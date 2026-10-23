@@ -262,7 +262,7 @@ func resultText(_ root: AXUIElement) -> String {
 func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) throws {
     try waitForUI("Japanese recognition result", seconds: 120) {
         let text = resultText(root)
-        return text.contains("月日") && text.contains("旅") && uiButton(root, ["Copy transcript"]) != nil
+        return text.contains("船") && text.contains("旅") && uiButton(root, ["Copy transcript"]) != nil
     }
     let text = resultText(root)
     try text.write(to: output.appendingPathComponent("transcript.txt"), atomically: true, encoding: .utf8)
@@ -284,7 +284,7 @@ func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) thr
     guard uiText(root).contains("モデル準備完了") else { throw SmokeFailure(description: "Model was not retained for reuse") }
     try interactionScreenshot(output, name: "discarded.png", windowID: windowID)
     try writeJSON(["status": "passed", "scenario": "transcribe", "realPermissionDialog": true,
-                   "missingModelError": true, "japaneseWords": ["月日", "旅"], "clipboardMatches": true,
+                   "missingModelError": true, "japaneseWords": ["船", "旅"], "clipboardMatches": true,
                    "discardedDuringInference": true, "modelRetained": true],
                   to: output.appendingPathComponent("interaction.json"))
 }
