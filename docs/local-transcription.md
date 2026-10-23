@@ -79,9 +79,13 @@ CLI の WAV は 16 bit PCM のみ受け付け、不正形式・サンプルレ�
 3. `sandbox-exec` の `(deny network*)` で推論プロセスツリーのネットワークを拒否。
    ローカル TCP 接続も `EPERM` になることを別プローブで確認する。
 4. CPU の API テスト、Metal / CPU の CLI で日本語の主要語句、無音、不正 WAV、
-   不正レート、モデル未配置・破損を検証。結果と実測時間を保存。
+   不正レート、モデル未配置・破損を検証。診断ログから Metal 初期化の有無も検証し、
+   GPU を要求したのに CPU へフォールバックした場合は CI を失敗させる。結果と実測時間を保存。
 
 Artifacts の `local-transcription-1`（末尾は再実行回数）に JSON とログを保存する。
 音声・モデルはアップロードしない。音声の出典と利用条件は
 [fixture の説明](../crates/local-transcription/tests/fixtures/README.md) を参照。
 この段階で人による権限承認は必要ない。物理マイクの音質・自然発話の精度は後続の評価対象。
+
+CI の GPU は Apple Paravirtual device。Metal の初期コンパイルや仮想 GPU の性能が
+計測値に含まれるため、CPU との速度差を実機全体の性能比較には使わない。

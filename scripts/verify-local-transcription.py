@@ -30,6 +30,9 @@ japanese = run(args.model, fixture, True)
 args.report.parent.mkdir(parents=True, exist_ok=True)
 args.report.with_suffix('.diagnostics.log').write_text(japanese.stderr)
 report = json.loads(japanese.stdout)
+metal_initialized = 'whisper_backend_init_gpu: using Metal backend' in japanese.stderr
+assert metal_initialized == (report['backend'] == 'metal'), japanese.stderr
+report['metal_initialized'] = metal_initialized
 for word in ['月日', '旅']:
     assert word in report['text'], report
 with tempfile.TemporaryDirectory(prefix='voice-input-asr-') as directory:
