@@ -133,8 +133,8 @@ func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
 }
 
 guard CommandLine.arguments.count == 3
-    || (CommandLine.arguments.count == 4 && ["deny", "allow"].contains(CommandLine.arguments[3])) else {
-    fputs("Usage: macos-window-smoke <app-bundle> <artifact-directory> [deny|allow]\n", stderr)
+    || (CommandLine.arguments.count == 4 && ["deny", "allow", "transcribe"].contains(CommandLine.arguments[3])) else {
+    fputs("Usage: macos-window-smoke <app-bundle> <artifact-directory> [deny|allow|transcribe]\n", stderr)
     exit(2)
 }
 

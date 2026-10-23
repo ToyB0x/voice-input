@@ -8,13 +8,13 @@
 }
 
 body { margin: 0; min-width: 320px; }
-main { max-width: 38rem; margin: 0 auto; padding: 2rem; }
+main { max-width: 38rem; margin: 0 auto; padding: 1.25rem; }
 .eyebrow { color: #526177; font-size: 0.85rem; letter-spacing: 0.06em; }
-h1 { margin: 0.75rem 0; font-size: 2.5rem; letter-spacing: -0.04em; }
+h1 { margin: 0.75rem 0; font-size: 2rem; letter-spacing: -0.04em; }
 p { line-height: 1.8; }
 section {
-  margin-top: 1.5rem;
-  padding: 1.25rem;
+  margin-top: 1rem;
+  padding: 1rem;
   border: 1px solid #dbe0e8;
   border-radius: 12px;
   background: #fff;
@@ -39,3 +39,14 @@ button:focus-visible { outline: 3px solid #5485e6; outline-offset: 2px; }
   section { border-color: #364154; background: #202733; }
   #error { color: #ffa3a3; }
 }
+
+label { font-size: 0.85rem; }
+input, select, textarea { box-sizing: border-box; font: inherit; color: inherit; background: inherit; border: 1px solid #b7c3d7; border-radius: 6px; padding: 0.5rem; }
+input, textarea { display: block; width: 100%; margin: 0.5rem 0; }
+textarea { resize: vertical; }
+.model-controls { align-items: center; }
+#copy-status { margin-left: 0.75rem; font-size: 0.85rem; }
+
+p { margin: 0.5rem 0; }
+section p { margin-top: 0.5rem; }
+.hint { line-height: 1.5; }

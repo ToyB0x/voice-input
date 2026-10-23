@@ -2,7 +2,7 @@
 
 `crates/local-transcription` は whisper.cpp を `whisper-rs 0.16.0` 経由で使う
 同期 Rust ライブラリと検証用 CLI。Tauri やマイクとは独立して動作する。
-この PR の範囲はエンジン導入と実際の日本語推論の検証で、アプリの録音 UI とはまだ接続しない。
+アプリの録音 UI に接続済み。操作・ワーカー・保持期間は [録音から文字起こし](recording-transcription.md) を参照。
 
 ## 選定とモデル
 
@@ -31,7 +31,7 @@
 
 Python 3.9 以降、C/C++ コンパイラー、CMake、libclang が必要。Mac では Xcode Command Line Tools と
 `brew install cmake` を使う。Metal が使える macOS の検証対象は現時点で CI の macOS 14。
-アプリ自体の OS 下限と、今後エンジンを接続したアプリの対応 OS は別途検証する。
+アプリの対象下限も macOS 14 に設定している。旧OSは検証対象外。
 Linux では例として `build-essential cmake clang libclang-dev` が必要。
 
 ```sh
@@ -64,8 +64,8 @@ CLI は明示的に渡したファイルだけを読み、出力先ファイル�
 CLI の WAV は 16 bit PCM のみ受け付け、不正形式・サンプルレート・チャネル数を拒否する。
 
 現在の録音バッファはデバイスのサンプルレートのまま保持している。
-次の PR で帯域制限を伴う 16 kHz へのリサンプリング、録音停止からのワーカー呼び出し、
-モデル配置設定、処理中・結果・エラー・コピー UI を接続する。
+`prepare_audio` で帯域制限を伴う 16 kHz へのリサンプリングを行い、録音停止から
+ワーカー経由で呼び出す。モデル配置設定、処理中・結果・エラー・コピー UI も実装済み。
 音声は引き続き Rust のメモリ内で扱い、WebView に音声データを渡さない。
 エンジン自体にマイク・アクセシビリティ・画面収録の追加許可は不要。
 

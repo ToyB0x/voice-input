@@ -6,6 +6,9 @@ fn main() {
         "stop_recording",
         "clear_recording",
         "open_microphone_settings",
+        "load_model",
+        "transcribe_recording",
+        "copy_transcript",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
         .expect("failed to build Tauri application");

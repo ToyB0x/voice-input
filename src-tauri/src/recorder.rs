@@ -1,4 +1,5 @@
 use crate::audio_buffer::{AudioBuffer, MAX_SECONDS};
+use crate::transcription::{self, Session};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use objc2_av_foundation::{AVCaptureDevice, AVMediaTypeAudio};
 use serde::Serialize;
@@ -59,13 +60,16 @@ pub struct Snapshot {
     sample_count: usize,
     sample_rate: u32,
     error: Option<String>,
+    #[serde(flatten)]
+    recognition: Session,
 }
 
 #[derive(Default)]
-struct Capture {
-    audio: Option<AudioBuffer>,
+pub(crate) struct Capture {
+    pub(crate) audio: Option<AudioBuffer>,
     phase: Option<&'static str>,
     error: Option<String>,
+    pub(crate) recognition: Session,
 }
 
 impl Capture {
@@ -82,6 +86,7 @@ impl Capture {
             sample_count: self.audio.as_ref().map_or(0, |a| a.samples.len()),
             sample_rate: self.audio.as_ref().map_or(0, |a| a.sample_rate),
             error: self.error.clone(),
+            recognition: self.recognition.clone(),
         }
     }
 
@@ -105,6 +110,8 @@ enum Action {
     Start,
     Stop,
     Clear,
+    LoadModel(String, String),
+    Transcribe,
 }
 struct Request {
     action: Action,
@@ -120,6 +127,7 @@ impl Recorder {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel::<Request>();
         let capture = Arc::new(Mutex::new(Capture::default()));
+        let jobs = transcription::worker(capture.clone());
         let shared = capture.clone();
         std::thread::spawn(move || {
             // The stream stays on its owning thread. Audio callbacks only fill
@@ -136,15 +144,26 @@ impl Recorder {
                     drop(stream.take());
                     if let Ok(mut c) = shared.lock() {
                         c.finish();
+                        if c.phase == Some("recorded") && c.recognition.model_ready {
+                            let _ = transcription::recognize(&mut c, &jobs);
+                        }
                     }
                 }
                 match rx.recv_timeout(Duration::from_millis(100)) {
                     Ok(request) => {
                         let result = match request.action {
+                            Action::Start if shared.lock().is_ok_and(|c| c.recognition.working) => {
+                                Err("処理が終わるまでお待ちください。".into())
+                            }
                             Action::Start if stream.is_some() => Err("すでに録音中です。".into()),
                             Action::Start => {
                                 if let Ok(mut c) = shared.lock() {
-                                    *c = Capture::default();
+                                    let mut recognition = std::mem::take(&mut c.recognition);
+                                    recognition.clear_result();
+                                    *c = Capture {
+                                        recognition,
+                                        ..Capture::default()
+                                    };
                                 }
                                 match start_stream(shared.clone()) {
                                     Ok(input) => {
@@ -165,14 +184,33 @@ impl Recorder {
                                     drop(was_recording);
                                     if let Ok(mut c) = shared.lock() {
                                         c.finish();
+                                        if c.phase == Some("recorded") && c.recognition.model_ready
+                                        {
+                                            let _ = transcription::recognize(&mut c, &jobs);
+                                        }
                                     }
                                 }
                                 Ok(())
                             }
+                            Action::LoadModel(_, _) | Action::Transcribe if stream.is_some() => {
+                                Err("録音を停止してから操作してください。".into())
+                            }
+                            Action::LoadModel(path, backend) => {
+                                shared.lock().map_err(|e| e.to_string()).and_then(|mut c| {
+                                    transcription::load(&mut c.recognition, path, &backend, &jobs)
+                                })
+                            }
+                            Action::Transcribe => shared
+                                .lock()
+                                .map_err(|e| e.to_string())
+                                .and_then(|mut c| transcription::recognize(&mut c, &jobs)),
                             Action::Clear => {
                                 drop(stream.take());
                                 if let Ok(mut c) = shared.lock() {
-                                    *c = Capture::default();
+                                    c.audio = None;
+                                    c.phase = None;
+                                    c.error = None;
+                                    c.recognition.clear_result();
                                 }
                                 Ok(())
                             }
@@ -340,6 +378,7 @@ mod tests {
             audio: Some(audio),
             phase: Some("recording"),
             error: None,
+            recognition: Session::default(),
         };
         capture.finish();
         let snapshot = capture.snapshot();
@@ -350,4 +389,37 @@ mod tests {
         capture = Capture::default();
         assert_eq!(capture.snapshot().sample_count, 0);
     }
+}
+
+#[tauri::command]
+pub async fn load_model(
+    recorder: tauri::State<'_, Recorder>,
+    path: String,
+    backend: String,
+) -> Result<Snapshot, String> {
+    recorder.send(Action::LoadModel(path, backend)).await
+}
+
+#[tauri::command]
+pub async fn transcribe_recording(
+    recorder: tauri::State<'_, Recorder>,
+) -> Result<Snapshot, String> {
+    recorder.send(Action::Transcribe).await
+}
+
+#[tauri::command]
+pub fn copy_transcript(recorder: tauri::State<'_, Recorder>) -> Result<(), String> {
+    let capture = recorder.capture.lock().map_err(|e| e.to_string())?;
+    if capture.recognition.working {
+        return Err("処理が終わるまでお待ちください。".into());
+    }
+    let text = capture
+        .recognition
+        .transcript
+        .as_deref()
+        .filter(|t| !t.is_empty())
+        .ok_or("コピーする認識結果がありません。")?;
+    arboard::Clipboard::new()
+        .and_then(|mut clipboard| clipboard.set_text(text))
+        .map_err(|e| format!("コピーできませんでした: {e}"))
 }

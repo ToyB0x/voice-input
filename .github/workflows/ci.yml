@@ -31,6 +31,14 @@ jobs:
         run: rustup show
       - name: Install frontend dependencies
         run: npm ci
+      - name: Restore Rust build cache
+        id: rust-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            src-tauri/target
+          key: macos-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Inspect macOS permission automation support
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
@@ -48,6 +56,16 @@ jobs:
         run: npm run tauri build -- --bundles app --ci -- --locked
         env:
           APPLE_SIGNING_IDENTITY: "-"
+      # Save after a successful build even if a later native UI check fails.
+      # Cargo rechecks local sources when restoring this dependency/build cache.
+      - name: Save Rust build cache
+        if: steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            src-tauri/target
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
       - name: Verify native window and capture screenshot
         timeout-minutes: 3
         run: |
@@ -106,6 +124,19 @@ jobs:
           "$RUNNER_TEMP/voice-input-smoke-runner" "$app" \
             "$RUNNER_TEMP/voice-input-smoke/permission-allowed" allow \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/permission-allowed.log"
+      - name: Prepare local model for app integration
+        run: python3 scripts/prepare-transcription-model.py "$RUNNER_TEMP/ggml-base.bin"
+      - name: Verify Japanese recording to transcription and clipboard
+        timeout-minutes: 7
+        env:
+          VOICE_INPUT_TEST_MODEL: ${{ runner.temp }}/ggml-base.bin
+          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
+        run: |
+          tccutil reset Microphone dev.toyb0x.voiceinput
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/transcription" transcribe \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/transcription.log"
       - name: Check compiler and smoke failure exit statuses
         run: |
           negative="$RUNNER_TEMP/voice-input-smoke/expected-failures"

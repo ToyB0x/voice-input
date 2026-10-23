@@ -12,6 +12,18 @@
       <h1>Voice Input</h1>
       <p>話すことから、入力をはじめる。</p>
       <p class="privacy">音声はこの Mac のメモリ内だけに保持し、外部へ送信しません。</p>
+      <section aria-labelledby="model-title">
+        <h2 id="model-title">ローカル文字起こしモデル</h2>
+        <label for="model-path">モデルの絶対パス（多言語版 ggml .bin）</label>
+        <input id="model-path" aria-label="Model path" type="text" placeholder="/Users/you/Models/ggml-base.bin" spellcheck="false" autocomplete="off" />
+        <div class="controls model-controls">
+          <label for="backend">実行方式</label>
+          <select id="backend" aria-label="Inference backend"><option value="metal">GPU（Metal）</option><option value="cpu">CPU</option></select>
+          <button id="load-model" aria-label="Load local model" disabled>モデルを読み込む</button>
+        </div>
+        <p id="model-status" role="status">モデル未読み込み。録音のみ利用できます。</p>
+        <p class="hint">自動ダウンロードは行いません。モデルの指定はアプリ終了まで保持します。</p>
+      </section>
       <section aria-labelledby="recording-title">
         <h2 id="recording-title">ローカル録音</h2>
         <p id="permission">マイクの許可を確認しています…</p>
@@ -24,13 +36,20 @@
         <div class="controls">
           <button id="start" aria-label="Start recording" disabled>録音を開始</button>
           <button id="stop" aria-label="Stop recording" disabled>停止</button>
+          <button id="transcribe" aria-label="Transcribe recording" disabled>文字起こし・再試行</button>
           <button id="clear" aria-label="Discard recording" disabled>破棄</button>
         </div>
         <p id="error" role="alert" hidden></p>
         <button id="settings" aria-label="Open microphone settings" hidden>マイクのシステム設定を開く</button>
         <p class="hint">最大 60 秒。新しい録音・破棄・アプリ終了で音声を消去します。</p>
       </section>
-      <p class="hint">文字起こし・他のアプリへの入力は、次の実装で追加します。</p>
+      <section aria-labelledby="result-title">
+        <h2 id="result-title">認識結果</h2>
+        <textarea id="transcript" aria-label="Transcription result" rows="3" readonly placeholder="モデル読み込み後、録音を停止すると文字起こしします。"></textarea>
+        <button id="copy" aria-label="Copy transcript" disabled>結果をコピー</button>
+        <span id="copy-status" role="status" aria-live="polite"></span>
+        <p class="hint">コピーした結果はクリップボードに残ります。新しい録音・破棄・終了でアプリ内の結果を消去します。</p>
+      </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
