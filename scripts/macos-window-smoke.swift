@@ -27,27 +27,36 @@ func visibleWindows(for pid: pid_t) -> [[String: Any]] {
     }
 }
 
-func smokeTest(appURL: URL, output: URL) throws {
+func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
     guard let bundle = Bundle(url: appURL),
-          let executable = bundle.executableURL
+          bundle.executableURL != nil
     else { throw SmokeFailure(description: "Missing app bundle or executable: \(appURL.path)") }
 
     let appLog = output.appendingPathComponent("app.log")
     FileManager.default.createFile(atPath: appLog.path, contents: nil)
-    let appLogHandle = try FileHandle(forWritingTo: appLog)
-    defer { try? appLogHandle.close() }
-
-    // Launch the bundled executable, never a browser or the Vite development server.
-    let app = Process()
-    app.executableURL = executable
-    app.standardOutput = appLogHandle
-    app.standardError = appLogHandle
-    try app.run()
+    // Launch Services gives the bundled app its own TCC identity instead of
+    // inheriting the CI runner's permissions via direct executable launch.
+    let previousPIDs = Set(NSWorkspace.shared.runningApplications.map(\.processIdentifier))
+    let launcher = Process()
+    launcher.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    launcher.arguments = ["-n", "-a", appURL.path, "--stdout", output.appendingPathComponent("app.stdout.log").path, "--stderr", appLog.path]
+    try launcher.run()
+    launcher.waitUntilExit()
+    guard launcher.terminationStatus == 0 else { throw SmokeFailure(description: "Launch Services could not open the app") }
+    var launched: NSRunningApplication?
+    let launchDeadline = Date().addingTimeInterval(15)
+    while launched == nil && Date() < launchDeadline {
+        launched = NSWorkspace.shared.runningApplications.first {
+            $0.bundleIdentifier == bundle.bundleIdentifier && !previousPIDs.contains($0.processIdentifier)
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    }
+    guard let app = launched else { throw SmokeFailure(description: "Launched app was not registered with the window server") }
     defer {
-        if app.isRunning {
+        if !app.isTerminated {
             app.terminate()
-            Thread.sleep(forTimeInterval: 0.2)
-            if app.isRunning { kill(app.processIdentifier, SIGKILL) }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            if !app.isTerminated { app.forceTerminate() }
         }
     }
 
@@ -63,8 +72,8 @@ func smokeTest(appURL: URL, output: URL) throws {
     var lastFailure = "No visible application window found"
 
     while Date() < deadline {
-        guard app.isRunning else {
-            throw SmokeFailure(description: "App exited before readiness (status \(app.terminationStatus)); see app.log")
+        guard !app.isTerminated else {
+            throw SmokeFailure(description: "App exited before readiness; see app.log")
         }
 
         let windows = visibleWindows(for: app.processIdentifier)
@@ -96,7 +105,10 @@ func smokeTest(appURL: URL, output: URL) throws {
                 // The heading alone could be the title bar. Rust/Tauri must also be
                 // visible in the page body, so an empty WebView cannot pass.
                 let missing = expected.filter { !normalized.contains($0) }
-                if missing.isEmpty && app.isRunning {
+                if missing.isEmpty && !app.isTerminated {
+                    if let scenario {
+                        try recordingInteraction(pid: app.processIdentifier, windowID: windowID, scenario: scenario, output: output)
+                    }
                     let result: [String: Any] = [
                         "status": "passed",
                         "pid": app.processIdentifier,
@@ -115,13 +127,14 @@ func smokeTest(appURL: URL, output: URL) throws {
                 lastFailure = "Window capture failed (status \(capture.terminationStatus)); see capture.log"
             }
         }
-        Thread.sleep(forTimeInterval: 1)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
     }
     throw SmokeFailure(description: "Timed out waiting for rendered app: \(lastFailure)")
 }
 
-guard CommandLine.arguments.count == 3 else {
-    fputs("Usage: macos-window-smoke <app-bundle> <artifact-directory>\n", stderr)
+guard CommandLine.arguments.count == 3
+    || (CommandLine.arguments.count == 4 && ["deny", "allow"].contains(CommandLine.arguments[3])) else {
+    fputs("Usage: macos-window-smoke <app-bundle> <artifact-directory> [deny|allow]\n", stderr)
     exit(2)
 }
 
@@ -129,7 +142,7 @@ let appURL = URL(fileURLWithPath: CommandLine.arguments[1])
 let output = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
 do {
     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-    try smokeTest(appURL: appURL, output: output)
+    try smokeTest(appURL: appURL, output: output, scenario: CommandLine.arguments.count == 4 ? CommandLine.arguments[3] : nil)
 } catch {
     try? writeJSON(["status": "failed", "error": String(describing: error)], to: output.appendingPathComponent("result.json"))
     fputs("FAIL: \(error)\n", stderr)
