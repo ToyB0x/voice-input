@@ -207,11 +207,37 @@ func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
 }
 
 func setModelPath(_ root: AXUIElement, _ path: String) throws {
-    guard let field = textField(root, label: "Model path"),
-          AXUIElementSetAttributeValue(field, kAXValueAttribute as CFString, path as CFString) == .success else {
-        throw SmokeFailure(description: "Could not set model path through the native UI")
+    guard CGPreflightPostEventAccess(), let field = textField(root, label: "Model path"),
+          AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
+        throw SmokeFailure(description: "Could not focus model path for native keyboard input")
     }
-    try waitForUI("enabled model load control") { uiButton(root, ["Load local model"]) != nil }
+    // WebKit can acknowledge AXValue writes without updating the DOM input.
+    // Exercise the same keyboard route as the user instead of injecting JS.
+    let source = CGEventSource(stateID: .hidSystemState)
+    for down in [true, false] {
+        guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else {
+            throw SmokeFailure(description: "Could not create Select All keyboard event")
+        }
+        event.flags = .maskCommand
+        event.post(tap: .cghidEventTap)
+    }
+    let units = Array(path.utf16)
+    for offset in stride(from: 0, to: units.count, by: 16) {
+        let chunk = Array(units[offset..<min(offset + 16, units.count)])
+        for down in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else {
+                throw SmokeFailure(description: "Could not create text keyboard event")
+            }
+            event.flags = []
+            chunk.withUnsafeBufferPointer { buffer in
+                event.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress!)
+            }
+            event.post(tap: .cghidEventTap)
+        }
+    }
+    try waitForUI("typed model path and enabled load control") {
+        axValue(field, kAXValueAttribute) as? String == path && uiButton(root, ["Load local model"]) != nil
+    }
 }
 
 func configureModel(root: AXUIElement, windowID: NSNumber, output: URL) throws {
