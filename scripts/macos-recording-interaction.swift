@@ -66,6 +66,17 @@ func interactionScreenshot(_ output: URL, name: String, windowID: NSNumber? = ni
 }
 
 func recordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, output: URL) throws {
+    do {
+        try runRecordingInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output)
+    } catch {
+        try? interactionScreenshot(output, name: "interaction-failure.png")
+        try? uiText(AXUIElementCreateApplication(pid)).write(
+            to: output.appendingPathComponent("failure-app-state.txt"), atomically: true, encoding: .utf8)
+        throw error
+    }
+}
+
+func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, output: URL) throws {
     let root = AXUIElementCreateApplication(pid)
     AXUIElementSetMessagingTimeout(root, 1)
     try writeJSON(["accessibilityTrusted": AXIsProcessTrusted(), "canPostEvents": CGPreflightPostEventAccess()],
@@ -138,8 +149,18 @@ func recordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
     try interactionScreenshot(output, name: "recording.png", windowID: windowID)
     guard let stop = uiButton(root, ["Stop recording"]) else { throw SmokeFailure(description: "Stop control missing") }
     try press(stop)
-    try waitForUI("recorded samples") { uiText(root).contains("サンプルを Mac 内に保持") }
-    let recorded = uiText(root)
+    var recorded = ""
+    try waitForUI("recorded samples") {
+        let text = uiText(root)
+        if text.contains("サンプルを Mac 内に保持") { recorded = text; return true }
+        return false
+    }
+    let pattern = try NSRegularExpression(pattern: "([0-9,]+)\\s+サンプル")
+    let fullRange = NSRange(recorded.startIndex..<recorded.endIndex, in: recorded)
+    guard let match = pattern.firstMatch(in: recorded, range: fullRange),
+          let range = Range(match.range(at: 1), in: recorded),
+          let sampleCount = Int(recorded[range].replacingOccurrences(of: ",", with: "")), sampleCount > 0
+    else { throw SmokeFailure(description: "No positive recorded sample count in the UI") }
     try recorded.write(to: output.appendingPathComponent("recorded.txt"), atomically: true, encoding: .utf8)
     try interactionScreenshot(output, name: "recorded.png", windowID: windowID)
     guard let clear = uiButton(root, ["Discard recording"]) else { throw SmokeFailure(description: "Discard control missing") }
@@ -149,6 +170,6 @@ func recordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
     }
     try interactionScreenshot(output, name: "cleared.png", windowID: windowID)
     try writeJSON(["status": "passed", "scenario": "allow", "realPermissionDialog": true,
-                   "inputLevel": peak, "recordingStopped": true, "recordingDiscarded": true],
+                   "inputLevel": peak, "sampleCount": sampleCount, "recordingStopped": true, "recordingDiscarded": true],
                   to: output.appendingPathComponent("interaction.json"))
 }

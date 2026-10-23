@@ -47,7 +47,11 @@ function render() {
   level.value = snapshot.level;
   duration.textContent = `${(snapshot.elapsedMs / 1000).toFixed(1)} 秒`;
   const states: Record<Snapshot["phase"], string> = {
-    idle: "録音を開始できます。",
+    idle: snapshot.permission === "authorized"
+      ? "録音を開始できます。"
+      : snapshot.permission === "not_determined"
+        ? "録音開始時にマイクへのアクセスを確認します。"
+        : "録音にはマイクへのアクセス許可が必要です。",
     recording: "録音中…",
     recorded: `録音を停止しました。${snapshot.sampleCount.toLocaleString()} サンプルを Mac 内に保持しています。`,
     error: "録音できませんでした。",
@@ -83,7 +87,7 @@ async function action(operation: () => Promise<unknown>) {
   try {
     await operation();
   } catch (cause) {
-    actionError = String(cause);
+    actionError = cause instanceof Error ? cause.message : String(cause);
   } finally {
     busy = false;
     await refresh();

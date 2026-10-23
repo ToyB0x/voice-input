@@ -39,7 +39,7 @@ func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
     let previousPIDs = Set(NSWorkspace.shared.runningApplications.map(\.processIdentifier))
     let launcher = Process()
     launcher.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-    launcher.arguments = ["-n", "-a", appURL.path, "--stdout", appLog.path, "--stderr", appLog.path]
+    launcher.arguments = ["-n", "-a", appURL.path, "--stdout", output.appendingPathComponent("app.stdout.log").path, "--stderr", appLog.path]
     try launcher.run()
     launcher.waitUntilExit()
     guard launcher.terminationStatus == 0 else { throw SmokeFailure(description: "Launch Services could not open the app") }
