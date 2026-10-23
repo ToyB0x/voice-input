@@ -139,3 +139,64 @@ jobs:
           path: ${{ runner.temp }}/voice-input-smoke/
           retention-days: 14
           if-no-files-found: warn
+
+  transcription:
+    name: Offline Japanese ASR (macOS)
+    runs-on: macos-14
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Check engine formatting and Clippy
+        run: |
+          cargo fmt --manifest-path crates/local-transcription/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/local-transcription/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Test and build engine
+        run: |
+          cargo test --manifest-path crates/local-transcription/Cargo.toml --locked
+          cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked
+      - name: Prepare checksum-verified model (setup only)
+        run: python3 scripts/prepare-transcription-model.py "$RUNNER_TEMP/ggml-base.bin"
+      - name: Verify inference with all network access denied
+        timeout-minutes: 8
+        env:
+          VOICE_INPUT_TEST_MODEL: ${{ runner.temp }}/ggml-base.bin
+        run: |
+          mkdir -p "$RUNNER_TEMP/transcription-evidence"
+          # Denies IPv4/IPv6, DNS and Unix network sockets in this process tree.
+          policy='(version 1) (allow default) (deny network*)'
+          sandbox-exec -p "$policy" python3 - <<'PY' \
+            | tee "$RUNNER_TEMP/transcription-evidence/network-denied.log"
+          import socket
+          try:
+              socket.create_connection(('127.0.0.1', 9), timeout=1)
+          except PermissionError:
+              print('PASS: sandbox rejects socket connection with EPERM')
+          else:
+              raise SystemExit('Expected sandbox PermissionError')
+          PY
+          sandbox-exec -p "$policy" cargo test --offline \
+            --manifest-path crates/local-transcription/Cargo.toml --locked \
+            --test offline -- --ignored --nocapture \
+            2>&1 | tee "$RUNNER_TEMP/transcription-evidence/api-tests.log"
+          for backend in metal cpu; do
+            extra=()
+            if [[ "$backend" = cpu ]]; then extra=(--cpu); fi
+            sandbox-exec -p "$policy" python3 scripts/verify-local-transcription.py \
+              --binary crates/local-transcription/target/release/local-transcription \
+              --model "$RUNNER_TEMP/ggml-base.bin" \
+              --report "$RUNNER_TEMP/transcription-evidence/$backend.json" "${extra[@]}" \
+              2>&1 | tee "$RUNNER_TEMP/transcription-evidence/$backend.log"
+          done
+      - name: Upload offline transcription evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-transcription-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/transcription-evidence/
+          retention-days: 14
+          if-no-files-found: warn
