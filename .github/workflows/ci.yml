@@ -16,6 +16,11 @@ jobs:
   macos:
     name: macOS app
     runs-on: macos-14
+    timeout-minutes: 20
+    defaults:
+      run:
+        # Explicit Bash enables -e -o pipefail, including commands piped to tee.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,3 +41,47 @@ jobs:
         run: npm run tauri build -- --bundles app --ci -- --locked
         env:
           APPLE_SIGNING_IDENTITY: "-"
+      - name: Verify native window and capture screenshot
+        timeout-minutes: 3
+        run: |
+          mkdir -p "$RUNNER_TEMP/voice-input-smoke"
+          xcrun swiftc scripts/macos-window-smoke.swift \
+            -o "$RUNNER_TEMP/voice-input-smoke-runner" \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/swift-build.log"
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke" \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/smoke.log"
+      - name: Check compiler and smoke failure exit statuses
+        run: |
+          negative="$RUNNER_TEMP/voice-input-smoke/expected-failures"
+          mkdir -p "$negative"
+          printf '%s\n' '#error("Expected compiler failure for CI regression check")' \
+            > "$negative/invalid.swift"
+
+          # Capture intentional failures without disabling pipefail. If tee masks
+          # either producer's exit status, this regression check must fail.
+          set +e
+          xcrun swiftc "$negative/invalid.swift" -o "$negative/invalid" \
+            2>&1 | tee "$negative/swift-build.log"
+          compile_status=$?
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$negative/missing.app" "$negative/smoke" \
+            2>&1 | tee "$negative/smoke.log"
+          smoke_status=$?
+          set -e
+
+          printf '{"compile_status": %d, "smoke_status": %d}\n' \
+            "$compile_status" "$smoke_status" > "$negative/exit-statuses.json"
+          if [[ "$compile_status" -eq 0 || "$smoke_status" -ne 1 ]]; then
+            echo "::error::Compiler or smoke failure was not propagated through tee"
+            exit 1
+          fi
+      - name: Upload native window evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-window-smoke-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-input-smoke/
+          retention-days: 14
+          if-no-files-found: warn
