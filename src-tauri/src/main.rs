@@ -4,6 +4,8 @@
 mod audio_buffer;
 #[cfg(target_os = "macos")]
 mod recorder;
+#[cfg(target_os = "macos")]
+mod transcription;
 
 fn main() {
     let builder = tauri::Builder::default();
@@ -18,6 +20,9 @@ fn main() {
                 recorder::stop_recording,
                 recorder::clear_recording,
                 recorder::open_microphone_settings,
+                recorder::load_model,
+                recorder::transcribe_recording,
+                recorder::copy_transcript,
             ]);
     builder
         .run(tauri::generate_context!())

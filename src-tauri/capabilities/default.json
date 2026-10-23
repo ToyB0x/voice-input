@@ -1,14 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Local recording controls for the main window",
-  "windows": ["main"],
+  "description": "Local recording, transcription and explicit result copy for the main window",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "allow-recording-status",
     "allow-request-microphone-permission",
     "allow-start-recording",
     "allow-stop-recording",
     "allow-clear-recording",
-    "allow-open-microphone-settings"
+    "allow-open-microphone-settings",
+    "allow-load-model",
+    "allow-transcribe-recording",
+    "allow-copy-transcript"
   ]
 }

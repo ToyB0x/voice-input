@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "Voice Input",
-        "width": 720,
-        "height": 680,
+        "width": 760,
+        "height": 940,
         "minWidth": 360,
-        "minHeight": 540
+        "minHeight": 620
       }
     ],
     "security": {
@@ -27,9 +27,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
+    "targets": [
+      "app"
+    ],
     "macOS": {
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "14.0",
       "entitlements": "Entitlements.plist"
     },
     "icon": [

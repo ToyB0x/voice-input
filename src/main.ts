@@ -10,6 +10,13 @@ type Snapshot = {
   sampleCount: number;
   sampleRate: number;
   error: string | null;
+  modelReady: boolean;
+  modelPath: string;
+  backend: string;
+  working: boolean;
+  recognitionPhase: string;
+  transcript: string | null;
+  recognitionError: string | null;
 };
 
 const start = document.querySelector<HTMLButtonElement>("#start")!;
@@ -22,6 +29,15 @@ const error = document.querySelector<HTMLParagraphElement>("#error")!;
 const level = document.querySelector<HTMLMeterElement>("#input-level")!;
 const duration = document.querySelector<HTMLOutputElement>("#duration")!;
 
+const modelPath = document.querySelector<HTMLInputElement>("#model-path")!;
+const backend = document.querySelector<HTMLSelectElement>("#backend")!;
+const loadModel = document.querySelector<HTMLButtonElement>("#load-model")!;
+const modelStatus = document.querySelector<HTMLParagraphElement>("#model-status")!;
+const transcribe = document.querySelector<HTMLButtonElement>("#transcribe")!;
+const transcript = document.querySelector<HTMLTextAreaElement>("#transcript")!;
+const copy = document.querySelector<HTMLButtonElement>("#copy")!;
+const copyStatus = document.querySelector<HTMLSpanElement>("#copy-status")!;
+
 const permissions: Record<Permission, string> = {
   not_determined: "未確認（録音開始時に macOS が確認します）",
   authorized: "許可済み",
@@ -33,15 +49,33 @@ const permissions: Record<Permission, string> = {
 let snapshot: Snapshot | undefined;
 let busy = false;
 let refreshing = false;
+let refreshVersion = 0;
 let actionError: string | null = null;
 
 function render() {
   if (!snapshot) return;
   permission.textContent = `マイクの許可: ${permissions[snapshot.permission]}`;
   const recording = snapshot.phase === "recording";
-  start.disabled = busy || recording || ["denied", "restricted", "unavailable"].includes(snapshot.permission);
+  const working = snapshot.working;
+  start.disabled = busy || working || recording || ["denied", "restricted", "unavailable"].includes(snapshot.permission);
   stop.disabled = busy || !recording;
-  clear.disabled = busy || recording || (snapshot.sampleCount === 0 && snapshot.phase !== "error");
+  clear.disabled = busy || (snapshot.recognitionPhase === "discarding") ||
+    (!working && snapshot.sampleCount === 0 && snapshot.phase !== "error" && snapshot.transcript === null && !snapshot.recognitionError);
+  modelPath.disabled = backend.disabled = busy || working || recording;
+  loadModel.disabled = busy || working || recording || !modelPath.value.trim();
+  transcribe.disabled = busy || working || recording || !snapshot.modelReady || snapshot.sampleCount === 0;
+  copy.disabled = busy || working || !snapshot.transcript;
+  if (transcript.value !== (snapshot.transcript ?? "")) {
+    transcript.value = snapshot.transcript ?? "";
+    copyStatus.textContent = "";
+  }
+  const modelStates: Record<string, string> = {
+    loading: "モデルを読み込み中…",
+    transcribing: "文字起こし中…（この Mac 内で処理しています）",
+    discarding: "結果を破棄しました。実行中の処理の終了を待っています…",
+  };
+  modelStatus.textContent = modelStates[snapshot.recognitionPhase] ??
+    (snapshot.modelReady ? `モデル準備完了（${snapshot.backend === "metal" ? "GPU / Metal" : "CPU"}を選択）` : "モデル未読み込み。録音のみ利用できます。");
   settings.hidden = snapshot.permission !== "denied";
   settings.disabled = busy;
   level.value = snapshot.level;
@@ -56,8 +90,11 @@ function render() {
     recorded: `録音を停止しました。${snapshot.sampleCount.toLocaleString()} サンプルを Mac 内に保持しています。`,
     error: "録音できませんでした。",
   };
-  status.textContent = busy ? "処理中です。マイクの確認が表示されたら選択してください。" : states[snapshot.phase];
-  const message = actionError ?? snapshot.error;
+  const resultStatus = snapshot.transcript !== null
+    ? (snapshot.transcript ? "文字起こしが完了しました。" : "音声が検出されませんでした。結果は空です。")
+    : states[snapshot.phase];
+  status.textContent = working ? modelStatus.textContent : busy ? "処理中です。マイクの確認が表示されたら選択してください。" : resultStatus;
+  const message = actionError ?? snapshot.error ?? snapshot.recognitionError;
   error.hidden = !message;
   error.textContent = message;
 }
@@ -65,23 +102,28 @@ function render() {
 async function refresh() {
   if (busy || refreshing) return;
   refreshing = true;
+  const version = ++refreshVersion;
   try {
     const next = await invoke<Snapshot>("recording_status");
-    if (!busy) {
+    if (!busy && version === refreshVersion) {
       snapshot = next;
       render();
     }
   } catch (cause) {
-    error.hidden = false;
-    error.textContent = `録音の状態を取得できません: ${String(cause)}`;
+    if (version === refreshVersion) {
+      error.hidden = false;
+      error.textContent = `録音の状態を取得できません: ${String(cause)}`;
+    }
   } finally {
-    refreshing = false;
+    if (version === refreshVersion) refreshing = false;
   }
 }
 
 async function action(operation: () => Promise<unknown>) {
   if (busy) return;
   busy = true;
+  ++refreshVersion;
+  refreshing = false;
   actionError = null;
   render();
   try {
@@ -95,7 +137,16 @@ async function action(operation: () => Promise<unknown>) {
   }
 }
 
+modelPath.addEventListener("input", render);
+loadModel.addEventListener("click", () => void action(() => invoke("load_model", { path: modelPath.value, backend: backend.value })));
+transcribe.addEventListener("click", () => void action(() => invoke("transcribe_recording")));
+copy.addEventListener("click", () => void action(async () => {
+  await invoke("copy_transcript");
+  copyStatus.textContent = "コピーしました。";
+}));
+
 start.addEventListener("click", () => void action(async () => {
+  copyStatus.textContent = "";
   const allowed = await invoke<Permission>("request_microphone_permission");
   if (allowed !== "authorized") {
     throw new Error(`マイクの許可: ${permissions[allowed]}`);

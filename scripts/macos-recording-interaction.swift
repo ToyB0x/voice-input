@@ -85,6 +85,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
 
+    if scenario == "transcribe" { try configureModel(root: root, windowID: windowID, output: output) }
+
     try waitForUI("initial microphone permission state") { uiText(root).contains("未確認") }
     try uiText(root).write(to: output.appendingPathComponent("before.txt"), atomically: true, encoding: .utf8)
     guard let start = uiButton(root, ["Start recording", "録音を開始"]) else {
@@ -135,6 +137,18 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
         }
         return text.contains("許可済み") && text.contains("録音中") && uiButton(root, ["Stop recording"]) != nil
     }
+    var playback: Process?
+    defer { if let playback, playback.isRunning { playback.terminate() } }
+    if scenario == "transcribe" {
+        guard let audio = ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_AUDIO"] else {
+            throw SmokeFailure(description: "VOICE_INPUT_TEST_AUDIO is required")
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+        process.arguments = [audio]
+        try process.run()
+        playback = process
+    }
     var peak = 0.0
     try waitForUI("nonzero signal from virtual microphone") {
         for element in axElements(root) {
@@ -147,8 +161,16 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
         return peak > 0.001
     }
     try interactionScreenshot(output, name: "recording.png", windowID: windowID)
+    if let playback {
+        try waitForUI("public Japanese fixture playback", seconds: 30) { !playback.isRunning }
+        guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Fixture playback failed") }
+    }
     guard let stop = uiButton(root, ["Stop recording"]) else { throw SmokeFailure(description: "Stop control missing") }
     try press(stop)
+    if scenario == "transcribe" {
+        try verifyTranscription(root: root, windowID: windowID, output: output)
+        return
+    }
     var recorded = ""
     try waitForUI("recorded samples") {
         let text = uiText(root)
@@ -171,5 +193,72 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
     try interactionScreenshot(output, name: "cleared.png", windowID: windowID)
     try writeJSON(["status": "passed", "scenario": "allow", "realPermissionDialog": true,
                    "inputLevel": peak, "sampleCount": sampleCount, "recordingStopped": true, "recordingDiscarded": true],
+                  to: output.appendingPathComponent("interaction.json"))
+}
+
+func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
+    axElements(root).first { element in
+        guard let role = axValue(element, kAXRoleAttribute) as? String,
+              ["AXTextField", "AXTextArea"].contains(role) else { return false }
+        return [kAXTitleAttribute, kAXDescriptionAttribute].contains {
+            axValue(element, $0) as? String == label
+        }
+    }
+}
+
+func setModelPath(_ root: AXUIElement, _ path: String) throws {
+    guard let field = textField(root, label: "Model path"),
+          AXUIElementSetAttributeValue(field, kAXValueAttribute as CFString, path as CFString) == .success else {
+        throw SmokeFailure(description: "Could not set model path through the native UI")
+    }
+    try waitForUI("enabled model load control") { uiButton(root, ["Load local model"]) != nil }
+}
+
+func configureModel(root: AXUIElement, windowID: NSNumber, output: URL) throws {
+    guard let path = ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_MODEL"] else {
+        throw SmokeFailure(description: "VOICE_INPUT_TEST_MODEL is required")
+    }
+    try setModelPath(root, "/no-such-voice-input-model.bin")
+    try press(uiButton(root, ["Load local model"])!)
+    try waitForUI("missing model error") { uiText(root).contains("モデルを読み込めません") }
+    try interactionScreenshot(output, name: "model-error.png", windowID: windowID)
+    try setModelPath(root, path)
+    try press(uiButton(root, ["Load local model"])!)
+    try waitForUI("loaded model", seconds: 90) { uiText(root).contains("モデル準備完了") }
+    try interactionScreenshot(output, name: "model-ready.png", windowID: windowID)
+}
+
+func resultText(_ root: AXUIElement) -> String {
+    guard let field = textField(root, label: "Transcription result") else { return "" }
+    return axValue(field, kAXValueAttribute) as? String ?? ""
+}
+
+func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) throws {
+    try waitForUI("Japanese recognition result", seconds: 120) {
+        let text = resultText(root)
+        return text.contains("月日") && text.contains("旅") && uiButton(root, ["Copy transcript"]) != nil
+    }
+    let text = resultText(root)
+    try text.write(to: output.appendingPathComponent("transcript.txt"), atomically: true, encoding: .utf8)
+    try interactionScreenshot(output, name: "transcribed.png", windowID: windowID)
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString("voice-input-copy-sentinel", forType: .string)
+    try press(uiButton(root, ["Copy transcript"])!)
+    try waitForUI("real system clipboard") { NSPasteboard.general.string(forType: .string) == text }
+    // Reuse the loaded model for a retry; then discard while native work runs.
+    guard let retry = uiButton(root, ["Transcribe recording"]) else { throw SmokeFailure(description: "Retry control missing") }
+    try press(retry)
+    try waitForUI("recognition in progress") { uiText(root).contains("文字起こし中") }
+    guard let clear = uiButton(root, ["Discard recording"]) else { throw SmokeFailure(description: "Discard control missing during inference") }
+    try press(clear)
+    try waitForUI("discarded in-flight result", seconds: 120) {
+        resultText(root).isEmpty && uiText(root).contains("録音を開始できます")
+            && uiButton(root, ["Start recording"]) != nil && uiButton(root, ["Copy transcript"]) == nil
+    }
+    guard uiText(root).contains("モデル準備完了") else { throw SmokeFailure(description: "Model was not retained for reuse") }
+    try interactionScreenshot(output, name: "discarded.png", windowID: windowID)
+    try writeJSON(["status": "passed", "scenario": "transcribe", "realPermissionDialog": true,
+                   "missingModelError": true, "japaneseWords": ["月日", "旅"], "clipboardMatches": true,
+                   "discardedDuringInference": true, "modelRetained": true],
                   to: output.appendingPathComponent("interaction.json"))
 }

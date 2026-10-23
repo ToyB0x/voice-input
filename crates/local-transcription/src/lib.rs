@@ -1,5 +1,8 @@
 //! Bounded, local-only Japanese ASR. No downloads or network clients.
 //! Call from a worker thread: loading and inference are blocking operations.
+mod resample;
+pub use resample::prepare_audio;
+
 use std::path::Path;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -102,7 +105,7 @@ fn validate_audio(audio: &[f32]) -> Result<(), Error> {
 }
 
 /// Strict validation before allocation; no implicit resampling or channel mixing.
-/// The recording adapter will supply the same 16 kHz mono contract in a later PR.
+/// The recording adapter uses `prepare_audio` to supply the same PCM contract.
 pub fn read_wav(path: &Path) -> Result<Vec<f32>, Error> {
     let mut reader = hound::WavReader::open(path)?;
     let spec = reader.spec();

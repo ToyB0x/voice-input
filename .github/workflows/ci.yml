@@ -106,6 +106,19 @@ jobs:
           "$RUNNER_TEMP/voice-input-smoke-runner" "$app" \
             "$RUNNER_TEMP/voice-input-smoke/permission-allowed" allow \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/permission-allowed.log"
+      - name: Prepare local model for app integration
+        run: python3 scripts/prepare-transcription-model.py "$RUNNER_TEMP/ggml-base.bin"
+      - name: Verify Japanese recording to transcription and clipboard
+        timeout-minutes: 7
+        env:
+          VOICE_INPUT_TEST_MODEL: ${{ runner.temp }}/ggml-base.bin
+          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
+        run: |
+          tccutil reset Microphone dev.toyb0x.voiceinput
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/transcription" transcribe \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/transcription.log"
       - name: Check compiler and smoke failure exit statuses
         run: |
           negative="$RUNNER_TEMP/voice-input-smoke/expected-failures"
