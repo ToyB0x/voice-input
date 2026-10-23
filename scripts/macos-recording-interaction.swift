@@ -271,6 +271,7 @@ func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) thr
     NSPasteboard.general.setString("voice-input-copy-sentinel", forType: .string)
     try press(uiButton(root, ["Copy transcript"])!)
     try waitForUI("real system clipboard") { NSPasteboard.general.string(forType: .string) == text }
+    try writeJSON(["status": "passed", "clipboardMatches": true], to: output.appendingPathComponent("copy.json"))
     // Reuse the loaded model for a retry; then discard while native work runs.
     guard let retry = uiButton(root, ["Transcribe recording"]) else { throw SmokeFailure(description: "Retry control missing") }
     try press(retry)
@@ -278,10 +279,12 @@ func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) thr
     guard let clear = uiButton(root, ["Discard recording"]) else { throw SmokeFailure(description: "Discard control missing during inference") }
     try press(clear)
     try waitForUI("discarded in-flight result", seconds: 120) {
-        resultText(root).isEmpty && uiText(root).contains("録音を開始できます")
+        // Read related status text in one AX snapshot; WebKit may briefly
+        // invalidate an accessibility node while a live region is updated.
+        let text = uiText(root)
+        return resultText(root).isEmpty && text.contains("録音を開始できます") && text.contains("モデル準備完了")
             && uiButton(root, ["Start recording"]) != nil && uiButton(root, ["Copy transcript"]) == nil
     }
-    guard uiText(root).contains("モデル準備完了") else { throw SmokeFailure(description: "Model was not retained for reuse") }
     try interactionScreenshot(output, name: "discarded.png", windowID: windowID)
     try writeJSON(["status": "passed", "scenario": "transcribe", "realPermissionDialog": true,
                    "missingModelError": true, "japaneseWords": ["船", "旅"], "clipboardMatches": true,

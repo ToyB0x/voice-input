@@ -52,9 +52,14 @@ let refreshing = false;
 let refreshVersion = 0;
 let actionError: string | null = null;
 
+function setText(element: HTMLElement, text: string | null) {
+  const value = text ?? "";
+  if (element.textContent !== value) element.textContent = value;
+}
+
 function render() {
   if (!snapshot) return;
-  permission.textContent = `マイクの許可: ${permissions[snapshot.permission]}`;
+  setText(permission, `マイクの許可: ${permissions[snapshot.permission]}`);
   const recording = snapshot.phase === "recording";
   const working = snapshot.working;
   start.disabled = busy || working || recording || ["denied", "restricted", "unavailable"].includes(snapshot.permission);
@@ -74,12 +79,12 @@ function render() {
     transcribing: "文字起こし中…（この Mac 内で処理しています）",
     discarding: "結果を破棄しました。実行中の処理の終了を待っています…",
   };
-  modelStatus.textContent = modelStates[snapshot.recognitionPhase] ??
-    (snapshot.modelReady ? `モデル準備完了（${snapshot.backend === "metal" ? "GPU / Metal" : "CPU"}を選択）` : "モデル未読み込み。録音のみ利用できます。");
+  setText(modelStatus, modelStates[snapshot.recognitionPhase] ??
+    (snapshot.modelReady ? `モデル準備完了（${snapshot.backend === "metal" ? "GPU / Metal" : "CPU"}を選択）` : "モデル未読み込み。録音のみ利用できます。"));
   settings.hidden = snapshot.permission !== "denied";
   settings.disabled = busy;
   level.value = snapshot.level;
-  duration.textContent = `${(snapshot.elapsedMs / 1000).toFixed(1)} 秒`;
+  setText(duration, `${(snapshot.elapsedMs / 1000).toFixed(1)} 秒`);
   const states: Record<Snapshot["phase"], string> = {
     idle: snapshot.permission === "authorized"
       ? "録音を開始できます。"
@@ -93,10 +98,10 @@ function render() {
   const resultStatus = snapshot.transcript !== null
     ? (snapshot.transcript ? "文字起こしが完了しました。" : "音声が検出されませんでした。結果は空です。")
     : states[snapshot.phase];
-  status.textContent = working ? modelStatus.textContent : busy ? "処理中です。マイクの確認が表示されたら選択してください。" : resultStatus;
+  setText(status, working ? modelStatus.textContent : busy ? "処理中です。マイクの確認が表示されたら選択してください。" : resultStatus);
   const message = actionError ?? snapshot.error ?? snapshot.recognitionError;
   error.hidden = !message;
-  error.textContent = message;
+  setText(error, message);
 }
 
 async function refresh() {
