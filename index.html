@@ -11,10 +11,26 @@
       <p class="eyebrow">macOS · Rust + Tauri</p>
       <h1>Voice Input</h1>
       <p>話すことから、入力をはじめる。</p>
-      <section aria-labelledby="status-title">
-        <h2 id="status-title">開発用の初期セットアップ</h2>
-        <p>録音・文字起こし・他のアプリへの入力は、これから実装します。</p>
+      <p class="privacy">音声はこの Mac のメモリ内だけに保持し、外部へ送信しません。</p>
+      <section aria-labelledby="recording-title">
+        <h2 id="recording-title">ローカル録音</h2>
+        <p id="permission">マイクの許可を確認しています…</p>
+        <p id="status" role="status" aria-live="polite">準備中…</p>
+        <div class="level">
+          <label for="input-level">入力レベル</label>
+          <meter id="input-level" min="0" max="1" value="0">0</meter>
+          <output id="duration" aria-label="録音時間">0.0 秒</output>
+        </div>
+        <div class="controls">
+          <button id="start" aria-label="Start recording" disabled>録音を開始</button>
+          <button id="stop" aria-label="Stop recording" disabled>停止</button>
+          <button id="clear" aria-label="Discard recording" disabled>破棄</button>
+        </div>
+        <p id="error" role="alert" hidden></p>
+        <button id="settings" aria-label="Open microphone settings" hidden>マイクのシステム設定を開く</button>
+        <p class="hint">最大 60 秒。新しい録音・破棄・アプリ終了で音声を消去します。</p>
       </section>
+      <p class="hint">文字起こし・他のアプリへの入力は、次の実装で追加します。</p>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

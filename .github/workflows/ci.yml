@@ -31,12 +31,19 @@ jobs:
         run: rustup show
       - name: Install frontend dependencies
         run: npm ci
+      - name: Inspect macOS permission automation support
+        run: |
+          mkdir -p "$RUNNER_TEMP/voice-input-smoke"
+          xcrun swift -e 'import ApplicationServices; print("accessibilityTrusted=\(AXIsProcessTrusted()) canPostEvents=\(CGPreflightPostEventAccess())")' \
+            | tee "$RUNNER_TEMP/voice-input-smoke/permissions-preflight.log"
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - name: Build frontend
         run: npm run build
       - name: Check Rust
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Test local audio processing
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Build unsigned macOS app
         run: npm run tauri build -- --bundles app --ci -- --locked
         env:
