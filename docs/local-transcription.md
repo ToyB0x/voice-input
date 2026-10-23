@@ -1,0 +1,87 @@
+# ローカル日本語文字起こしエンジン
+
+`crates/local-transcription` は whisper.cpp を `whisper-rs 0.16.0` 経由で使う
+同期 Rust ライブラリと検証用 CLI。Tauri やマイクとは独立して動作する。
+この PR の範囲はエンジン導入と実際の日本語推論の検証で、アプリの録音 UI とはまだ接続しない。
+
+## 選定とモデル
+
+- whisper.cpp: ローカルのモデルファイルから多言語音声認識を実行できる。
+  Apple Silicon の Metal を利用でき、CPU でも動作する。
+- 初期検証モデル: **Whisper base 多言語版**、約 148 MB、MIT ライセンス。
+  `.en` モデルは日本語に使えないため API で拒否する。
+- base は小さい検証用の出発点。自然発話の精度・遅延・メモリ評価を踏まえ、
+  将来 small / medium なども比較する。今回の短い音声の成功から日常入力の精度は保証しない。
+- Whisper / whisper.cpp は MIT、whisper-rs は Unlicense。
+  モデルのライセンスは [OpenAI Whisper LICENSE](https://github.com/openai/whisper/blob/main/LICENSE)、
+  配布元は [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)。
+  アプリに同梱して配布する場合は各ライセンス表示も同梱する。
+
+モデルの準備は明示的な別コマンドに限定する。音声を扱う推論経路はダウンロードや
+外部 API を呼ばず、モデル未配置・破損時はローカルエラーを返す。
+`prepare-transcription-model.py` は配布元のコミットを固定し、ダウンロード後に SHA-256 を照合してから
+指定ファイルを置き換える。音声や認識結果を読み取らない。アプリへの自動取得機能は未実装。
+
+- モデル: `ggml-base.bin`
+- 配布リビジョン: `5359861c739e955e79d9a303bcbc70fb988958b1`
+- SHA-256: `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe`
+- 例として `models/` に配置する（Git 管理対象外）。別のローカルパスも指定できる。
+
+## 実行
+
+C/C++ コンパイラー、CMake、libclang が必要。Mac では Xcode Command Line Tools と
+`brew install cmake` を使う。Metal が使える macOS の検証対象は現時点で CI の macOS 14。
+アプリ自体の OS 下限と、今後エンジンを接続したアプリの対応 OS は別途検証する。
+Linux では例として `build-essential cmake clang libclang-dev` が必要。
+
+```sh
+# 準備時のみネットワークを使う。既存モデルもチェックサムを検証する。
+python3 scripts/prepare-transcription-model.py models/ggml-base.bin
+cargo test --manifest-path crates/local-transcription/Cargo.toml --locked
+cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked
+
+# ここからはネットワーク不要。macOS の既定は Metal、他 OS は CPU。
+crates/local-transcription/target/release/local-transcription \
+  models/ggml-base.bin crates/local-transcription/tests/fixtures/ja-oku.wav
+# Mac で CPU を明示的に選ぶ場合は末尾に --cpu
+```
+
+標準出力はテキスト、日本語の言語指定、選択バックエンド、音声秒数、モデルロード時間、
+推論時間を含む JSON。低レベルエンジンの診断は標準エラーに出る。
+`backend` は要求した実行方式を示す。whisper.cpp 側の GPU 初期化結果は診断ログを参照する。
+CLI は明示的に渡したファイルだけを読み、出力先ファイルを作らない。
+
+## API と次の UI 接続
+
+`Transcriber::load(local_path, Backend)` でローカルモデルをロードし、
+`transcribe(&[f32])` で日本語文字列を返す。翻訳・前回の認識文脈は無効。
+処理は同期なので UI 接続時はワーカースレッドで実行し、同時実行・破棄・処理中状態を管理する。
+
+入力契約は **16 kHz・モノラル・正規化 f32 PCM、1〜60 秒**。
+非有限値、範囲外振幅、空・短すぎる音声、上限超過はエラー。
+無音に近い PCM（RMS < 0.00001）は空文字にし、無音への不要なデコードを避ける。
+これは VAD ではなく、背景雑音や非発話に対する誤認識対策は後続の検討対象。
+CLI の WAV は 16 bit PCM のみ受け付け、不正形式・サンプルレート・チャネル数を拒否する。
+
+現在の録音バッファはデバイスのサンプルレートのまま保持している。
+次の PR で帯域制限を伴う 16 kHz へのリサンプリング、録音停止からのワーカー呼び出し、
+モデル配置設定、処理中・結果・エラー・コピー UI を接続する。
+音声は引き続き Rust のメモリ内で扱い、WebView に音声データを渡さない。
+エンジン自体にマイク・アクセシビリティ・画面収録の追加許可は不要。
+
+## CI の検証資料
+
+既存の macOS アプリ・実際のマイク許可/拒否 UI のジョブは継続する。
+追加の `Offline Japanese ASR (macOS)` ジョブは次を行う。
+
+1. Rust の fmt / Clippy / 単体テスト、Metal 対応バイナリのビルド。
+2. 固定したモデルを準備し、SHA-256 を照合。
+3. `sandbox-exec` の `(deny network*)` で推論プロセスツリーのネットワークを拒否。
+   ローカル TCP 接続も `EPERM` になることを別プローブで確認する。
+4. CPU の API テスト、Metal / CPU の CLI で日本語の主要語句、無音、不正 WAV、
+   不正レート、モデル未配置・破損を検証。結果と実測時間を保存。
+
+Artifacts の `local-transcription-1`（末尾は再実行回数）に JSON とログを保存する。
+音声・モデルはアップロードしない。音声の出典と利用条件は
+[fixture の説明](../crates/local-transcription/tests/fixtures/README.md) を参照。
+この段階で人による権限承認は必要ない。物理マイクの音質・自然発話の精度は後続の評価対象。
