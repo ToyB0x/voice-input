@@ -29,7 +29,7 @@
 
 ## 実行
 
-C/C++ コンパイラー、CMake、libclang が必要。Mac では Xcode Command Line Tools と
+Python 3.9 以降、C/C++ コンパイラー、CMake、libclang が必要。Mac では Xcode Command Line Tools と
 `brew install cmake` を使う。Metal が使える macOS の検証対象は現時点で CI の macOS 14。
 アプリ自体の OS 下限と、今後エンジンを接続したアプリの対応 OS は別途検証する。
 Linux では例として `build-essential cmake clang libclang-dev` が必要。
