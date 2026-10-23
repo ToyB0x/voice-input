@@ -131,7 +131,10 @@ def main():
     if sys.platform == 'darwin':
         for name in ['machdep.cpu.brand_string', 'hw.memsize']:
             host[name] = subprocess.check_output(['/usr/sbin/sysctl', '-n', name], text=True).strip()
-    report = dict(schema_version=1, timestamp=datetime.now(timezone.utc).isoformat(), host=host,
+    source_revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    source_dirty = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip())
+    report = dict(schema_version=1, protocol_version='ja-cer-v1', source_revision=source_revision, source_dirty=source_dirty,
+                  cargo_lock_sha256=checksum(ROOT / 'crates/local-transcription/Cargo.lock'), binary_sha256=checksum(args.binary), timestamp=datetime.now(timezone.utc).isoformat(), host=host,
                   model_name=args.model_name, model_sha256=MODELS[args.model_name]['sha256'], model_revision=REVISION,
                   model_bytes=args.model.stat().st_size, backend=args.backend, metal_initialized=metal,
                   corpus_sha256=checksum(args.corpus), network_denied_probe=args.require_network_denied,

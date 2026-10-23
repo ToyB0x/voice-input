@@ -33,7 +33,7 @@ class ComparisonCompletenessTests(unittest.TestCase):
     def reports(self):
         from transcription_models import MODELS
         return [dict(model_name=model, backend=backend, model_sha256=MODELS[model]['sha256'],
-                     corpus_sha256='same-corpus', network_denied_probe=True, model_bytes=MODELS[model]['bytes'],
+                     corpus_sha256='same-corpus', source_revision='same-code', protocol_version='ja-cer-v1', cargo_lock_sha256='same-lock', network_denied_probe=True, model_bytes=MODELS[model]['bytes'],
                      summary=dict(cer=0.1, silence_false_positives=0))
                 for model in ['base', 'small'] for backend in ['cpu', 'metal']]
 
@@ -43,6 +43,9 @@ class ComparisonCompletenessTests(unittest.TestCase):
         with self.assertRaises(ValueError): validate(reports[:-1], ['base', 'small'])
         with self.assertRaises(ValueError): validate(reports + reports[:1], ['base', 'small'])
         reports[0]['corpus_sha256'] = 'different-corpus'
+        with self.assertRaises(ValueError): validate(reports, ['base', 'small'])
+        reports[0]['corpus_sha256'] = 'same-corpus'
+        reports[0]['source_revision'] = 'different-code'
         with self.assertRaises(ValueError): validate(reports, ['base', 'small'])
 
     def test_unverified_offline_results_cannot_be_presented_as_offline(self):

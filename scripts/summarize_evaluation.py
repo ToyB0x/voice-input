@@ -11,8 +11,9 @@ def validate(reports, models, require_offline=False):
     identities = [(r['model_name'], r['backend']) for r in reports]
     if len(identities) != len(set(identities)) or set(identities) != expected:
         raise ValueError('Incomplete or duplicate model/backend reports')
-    if len({r['corpus_sha256'] for r in reports}) != 1:
-        raise ValueError('Corpus identities differ; results cannot be compared')
+    for key in ['corpus_sha256', 'source_revision', 'protocol_version', 'cargo_lock_sha256']:
+        if len({r[key] for r in reports}) != 1:
+            raise ValueError(f'{key} identities differ; results cannot be compared')
     for report in reports:
         if report['model_sha256'] != MODELS[report['model_name']]['sha256']:
             raise ValueError('Unexpected model identity')
