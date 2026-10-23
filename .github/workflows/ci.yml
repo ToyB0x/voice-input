@@ -16,7 +16,7 @@ jobs:
   macos:
     name: macOS app
     runs-on: macos-14
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
@@ -52,13 +52,60 @@ jobs:
         timeout-minutes: 3
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
-          xcrun swiftc scripts/macos-window-smoke.swift \
+          cp scripts/macos-window-smoke.swift "$RUNNER_TEMP/main.swift"
+          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift \
             -o "$RUNNER_TEMP/voice-input-smoke-runner" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/swift-build.log"
           "$RUNNER_TEMP/voice-input-smoke-runner" \
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/smoke.log"
+      - name: Install virtual microphone for synthetic audio
+        timeout-minutes: 5
+        run: |
+          brew install --cask blackhole-2ch
+          brew install switchaudio-osx
+          sudo killall coreaudiod
+          for attempt in {1..30}; do
+            if SwitchAudioSource -a -t input | grep -Fxq 'BlackHole 2ch'; then
+              break
+            fi
+            sleep 1
+          done
+          SwitchAudioSource -s 'BlackHole 2ch' -t input
+          SwitchAudioSource -s 'BlackHole 2ch' -t output
+          SwitchAudioSource -c -t input | tee "$RUNNER_TEMP/voice-input-smoke/input-device.txt"
+      - name: Verify real microphone permission and recording controls
+        timeout-minutes: 5
+        run: |
+          app="$PWD/src-tauri/target/release/bundle/macos/Voice Input.app"
+          /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$app/Contents/Info.plist"
+          codesign --verify --strict "$app"
+          codesign -d --entitlements :- "$app" \
+            > "$RUNNER_TEMP/voice-input-smoke/entitlements.plist" \
+            2> "$RUNNER_TEMP/voice-input-smoke/codesign.log"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.device.audio-input' "$RUNNER_TEMP/voice-input-smoke/entitlements.plist")" = true
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app"
+          tccutil reset Microphone dev.toyb0x.voiceinput
+          "$RUNNER_TEMP/voice-input-smoke-runner" "$app" \
+            "$RUNNER_TEMP/voice-input-smoke/permission-denied" deny \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/permission-denied.log"
+          tccutil reset Microphone dev.toyb0x.voiceinput
+          python3 - <<'PY'
+          import array, math, os, wave
+          from pathlib import Path
+          tone = array.array('h', (int(math.sin(i * 2 * math.pi * 440 / 48000) * 8192) for i in range(48000)))
+          with wave.open(str(Path(os.environ['RUNNER_TEMP']) / 'voice-input-tone.wav'), 'wb') as audio:
+              audio.setparams((1, 2, 48000, 0, 'NONE', 'not compressed'))
+              audio.writeframes(tone.tobytes() * 60)
+          PY
+          afplay "$RUNNER_TEMP/voice-input-tone.wav" \
+            > "$RUNNER_TEMP/voice-input-smoke/tone.log" 2>&1 &
+          tone_pid=$!
+          trap 'kill "$tone_pid" 2>/dev/null || true' EXIT
+          "$RUNNER_TEMP/voice-input-smoke-runner" "$app" \
+            "$RUNNER_TEMP/voice-input-smoke/permission-allowed" allow \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/permission-allowed.log"
       - name: Check compiler and smoke failure exit statuses
         run: |
           negative="$RUNNER_TEMP/voice-input-smoke/expected-failures"
