@@ -15,13 +15,14 @@
       <section aria-labelledby="model-title">
         <h2 id="model-title">ローカル文字起こしモデル</h2>
         <label for="model-path">モデルの絶対パス（多言語版 ggml .bin）</label>
-        <input id="model-path" aria-label="Model path" type="text" placeholder="/Users/you/Models/ggml-base.bin" spellcheck="false" autocomplete="off" />
+        <input id="model-path" aria-label="Model path" type="text" placeholder="/Users/you/Models/ggml-model.bin" spellcheck="false" autocomplete="off" />
         <div class="controls model-controls">
           <label for="backend">実行方式</label>
           <select id="backend" aria-label="Inference backend"><option value="metal">GPU（Metal）</option><option value="cpu">CPU</option></select>
           <button id="load-model" aria-label="Load local model" disabled>モデルを読み込む</button>
         </div>
         <p id="model-status" role="status">モデル未読み込み。録音のみ利用できます。</p>
+        <p id="model-info" aria-label="Loaded model information" hidden></p>
         <p class="hint">自動ダウンロードは行いません。モデルの指定はアプリ終了まで保持します。</p>
       </section>
       <section aria-labelledby="recording-title">

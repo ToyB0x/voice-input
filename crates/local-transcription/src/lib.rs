@@ -57,6 +57,14 @@ impl Transcriber {
         Ok(Self { context })
     }
 
+    /// Model identity comes from loaded weights, not a user-controlled filename.
+    pub fn model_name(&self) -> String {
+        self.context
+            .model_type_readable_str_lossy()
+            .map(|name| name.into_owned())
+            .unwrap_or_else(|_| "unknown".into())
+    }
+
     /// Input is normalized mono PCM. Empty/short/oversized/NaN input is rejected.
     /// Digital silence bypasses decoding to avoid silence hallucinations.
     pub fn transcribe(&self, audio: &[f32]) -> Result<String, Error> {

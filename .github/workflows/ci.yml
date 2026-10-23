@@ -125,11 +125,12 @@ jobs:
             "$RUNNER_TEMP/voice-input-smoke/permission-allowed" allow \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/permission-allowed.log"
       - name: Prepare local model for app integration
-        run: python3 scripts/prepare-transcription-model.py "$RUNNER_TEMP/ggml-base.bin"
+        # A neutral filename verifies UI identity comes from loaded weights.
+        run: python3 scripts/prepare-transcription-model.py "$RUNNER_TEMP/local-model.bin"
       - name: Verify Japanese recording to transcription and clipboard
         timeout-minutes: 7
         env:
-          VOICE_INPUT_TEST_MODEL: ${{ runner.temp }}/ggml-base.bin
+          VOICE_INPUT_TEST_MODEL: ${{ runner.temp }}/local-model.bin
           VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
         run: |
           tccutil reset Microphone dev.toyb0x.voiceinput

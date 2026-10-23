@@ -250,7 +250,10 @@ func configureModel(root: AXUIElement, windowID: NSNumber, output: URL) throws {
     try interactionScreenshot(output, name: "model-error.png", windowID: windowID)
     try setModelPath(root, path)
     try press(uiButton(root, ["Load local model"])!)
-    try waitForUI("loaded model", seconds: 90) { uiText(root).contains("モデル準備完了") }
+    try waitForUI("loaded model and weight-derived model information", seconds: 90) {
+        let text = uiText(root)
+        return text.contains("モデル準備完了") && text.contains("モデル: base / 148 MB")
+    }
     try interactionScreenshot(output, name: "model-ready.png", windowID: windowID)
 }
 
