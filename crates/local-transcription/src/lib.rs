@@ -6,6 +6,40 @@ pub use resample::prepare_audio;
 use std::path::Path;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+// Never pass native log text to a sink: debug builds can include prompt tokens.
+// Preserve only a fixed, exact backend marker needed by our Metal verification.
+const METAL_MARKER: &[u8] = b"whisper_backend_init_gpu: using Metal backend\n";
+fn safe_diagnostic(message: &[u8]) -> Option<&'static [u8]> {
+    (message == METAL_MARKER).then_some(METAL_MARKER)
+}
+unsafe extern "C" fn native_diagnostic(
+    _: std::ffi::c_uint,
+    text: *const std::ffi::c_char,
+    _: *mut std::ffi::c_void,
+) {
+    if text.is_null() {
+        return;
+    }
+    // SAFETY: whisper.cpp's logging contract supplies a NUL-terminated C string.
+    let message = unsafe { std::ffi::CStr::from_ptr(text) }.to_bytes();
+    if let Some(marker) = safe_diagnostic(message) {
+        use std::io::Write;
+        // Ignore sink failures: no panic/unwind may cross this C callback.
+        let _ = std::io::stderr().lock().write_all(marker);
+    }
+}
+fn configure_native_logging() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        // No Rust logging backend features enabled: silence GGML initialization.
+        whisper_rs::install_logging_hooks();
+        // SAFETY: static callback, no user data, no panics or stored references.
+        unsafe {
+            whisper_rs::set_log_callback(Some(native_diagnostic), std::ptr::null_mut());
+        }
+    });
+}
+
 pub const SAMPLE_RATE: u32 = 16_000;
 pub const MAX_SAMPLES: usize = SAMPLE_RATE as usize * 60;
 
@@ -46,9 +80,7 @@ impl Transcriber {
         if !path.is_file() || std::fs::File::open(path).is_err() {
             return Err(Error::ModelUnavailable);
         }
-        // No log_backend/tracing_backend features are enabled. The hooks discard
-        // native diagnostics, including prompt tokens in debug builds.
-        whisper_rs::install_logging_hooks();
+        configure_native_logging();
         let mut options = WhisperContextParameters::default();
         options.use_gpu(!matches!(backend, Backend::Cpu));
         let context =
@@ -162,6 +194,18 @@ pub fn read_wav(path: &Path) -> Result<Vec<f32>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_diagnostics_never_forward_prompt_or_paths() {
+        assert_eq!(safe_diagnostic(METAL_MARKER), Some(METAL_MARKER));
+        for message in [
+            b"prompt[0] = private text".as_slice(),
+            b"failed: /Users/private/model.bin",
+            b"whisper_backend_init_gpu: using Metal backend\nprivate text",
+        ] {
+            assert!(safe_diagnostic(message).is_none());
+        }
+    }
 
     #[test]
     fn hints_are_bounded_unicode_and_c_safe() {

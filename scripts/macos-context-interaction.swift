@@ -12,7 +12,10 @@ func configureContext(_ voice: AXUIElement, enabled: Bool) throws {
     if (axValue(insertion, kAXValueAttribute) as? NSNumber)?.intValue == 1 { try press(insertion) }
     if ((axValue(checkbox, kAXValueAttribute) as? NSNumber)?.intValue == 1) != enabled { try press(checkbox) }
     try press(uiButton(voice, ["Save preferences"])!)
-    try waitForUI("context preference applied") { uiText(voice).contains(enabled ? "認識補助: 有効" : "認識補助: 無効") && uiText(voice).contains("直接入力: 無効") }
+    try waitForUI("context preference applied") {
+        let text = uiText(voice)
+        return (enabled ? text.contains("認識補助:") && !text.contains("認識補助: 無効") : text.contains("認識補助: 無効")) && text.contains("直接入力: 無効")
+    }
 }
 func contextInteraction(pid: pid_t, scenario: String, output: URL) throws {
     let voice = AXUIElementCreateApplication(pid)
@@ -80,6 +83,10 @@ func contextInteraction(pid: pid_t, scenario: String, output: URL) throws {
         let values = counts(after, "valueReads") - counts(before, "valueReads")
         guard values == 0 else { throw SmokeFailure(description: "Context requested a full field value: \(mode)") }
         guard reads == (["disabled", "secure", "readonly"].contains(mode) ? 0 : 1), (after["maximumRange"] as! Int) <= 512 else { throw SmokeFailure(description: "Unexpected or unbounded range read: \(mode)") }
+        if mode == "bounded" {
+            guard after["lastRangeStart"] as? Int == (after["caret"] as! Int) - 256,
+                  after["lastRangeLength"] as? Int == 512 else { throw SmokeFailure(description: "Context range did not surround caret") }
+        }
         try trayAction(voice, title: "設定・認識結果を表示")
         let expected = mode == "disabled" ? "認識補助: 無効" : ["secure", "readonly", "unsupported"].contains(mode) ? "認識補助: ヒントなしで続行" : "認識補助: 取得済み"
         try waitForUI("context capture state") { uiText(voice).contains(expected) }
