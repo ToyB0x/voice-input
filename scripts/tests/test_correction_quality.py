@@ -12,7 +12,7 @@ from correction_quality import constraints, quality_summary, load_baseline, comp
 from correction_models import MODELS
 from transcription_models import MODELS as ASR_MODELS, checksum
 from evaluate_models import ROOT, normalize, score
-from evaluate_correction import MODES, load_asr, route_summary, measured_infer, persist_report, route_requests
+from evaluate_correction import MODES, load_asr, route_summary, measured_infer, persist_report, route_requests, host_info
 from summarize_correction import EXPECTED, validate_reports
 
 
@@ -80,6 +80,10 @@ class FixedQualityTests(unittest.TestCase):
 
 
 class ProvenanceTests(unittest.TestCase):
+    def test_macos_memory_metadata_uses_sysctl_instead_of_linux_sysconf(self):
+        with patch('evaluate_correction.platform.system', return_value='Darwin'), patch('evaluate_correction.subprocess.check_output', return_value='7516192768\n'), patch('evaluate_correction.os.sysconf', side_effect=AssertionError('Linux-only selector')):
+            self.assertEqual(host_info()['physical_memory_bytes'], 7516192768)
+
     def test_requests_freeze_asr_and_context_independently(self):
         corpus=dict(cases=[dict(id='one', reference='正解', hint='固定画面情報')])
         asr={mode:dict(cases=[dict(observations=[dict(text=text), dict(text=text)])])

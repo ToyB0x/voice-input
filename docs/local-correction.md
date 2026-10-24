@@ -71,7 +71,7 @@ Qwen3の非思考モード用のプロンプトとJSON文法制約を用いま�
 | correction_only | なし | あり |
 | both | あり | あり |
 
-Artifact `correction-evaluation-qwen3-1.7b` / `correction-evaluation-qwen3-4b` / `correction-evaluation-qwen3-8b`に原文・補正結果・CER・棄却数・実行失敗数・時間・RSSを保存します。補正の4条件比較は同じLinux CPU環境で行い、事実と書式を分けた固定19ケース、8Bの同じ旧9ケースの変更前後、差分を評価します。全モデルが揃った比較表は`correction-quality-summary`です。詳細・制約は[補正品質の比較](correction-quality.md)を参照してください。棄却時の原文保持は生成成功と区別し、エンジンの実行失敗ではCIを失敗にします。推論プロセス全体のネットワークを禁止し、GPUを実行していない評価は`NOT TESTED`と記録します。Macのアプリ結合テストとGPUの利用可否検査は継続します。
+Artifact `correction-evaluation-qwen3-1.7b` / `correction-evaluation-qwen3-4b` / `correction-evaluation-qwen3-8b`に原文・補正結果・CER・棄却数・実行失敗数・時間・RSSを保存します。補正の4条件比較は同じLinux CPU環境で行い、事実と書式を分けた固定20ケース、8Bの同じ旧9ケースの変更前後、差分を評価します。全モデルが揃った比較表は`correction-quality-summary`です。詳細・制約は[補正品質の比較](correction-quality.md)を参照してください。棄却時の原文保持は生成成功と区別し、エンジンの実行失敗ではCIを失敗にします。推論プロセス全体のネットワークを禁止し、GPUを実行していない評価は`NOT TESTED`と記録します。Macのアプリ結合テストとGPUの利用可否検査は継続します。
 
 この比較は、正解語彙を含む固定文脈による感度試験です。実画面のOCR精度や一般的な自然発話の性能を測ったものではありません。実画面OCRの権限・切り出し・音声認識・補正・明示コピー・子プロセスのキャンセルは、別途Macアプリのネイティブ操作CIで検証します。意味・事実・フォーマットに関する機械チェックも指定した制約の範囲に限られ、自由な文章全体の意味評価には人の判断が必要です。VM上の時間・メモリを物理Macの性能として解釈しないでください。
 

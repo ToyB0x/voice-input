@@ -273,6 +273,24 @@
         "参加しません"
       ],
       "punctuation": true
+    },
+    {
+      "id": "multi-sentence-preservation",
+      "transcript": "月日は、百代の過客にして、生きかうとしもまた旅人なり。船の上にしょうがようかべ、うまの口とらえておよむかうるものは、日々旅にして旅を済みかとす。",
+      "context": "月日、百代、過客、旅人。",
+      "reference": "月日は、百代の過客にして、生きかうとしもまた旅人なり。船の上にしょうがようかべ、うまの口とらえておよむかうるものは、日々旅にして旅を済みかとす。",
+      "required": [
+        "百代",
+        "旅人",
+        "日々"
+      ],
+      "forbidden": [
+        "昼食",
+        "うどん",
+        "見積もり"
+      ],
+      "punctuation": true,
+      "source": "ASR of public-domain Oku no Hosomichi app fixture; CI run 40100448970"
     }
   ]
 }

@@ -168,6 +168,12 @@ def route_requests(corpus,asr):
                        reference=case['reference'],context=case['hint'] if correction_context else '')
 
 
+def host_info():
+    memory=(int(subprocess.check_output(['/usr/sbin/sysctl','-n','hw.memsize'],text=True))
+            if platform.system()=='Darwin' else os.sysconf('SC_PHYS_PAGES')*os.sysconf('SC_PAGE_SIZE'))
+    return dict(system=platform.system(),machine=platform.machine(),logical_cpus=os.cpu_count(),physical_memory_bytes=memory)
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary',type=Path,required=True)
@@ -196,8 +202,7 @@ def main():
         binary_sha256=checksum(args.binary),runtime_source_sha256=checksum(ROOT/'crates/local-correction/src/lib.rs'),
         cargo_lock_sha256=checksum(ROOT/'crates/local-correction/Cargo.lock'),
         network_denied=args.require_network_denied,backend='cpu',
-        host=dict(system=platform.system(),machine=platform.machine(),logical_cpus=os.cpu_count(),
-                  physical_memory_bytes=os.sysconf('SC_PHYS_PAGES')*os.sysconf('SC_PAGE_SIZE')),
+        host=host_info(),
         asr_input_sha256={mode:checksum(args.asr/(mode+'.json')) for mode in asr},
         asr_binary_sha256=asr_metadata['binary_sha256'],
         corpus_sha256=checksum(ROOT/'evaluation/corpus.json'),supplemental_sha256=checksum(ROOT/'evaluation/correction-cases.json'),

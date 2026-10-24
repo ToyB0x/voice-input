@@ -174,11 +174,33 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     try waitForUI("correction CPU selected") {axText(backend).contains("CPU")}
     try pressContextButton(voice,"Save preferences")
     try pressContextButton(voice,"Preview local correction")
-    try waitForUI("native correction preview",seconds:180) {
-        let text=uiText(voice)
-        if text.contains("ローカル補正に失敗しました") || text.contains("補正結果が原文保持のチェックを満たさず") {throw SmokeFailure(description:"Native correction failed; inspect failure-app-state.txt for the fixed failure stage")}
-        let fields=axElements(voice)
-        return fields.contains{axValue($0,kAXRoleAttribute) as? String=="AXTextArea" && axText($0).contains("Corrected text") && !(axValue($0,kAXValueAttribute) as? String ?? "").isEmpty} && uiText(voice).contains("補正プレビュー:")
+    func waitForCorrectionCandidate() throws -> Bool {
+        var rejected=false
+        try waitForUI("native correction preview",seconds:180) {
+            let text=uiText(voice)
+            if text.contains("ローカル補正に失敗しました") {throw SmokeFailure(description:"Native correction runtime failed; inspect failure-app-state.txt")}
+            if text.contains("補正結果が原文保持のチェックを満たさず") {rejected=true;return true}
+            let fields=axElements(voice)
+            return fields.contains{axValue($0,kAXRoleAttribute) as? String=="AXTextArea" && axText($0).contains("Corrected text") && !(axValue($0,kAXValueAttribute) as? String ?? "").isEmpty} && text.contains("補正プレビュー:")
+        }
+        return !rejected
+    }
+    let initialPreviewRejected = !(try waitForCorrectionCandidate())
+    if initialPreviewRejected {
+        // Rejection is a valid safe outcome, not a generated preview. Require
+        // unchanged raw text/clipboard and no candidate before a real retry.
+        let candidates=axElements(voice).filter{axValue($0,kAXRoleAttribute) as? String=="AXTextArea" && axText($0).contains("Corrected text")}
+        guard resultText(voice)==raw, NSPasteboard.general.string(forType:.string)=="insertion-clipboard-sentinel",
+              uiButton(voice,["Copy correction"])==nil,
+              candidates.allSatisfy({(axValue($0,kAXValueAttribute) as? String ?? "").isEmpty}) else {
+            throw SmokeFailure(description:"Rejected correction changed data or left a copyable candidate")
+        }
+        try interactionScreenshot(output,name:"rejected-preview.png")
+        // Product retries consume no old screen context. Still require an
+        // actual successful model preview and explicit copy below.
+        try pressContextButton(voice,"Preview local correction")
+        try waitForUI("context-free correction retry acknowledged") {uiText(voice).contains("ローカル補正中") && productChildRunning(pid)}
+        guard try waitForCorrectionCandidate() else {throw SmokeFailure(description:"Context-free correction retry was also rejected")}
     }
     guard resultText(voice)==raw, NSPasteboard.general.string(forType:.string)=="insertion-clipboard-sentinel" else {throw SmokeFailure(description:"Correction changed raw text or clipboard without explicit copy")}
     let corrected=axElements(voice).first{axValue($0,kAXRoleAttribute) as? String=="AXTextArea" && axText($0).contains("Corrected text")}.flatMap{axValue($0,kAXValueAttribute) as? String} ?? ""
@@ -211,5 +233,5 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     let app=NSRunningApplication(processIdentifier:pid)
     try trayAction(voice,title:"Voice Inputを終了")
     try waitForUI("app and correction child exited",seconds:20) {app?.isTerminated==true && kill(quittingChild!,0) != 0}
-    try writeJSON(["status":"passed","exitReapedChild":true,"excluded":exclusions,"ocrCharacters":count,"axTextReads":0,"rawPreserved":true,"explicitCopy":true,"childCancellation":true],to:output.appendingPathComponent("interaction.json"))
+    try writeJSON(["status":"passed","exitReapedChild":true,"excluded":exclusions,"ocrCharacters":count,"axTextReads":0,"rawPreserved":true,"explicitCopy":true,"childCancellation":true,"contextFreeRetryAfterRejection":initialPreviewRejected],to:output.appendingPathComponent("interaction.json"))
 }
