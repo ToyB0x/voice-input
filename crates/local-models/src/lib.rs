@@ -190,7 +190,7 @@ impl Manager {
     pub fn start(&self, ids: Vec<String>, download: bool) -> Result<Status> {
         let all = catalog();
         if ids.is_empty() || ids.len() > 2 {
-            return Err("音声モデルと必要な補正モデルを選んでください。");
+            return Err("準備するモデルを一つか二つ選んでください。");
         }
         let models = ids
             .iter()
@@ -201,10 +201,14 @@ impl Manager {
                     .ok_or("未対応のモデルです。")
             })
             .collect::<Result<Vec<_>>>()?;
-        if models[0].kind != "transcription"
-            || (models.len() == 2 && models[1].kind != "correction")
+        if models
+            .iter()
+            .map(|m| &m.kind)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != models.len()
         {
-            return Err("モデルの種類が不正です。");
+            return Err("音声・補正モデルはそれぞれ一つまで選択できます。");
         }
         let mut inner = self
             .inner
@@ -487,6 +491,20 @@ mod tests {
         );
     }
     #[test]
+    fn correction_only_setup_is_supported_without_touching_custom_speech_paths() {
+        let (manager, _) = fixture("correction-only");
+        assert!(manager.start(vec![], false).is_err());
+        assert!(
+            manager
+                .start(vec!["base".into(), "small".into()], false)
+                .is_err()
+        );
+        assert!(manager.start(vec!["qwen3-4b".into()], false).is_ok());
+        manager.shutdown();
+        assert!(manager.status().prepared.is_empty());
+        fs::remove_dir_all(manager.root).unwrap();
+    }
+    #[test]
     fn cached_files_are_verified_and_corruption_is_not_applied() {
         let (manager, model) = fixture("integrity");
         let file = model.path(&manager.root);
@@ -571,7 +589,11 @@ mod tests {
         assert_eq!(manager.wait_download(child, &partial, 3), Err(INVALID));
         assert!(!model.path(&manager.root).exists());
         assert!(manager.start(vec!["../private".into()], true).is_err());
-        assert!(manager.start(vec!["qwen3-4b".into()], true).is_err());
+        assert!(
+            manager
+                .start(vec!["qwen3-4b".into(), "qwen3-8b".into()], true)
+                .is_err()
+        );
         manager.shutdown();
         fs::remove_dir_all(manager.root).unwrap();
     }

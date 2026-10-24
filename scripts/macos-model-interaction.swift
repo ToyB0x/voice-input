@@ -32,7 +32,7 @@ func modelInteraction(pid:pid_t,scenario:String,output:URL) throws {
         }
     }
     let clipboard=NSPasteboard.general.string(forType:.string)
-    try waitForUI("model catalog loaded") {uiButton(root,[scenario=="models-restore" ? "Verify cached models":"Download selected models"]) != nil}
+    try waitForUI("model catalog loaded") {axElements(root).contains(where:{axValue($0,kAXRoleAttribute) as? String == "AXPopUpButton" && axText($0).contains("Model preset") && (axValue($0,kAXEnabledAttribute) as? Bool)==true})}
     if scenario=="models" {
         let initialPath=value("Model path")
         for (title,expected) in [("認識重視（medium）","Whisper medium"),("大きい音声モデル（turbo）","Whisper large-v3-turbo"),("整形比較（medium + 4B）","Whisper medium")] {
@@ -60,6 +60,7 @@ func modelInteraction(pid:pid_t,scenario:String,output:URL) throws {
         try interactionScreenshot(output,name:"prepared.png")
         try writeJSON(["status":"passed","downloadedAndVerified":true,"actualTransportCancelled":true,"partialFilesRemoved":true,"realModelLoaded":true,"contextUnchanged":true],to:output.appendingPathComponent("interaction.json"))
     } else {
+        try chooseModelOption(root,label:"Model preset",title:"軽量（base）")
         try waitForUI("managed model preferences restored",seconds:120) {value("Model path").hasPrefix(storage.path+"/") && uiText(root).contains("モデル準備完了")}
         guard !modelTransportRunning(pid) else {throw SmokeFailure(description:"Restore downloaded without an explicit request")}
         try press(uiButton(root,["Verify cached models"])!)

@@ -9,7 +9,7 @@ const presets: Record<string, [string, string, string]> = {
   turbo: ["large-v3-turbo", "", "大きい音声モデル：Whisper large-v3-turbo。実機の速度とメモリをご確認ください。"],
   format: ["medium", "qwen3-4b", "整形比較：Whisper medium + Qwen3 4B。補正は確認後にコピーします。画面情報の取得元・利用先は別途選択してください。"],
 };
-export function setupModels(locked: () => boolean, apply: (speech: string, correction: string) => void) {
+export function setupModels(locked: () => boolean, apply: (speech: string | undefined, correction: string | undefined) => void) {
   const select = <T extends HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
   const preset = select<HTMLSelectElement>("model-preset");
   const speech = select<HTMLSelectElement>("managed-speech");
@@ -23,20 +23,23 @@ export function setupModels(locked: () => boolean, apply: (speech: string, corre
   const message = select<HTMLParagraphElement>("managed-status");
   const progress = select<HTMLProgressElement>("model-progress");
   let models: Model[] = [];
+  let populated = false;
   let state: Preparation | undefined;
   let requesting = false;
   let polling = false;
   let ignoredGeneration = -1;
   let terminalGeneration = -1;
-  const ids = () => [speech.value, correction.value].filter(Boolean);
+  const ids = () => [speech.value, correction.value].filter(id => id !== "" && id !== "keep");
   const busy = () => requesting || !!state && ["starting", "downloading", "verifying"].includes(state.phase);
+  const onlyDisableCorrection = () => speech.value === "" && correction.value === "";
   const matches = () => !!state && state.phase === "ready" && state.generation !== ignoredGeneration && state.prepared.map(m => m.id).join() === ids().join();
   function render() {
     const unavailable = !isTauri() || !models.length;
     preset.disabled = speech.disabled = correction.disabled = unavailable || busy() || locked();
-    download.disabled = unavailable || busy() || locked();
-    verify.disabled = unavailable || busy() || locked() || ids().some(id => !models.find(m => m.id === id)?.cached);
-    applyButton.disabled = !matches() || busy() || locked();
+    download.disabled = unavailable || !ids().length || busy() || locked();
+    verify.disabled = unavailable || !ids().length || busy() || locked() || ids().some(id => !models.find(m => m.id === id)?.cached);
+    applyButton.disabled = !(matches() || onlyDisableCorrection()) || busy() || locked();
+    applyButton.textContent = onlyDisableCorrection() ? "補正を無効にして設定欄へ反映" : "検証済みモデルを設定欄へ反映";
     cancel.disabled = requesting || !busy();
     const chosen = ids().map(id => models.find(m => m.id === id)).filter((m): m is Model => !!m);
     const total = chosen.reduce((n, m) => n + m.bytes, 0);
@@ -60,15 +63,15 @@ export function setupModels(locked: () => boolean, apply: (speech: string, corre
   verify.addEventListener("click", () => void prepare(false));
   cancel.addEventListener("click", () => { ignoredGeneration = state?.generation ?? -1; void invoke("cancel_model_preparation").catch(cause => { message.textContent = String(cause); }); });
   applyButton.addEventListener("click", () => {
-    if (!matches() || locked()) return;
-    apply(state!.prepared.find(m => m.id === speech.value)!.path, state!.prepared.find(m => m.id === correction.value)?.path ?? "");
-    message.textContent = "設定欄へ反映しました。「設定を保存」と音声モデルの「モデルを読み込む」で適用してください。";
+    if (!(matches() || onlyDisableCorrection()) || locked()) return;
+    apply(state?.prepared.find(m => m.id === speech.value)?.path, correction.value === "keep" ? undefined : state?.prepared.find(m => m.id === correction.value)?.path ?? "");
+    message.textContent = "設定欄へ反映しました。「設定を保存」を押し、音声モデルを変更した場合は「モデルを読み込む」で適用してください。";
   });
   async function loadCatalog() {
     models = await invoke<Model[]>("model_catalog");
-    if (!speech.options.length) {
+    if (!populated) {
       for (const m of models) (m.kind === "transcription" ? speech : correction).add(new Option(m.name, m.id));
-      speech.value = "base"; correction.value = "";
+      speech.value = ""; correction.value = "keep"; populated = true;
     }
     render();
   }

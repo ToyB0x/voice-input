@@ -18,9 +18,9 @@
         <select id="model-preset" aria-label="Model preset"><option value="custom">個別に選択</option><option value="light">軽量（base）</option><option value="accurate">認識重視（medium）</option><option value="turbo">大きい音声モデル（turbo）</option><option value="format">整形比較（medium + 4B）</option></select>
         <p id="preset-info" class="hint">準備するモデルを個別に選択できます。</p>
         <label for="managed-speech">音声モデル</label>
-        <select id="managed-speech" aria-label="Managed speech model"></select>
+        <select id="managed-speech" aria-label="Managed speech model"><option value="">現在の音声設定を維持</option></select>
         <label for="managed-correction">最終補正モデル</label>
-        <select id="managed-correction" aria-label="Managed correction model"><option value="">補正を使わない</option></select>
+        <select id="managed-correction" aria-label="Managed correction model"><option value="keep">現在の補正設定を維持</option><option value="">補正を使わない</option></select>
         <p id="managed-info" class="hint"></p>
         <div class="controls">
           <button id="download-models" aria-label="Download selected models" disabled>ダウンロードして準備</button>

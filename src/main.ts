@@ -91,9 +91,9 @@ let actionError: string | null = null;
 const managedModels = setupModels(
   () => busy || !snapshot || snapshot.working || snapshot.phase === "recording" || !!correction?.working,
   (speechPath, finalModelPath) => {
-    modelPath.value = speechPath;
-    correctionModelPath.value = finalModelPath;
-    preferencesMessage.textContent = "モデルを設定欄へ反映しました。保存し、音声モデルを読み込んでください。";
+    if (speechPath !== undefined) modelPath.value = speechPath;
+    if (finalModelPath !== undefined) correctionModelPath.value = finalModelPath;
+    preferencesMessage.textContent = speechPath !== undefined ? "モデルを設定欄へ反映しました。保存し、音声モデルを読み込んでください。" : "補正モデルの設定を反映しました。設定を保存してください。";
     render();
   },
 );
