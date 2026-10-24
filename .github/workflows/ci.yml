@@ -17,6 +17,8 @@ jobs:
     name: macOS app
     runs-on: macos-14
     timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
@@ -93,6 +95,19 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local Context Fixture' "$fixture/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
           codesign --force --sign - "$fixture"
+      - name: Verify bundled correction runtime starts without a model or network
+        run: |
+          runtime="$PWD/src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/local-correction"
+          test -x "$runtime"
+          printf '%s' '{"transcript":"","context":""}' | \
+            sandbox-exec -p '(version 1) (allow default) (deny network*)' "$runtime" /missing/model.gguf cpu \
+            > "$RUNNER_TEMP/voice-input-smoke/runtime-probe.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads((Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke/runtime-probe.json').read_text())
+          assert report['text'] == '' and report['offloaded_layers'] == 0
+          PY
       - name: Verify native window and capture screenshot
         timeout-minutes: 3
         run: |
