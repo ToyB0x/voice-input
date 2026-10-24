@@ -181,7 +181,7 @@ jobs:
           from pathlib import Path
           credential = dict(username='voiceinput-ci', password=secrets.token_hex(24))
           path = Path(os.environ['VOICE_INPUT_CI_AUTH_FILE'])
-          with path.open('w', opener=lambda p, f: os.open(p, f, 0o600)) as output:
+          with open(path, 'w', opener=lambda p, f: os.open(p, f, 0o600)) as output:
               json.dump(credential, output)
           result = subprocess.run(['sudo', 'sysadminctl', '-addUser', credential['username'],
               '-fullName', 'Voice Input CI', '-home', str(path.parent / 'voice-input-ci-home'),
