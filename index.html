@@ -23,7 +23,7 @@
         </div>
         <p id="model-status" role="status">モデル未読み込み。録音のみ利用できます。</p>
         <p id="model-info" aria-label="Loaded model information" hidden></p>
-        <p class="hint">自動ダウンロードは行いません。モデルの指定はアプリ終了まで保持します。</p>
+        <p class="hint">自動ダウンロードは行いません。設定を保存すると次回起動時に読み込みます。音声・認識結果は保存しません。</p>
       </section>
       <section aria-labelledby="recording-title">
         <h2 id="recording-title">ローカル録音</h2>
@@ -43,6 +43,16 @@
         <p id="error" role="alert" hidden></p>
         <button id="settings" aria-label="Open microphone settings" hidden>マイクのシステム設定を開く</button>
         <p class="hint">最大 60 秒。新しい録音・破棄・アプリ終了で音声を消去します。</p>
+      </section>
+      <section aria-labelledby="desktop-title">
+        <h2 id="desktop-title">常駐・ショートカット設定</h2>
+        <label for="shortcut">録音開始 / 停止（空欄で無効）</label>
+        <input id="shortcut" aria-label="Recording shortcut" type="text" value="Command+Shift+Space" spellcheck="false" autocomplete="off" />
+        <button id="save-preferences" aria-label="Save preferences" disabled>設定を保存</button>
+        <p id="desktop-status" role="status"></p>
+        <p id="preferences-message" role="status"></p>
+        <p class="hint">モデルのパス・実行方式・ショートカットだけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
+        <p class="hint">ウィンドウを閉じても常駐します。メニューバーの VI から設定・結果を表示、終了できます。</p>
       </section>
       <section aria-labelledby="result-title">
         <h2 id="result-title">認識結果</h2>
