@@ -1,5 +1,9 @@
 fn main() {
     let manifest = tauri_build::AppManifest::new().commands(&[
+        "model_catalog",
+        "model_preparation_status",
+        "prepare_models",
+        "cancel_model_preparation",
         "recording_status",
         "request_microphone_permission",
         "start_recording",

@@ -16,3 +16,5 @@ evaluation/results/
 
 crates/local-correction/target/
 src-tauri/resources/local-correction
+
+crates/local-models/target/

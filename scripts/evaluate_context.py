@@ -65,6 +65,9 @@ def main():
             subprocess.run([str(args.binary.resolve()), str(args.model.resolve()), str(corpus_path), '--cpu', *flag],
                            stdout=stdout, stderr=stderr, check=True, timeout=600)
         reports[mode] = json.loads((args.output / f'{mode}.json').read_text())
+        if (reports[mode]['model_name'] != MODELS[args.model_name].get('engine_name', args.model_name)
+            or reports[mode]['backend'] != 'cpu' or reports[mode].get('metal_initialized')):
+            raise ValueError('Unexpected ASR engine or backend')
     report = compare(corpus, reports)
     report.update(protocol_version='context-evaluation-v2', model=args.model_name,
                   model_sha256=checksum(args.model), backend='cpu',

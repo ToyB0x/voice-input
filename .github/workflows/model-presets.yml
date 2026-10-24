@@ -1,0 +1,128 @@
+name: Model preset evaluation
+on:
+  pull_request:
+    paths-ignore: ["docs/**", "README.md", "evaluation/baseline/**"]
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "README.md", "evaluation/baseline/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: presets-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  asr:
+    name: Preset ASR ${{ matrix.asr }} (Mac CPU)
+    runs-on: macos-14
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        asr: [medium, large-v3-turbo]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-transcription/target
+          key: macos-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Build fixed evaluator
+        run: cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked --bin evaluate
+      - name: Prepare pinned model (explicit setup only)
+        run: python3 scripts/prepare-transcription-model.py --model '${{ matrix.asr }}' "$RUNNER_TEMP/model.bin"
+      - name: Compare all context inputs on CPU with networking denied
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 scripts/evaluate_context.py \
+            --binary crates/local-transcription/target/release/evaluate --model "$RUNNER_TEMP/model.bin" \
+            --model-name '${{ matrix.asr }}' --output "$RUNNER_TEMP/preset-asr" --require-network-denied
+          cat "$RUNNER_TEMP/preset-asr/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preset-asr-${{ matrix.asr }}
+          path: ${{ runner.temp }}/preset-asr/
+          retention-days: 14
+  correction:
+    name: Preset ${{ matrix.asr }} + 4B (Linux CPU)
+    needs: asr
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
+    strategy:
+      fail-fast: false
+      matrix:
+        asr: [medium, large-v3-turbo]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libclang-dev libseccomp2 time
+          rustup show
+      - uses: actions/cache/restore@v4
+        id: correction-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: linux-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: linux-${{ runner.arch }}-correction-runtime-v1-
+      - uses: actions/download-artifact@v4
+        with:
+          name: preset-asr-${{ matrix.asr }}
+          path: ${{ runner.temp }}/preset-asr
+      - name: Build and test evaluator
+        run: |
+          cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked
+          python3 -m unittest discover -s scripts/tests -v
+      - uses: actions/cache/save@v4
+        if: steps.correction-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: ${{ steps.correction-cache.outputs.cache-primary-key }}
+      - name: Prepare checksum-verified 4B model (setup only)
+        run: python3 scripts/prepare-correction-model.py --model qwen3-4b "$RUNNER_TEMP/correction.gguf"
+      - name: Evaluate all four routes with networking denied
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/evaluate_correction.py \
+            --binary crates/local-correction/target/release/local-correction \
+            --model "$RUNNER_TEMP/correction.gguf" --model-name qwen3-4b --asr-model '${{ matrix.asr }}' \
+            --asr "$RUNNER_TEMP/preset-asr" --output "$RUNNER_TEMP/preset-correction" --cpu-only --require-network-denied
+          cat "$RUNNER_TEMP/preset-correction/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preset-correction-${{ matrix.asr }}
+          path: ${{ runner.temp }}/preset-correction/
+          retention-days: 14
+  summary:
+    name: Compare complete model presets
+    needs: correction
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: preset-correction-*
+          path: ${{ runner.temp }}/preset-reports
+      - name: Validate complete combinations and publish raw and final CER
+        run: |
+          python3 scripts/summarize_presets.py "$RUNNER_TEMP/preset-reports" "$RUNNER_TEMP/preset-summary"
+          cat "$RUNNER_TEMP/preset-summary/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-preset-summary
+          path: ${{ runner.temp }}/preset-summary/
+          retention-days: 14

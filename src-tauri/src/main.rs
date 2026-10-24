@@ -16,6 +16,8 @@ mod desktop;
 #[cfg(target_os = "macos")]
 mod insertion;
 #[cfg(target_os = "macos")]
+mod models;
+#[cfg(target_os = "macos")]
 mod ocr;
 #[cfg(any(target_os = "macos", test))]
 mod settings;
@@ -53,6 +55,10 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            models::model_catalog,
+            models::model_preparation_status,
+            models::prepare_models,
+            models::cancel_model_preparation,
             recorder::recording_status,
             recorder::request_microphone_permission,
             recorder::start_recording,
@@ -86,6 +92,7 @@ fn main() {
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
             ) {
                 use tauri::Manager;
+                app.state::<local_models::Manager>().shutdown();
                 app.state::<context::Reader>().cancel();
                 app.state::<correction::Corrector>().shutdown();
             }

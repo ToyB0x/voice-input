@@ -199,6 +199,9 @@ pub fn save_preferences(
 }
 
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    app.manage(local_models::Manager::new(
+        app.path().app_local_data_dir()?.join("models"),
+    ));
     let path = app.path().app_config_dir()?.join("settings.json");
     let (preferences, mut error) = match settings::load(&path) {
         Ok(settings) => (settings, None),

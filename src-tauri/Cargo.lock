@@ -1980,6 +1980,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
 
 [[package]]
+name = "local-models"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "local-transcription"
 version = "0.1.0"
 dependencies = [
@@ -4233,6 +4242,7 @@ dependencies = [
  "block2",
  "core-foundation",
  "cpal",
+ "local-models",
  "local-transcription",
  "objc2",
  "objc2-av-foundation",

@@ -56,6 +56,12 @@ jobs:
         with:
           path: crates/local-correction/target
           key: macos-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Test pinned model preparation without networking
+        run: |
+          cargo fmt --manifest-path crates/local-models/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/local-models/Cargo.toml --locked --all-targets -- -D warnings
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            cargo test --manifest-path crates/local-models/Cargo.toml --locked --offline
       - name: Check and build isolated local correction runtime
         run: |
           cargo fmt --manifest-path crates/local-correction/Cargo.toml -- --check
@@ -164,13 +170,25 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
           cp scripts/macos-window-smoke.swift "$RUNNER_TEMP/main.swift"
-          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift scripts/macos-insertion-interaction.swift scripts/macos-context-interaction.swift scripts/macos-ocr-interaction.swift \
+          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift scripts/macos-insertion-interaction.swift scripts/macos-context-interaction.swift scripts/macos-ocr-interaction.swift scripts/macos-model-interaction.swift \
             -o "$RUNNER_TEMP/voice-input-smoke-runner" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/swift-build.log"
           "$RUNNER_TEMP/voice-input-smoke-runner" \
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/smoke.log"
+      - name: Verify explicit model preparation, cancellation and preset isolation
+        timeout-minutes: 14
+        run: |
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/models" models
+      - name: Verify managed model restoration and cached verification
+        timeout-minutes: 4
+        run: |
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/models-restore" models-restore
       - name: Install virtual microphone for synthetic audio
         timeout-minutes: 5
         run: |

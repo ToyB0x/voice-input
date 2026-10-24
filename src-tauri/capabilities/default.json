@@ -23,6 +23,10 @@
     "allow-correct-transcript",
     "allow-correction-status",
     "allow-copy-correction",
-    "allow-request-accessibility"
+    "allow-request-accessibility",
+    "allow-model-catalog",
+    "allow-model-preparation-status",
+    "allow-prepare-models",
+    "allow-cancel-model-preparation"
   ]
 }
