@@ -17,6 +17,9 @@ func hideInsertionWindow(_ root: AXUIElement) throws {
     guard let window = (axValue(root, kAXWindowsAttribute) as? [AXUIElement])?.first,
           let close = axValue(window, kAXCloseButtonAttribute) else { throw SmokeFailure(description: "No window close control") }
     try press(unsafeBitCast(close, to: AXUIElement.self))
+    var pid: pid_t = 0
+    guard AXUIElementGetPid(root, &pid) == .success else { throw SmokeFailure(description: "Could not identify closing app") }
+    try waitForUI("Voice Input window fully hidden") { visibleWindows(for: pid).isEmpty }
 }
 func focusElement(_ root: AXUIElement, _ element: AXUIElement, pid: pid_t) throws {
     NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateAllWindows])
@@ -266,7 +269,8 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
             }
             guard axValue(field, kAXValueAttribute) as? String == initial else { throw SmokeFailure(description: "Retry inserted a second time") }
             passed.append("retry-with-restored-target")
-            try trayAction(voice, title: "設定・認識結果を表示")
+            // The settings window is already visible behind TextEdit. Do not
+            // enqueue a new focus request immediately before closing it.
         }
         try hideInsertionWindow(voice)
     }
