@@ -13,6 +13,9 @@ on:
       - scripts/macos-foundation-model-probe.swift
       - scripts/probe-correction-model.py
       - scripts/run-offline-linux.py
+      - crates/local-models/catalog.json
+      - scripts/transcription_models.py
+      - scripts/correction_models.py
 
 permissions:
   contents: read

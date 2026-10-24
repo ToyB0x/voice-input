@@ -94,6 +94,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
 
+    if scenario.hasPrefix("models") { try modelInteraction(pid:pid,scenario:scenario,output:output); return }
+
     if scenario.hasPrefix("ocr") { try ocrInteraction(pid:pid,scenario:scenario,output:output); return }
 
     if scenario.hasPrefix("context") { try contextInteraction(pid: pid, scenario: scenario, output: output); return }

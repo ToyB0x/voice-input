@@ -12,6 +12,26 @@
       <h1>Voice Input</h1>
       <p>話すことから、入力をはじめる。</p>
       <p class="privacy">音声はこの Mac のメモリ内だけに保持し、外部へ送信しません。</p>
+      <section aria-labelledby="prepare-title">
+        <h2 id="prepare-title">モデルの準備・選択</h2>
+        <label for="model-preset">準備するモデルの組み合わせ</label>
+        <select id="model-preset" aria-label="Model preset"><option value="custom">個別に選択</option><option value="light">軽量（base）</option><option value="accurate">認識重視（medium）</option><option value="turbo">大きい音声モデル（turbo）</option><option value="format">整形比較（medium + 4B）</option></select>
+        <p id="preset-info" class="hint">準備するモデルを個別に選択できます。</p>
+        <label for="managed-speech">音声モデル</label>
+        <select id="managed-speech" aria-label="Managed speech model"><option value="">現在の音声設定を維持</option></select>
+        <label for="managed-correction">最終補正モデル</label>
+        <select id="managed-correction" aria-label="Managed correction model"><option value="keep">現在の補正設定を維持</option><option value="">補正を使わない</option></select>
+        <p id="managed-info" class="hint"></p>
+        <div class="controls">
+          <button id="download-models" aria-label="Download selected models" disabled>ダウンロードして準備</button>
+          <button id="verify-models" aria-label="Verify cached models" disabled>保存済みモデルを検証</button>
+          <button id="cancel-models" aria-label="Cancel model preparation" disabled>準備を取り消す</button>
+          <button id="apply-models" aria-label="Apply prepared models" disabled>検証済みモデルを設定欄へ反映</button>
+        </div>
+        <progress id="model-progress" aria-label="Model preparation progress" max="1" value="0" hidden></progress>
+        <p id="managed-status" role="status">取得操作時だけ公式配布元へ接続します。音声や画面情報は送信しません。</p>
+        <p class="hint">容量・SHA-256を検証してこのMacへ保存します。保存済みモデルの検証は通信しません。プリセットの選択では画面情報の取得・利用先や権限は変更しません。手入力のモデルパスも引き続き利用できます。</p>
+      </section>
       <section aria-labelledby="model-title">
         <h2 id="model-title">ローカル文字起こしモデル</h2>
         <label for="model-path">モデルの絶対パス（多言語版 ggml .bin）</label>

@@ -6,7 +6,7 @@ Whisperの文字起こし後に、軽量なローカルQwen3モデルで校正�
 
 Macで従来の開発環境を用意し、`npm ci` → `npm run tauri dev` を実行します。npmのTauriコマンドは、先にRust製の補正ランタイムをビルドしてアプリのリソースに配置します。llama.cppとWhisperのGGMLは別プロセスで動くため、異なるネイティブライブラリのシンボルが衝突しません。モデルの自動ダウンロードやHTTPサーバーの起動は行いません。
 
-モデルの準備は利用者が明示的に行います。公式Qwen GGUFの固定リビジョン・サイズ・SHA-256を検証してから配置します。
+アプリ内の[モデル準備・プリセット](model-setup.md)から準備でき、従来の手入力パスも使えます。モデルの準備は利用者が明示的に行います。公式Qwen GGUFの固定リビジョン・サイズ・SHA-256を検証してから配置します。
 
 ```bash
 python3 scripts/prepare-correction-model.py --model qwen3-1.7b "$HOME/Models/Qwen3-1.7B-Q8_0.gguf"

@@ -118,6 +118,24 @@ class ProvenanceTests(unittest.TestCase):
                 load_asr(root, corpus, 'revision', True)
 
 
+    def test_turbo_engine_name_requires_pinned_turbo_identity(self):
+        corpus=dict(cases=[dict(id='a')])
+        raw=dict(model_name='large',backend='cpu',cases=[dict(id='a',observations=[dict(text='会議'),dict(text='会議')])])
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for mode in ['none','related']:(root/(mode+'.json')).write_text(json.dumps(raw))
+            metadata=dict(protocol_version='context-evaluation-v2',model='large-v3-turbo',backend='cpu',
+                          model_sha256=ASR_MODELS['large-v3-turbo']['sha256'],corpus_sha256=checksum(ROOT/'evaluation/corpus.json'),
+                          source_revision='revision',network_denied=True,binary_sha256='a'*64,
+                          asr_sha256={mode:checksum(root/(mode+'.json')) for mode in ['none','related']})
+            (root/'comparison.json').write_text(json.dumps(metadata))
+            load_asr(root,corpus,'revision',True,'large-v3-turbo')
+            with self.assertRaises(ValueError):load_asr(root,corpus,'revision',True,'medium')
+            metadata['model_sha256']=ASR_MODELS['large-v3']['sha256']
+            (root/'comparison.json').write_text(json.dumps(metadata))
+            with self.assertRaises(ValueError):load_asr(root,corpus,'revision',True,'large-v3-turbo')
+
+
 class ComparableReportTests(unittest.TestCase):
     def setUp(self):
         self.corpus = dict(cases=[dict(id='spoken', reference='会議', hint='会議')])
@@ -137,6 +155,19 @@ class ComparableReportTests(unittest.TestCase):
                 asr_input_sha256=dict(none='a', related='b'), asr_binary_sha256='c', corpus_sha256='d', supplemental_sha256='e',
                 runtime_source_sha256='f', cargo_lock_sha256='g', expected_records=4, expected_supplemental=1,
                 records=rows, supplemental=supplemental, summary=route_summary(rows), quality=quality_summary(supplemental)))
+
+    def test_preset_comparison_uses_distinct_verified_asr_models(self):
+        from summarize_presets import validate
+        reports=[]
+        for asr in ['medium','large-v3-turbo']:
+            report=copy.deepcopy(self.reports[1])
+            report.update(asr_model=asr,asr_model_sha256=ASR_MODELS[asr]['sha256'],asr_input_sha256={'none':asr,'related':asr+'hint'})
+            reports.append(report)
+        self.assertEqual(set(validate(reports,self.corpus,self.cases,'revision')),{'medium','large-v3-turbo'})
+        for mutate in [lambda r:r.pop(),lambda r:r[0].update(asr_model_sha256='wrong'),
+                       lambda r:r[0].update(model='qwen3-8b'),lambda r:r[0]['records'].pop()]:
+            invalid=copy.deepcopy(reports);mutate(invalid)
+            with self.assertRaises(ValueError):validate(invalid,self.corpus,self.cases,'revision')
 
     def test_complete_matrix_is_accepted(self):
         self.assertEqual(set(validate_reports(self.reports, self.corpus, self.cases, 'revision')), set(EXPECTED))

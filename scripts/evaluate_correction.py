@@ -54,11 +54,11 @@ def infer(binary,model,backend,raw,context):
         item.update(text=report['text'],model_report=report)
     return item
 
-def load_asr(directory, corpus, source_revision, require_network_denied):
+def load_asr(directory, corpus, source_revision, require_network_denied, asr_model="small"):
     metadata=json.loads((directory/'comparison.json').read_text())
     if (metadata.get('protocol_version')!='context-evaluation-v2'
-        or metadata.get('model')!='small' or metadata.get('backend')!='cpu'
-        or metadata.get('model_sha256')!=ASR_MODELS['small']['sha256']
+        or metadata.get('model')!=asr_model or metadata.get('backend')!='cpu'
+        or metadata.get('model_sha256')!=ASR_MODELS[asr_model]['sha256']
         or metadata.get('corpus_sha256')!=checksum(ROOT/'evaluation/corpus.json')
         or metadata.get('source_revision')!=source_revision
         or not re.fullmatch('[0-9a-f]{64}',str(metadata.get('binary_sha256','')))
@@ -71,7 +71,7 @@ def load_asr(directory, corpus, source_revision, require_network_denied):
         if checksum(path)!=metadata.get('asr_sha256',{}).get(mode):
             raise ValueError('ASR report checksum mismatch')
         report=json.loads(path.read_text())
-        if (report.get('model_name')!='small' or report.get('backend')!='cpu'
+        if (report.get('model_name')!=ASR_MODELS[asr_model].get('engine_name',asr_model) or report.get('backend')!='cpu'
             or [case['id'] for case in report['cases']]!=expected):
             raise ValueError('Incomplete or wrong ASR evaluation input')
         for case in report['cases']:
@@ -180,6 +180,7 @@ def main():
     parser.add_argument('--model',type=Path,required=True)
     parser.add_argument('--model-name',choices=MODELS,required=True)
     parser.add_argument('--asr',type=Path,required=True)
+    parser.add_argument('--asr-model',choices=ASR_MODELS,default='small')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--baseline',type=Path)
     parser.add_argument('--cpu-only',action='store_true')
@@ -193,7 +194,7 @@ def main():
     corpus=json.loads((ROOT/'evaluation/corpus.json').read_text())
     supplemental_cases=load_cases(ROOT/'evaluation/correction-cases.json')
     revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
-    asr,asr_metadata=load_asr(args.asr,corpus,revision,args.require_network_denied)
+    asr,asr_metadata=load_asr(args.asr,corpus,revision,args.require_network_denied,args.asr_model)
     baseline=load_baseline(args.baseline,args.model_name,MODELS[args.model_name],supplemental_cases) if args.baseline else None
     args.output.mkdir(parents=True,exist_ok=True)
     report=dict(protocol_version='correction-quality-v2',complete=False,model=args.model_name,
@@ -205,6 +206,7 @@ def main():
         host=host_info(),
         asr_input_sha256={mode:checksum(args.asr/(mode+'.json')) for mode in asr},
         asr_binary_sha256=asr_metadata['binary_sha256'],
+        asr_model=args.asr_model,asr_model_sha256=ASR_MODELS[args.asr_model]['sha256'],
         corpus_sha256=checksum(ROOT/'evaluation/corpus.json'),supplemental_sha256=checksum(ROOT/'evaluation/correction-cases.json'),
         expected_records=len(corpus['cases'])*len(MODES),expected_supplemental=len(supplemental_cases),
         records=[],supplemental=[],metal_smoke=None,metal_skipped=args.cpu_only,metal_unavailable=False,

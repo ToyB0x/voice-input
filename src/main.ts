@@ -1,4 +1,5 @@
 import "./styles.css";
+import { setupModels } from "./model-setup";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
 type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionBackend: string };
@@ -87,12 +88,23 @@ let refreshing = false;
 let refreshVersion = 0;
 let actionError: string | null = null;
 
+const managedModels = setupModels(
+  () => busy || !snapshot || snapshot.working || snapshot.phase === "recording" || !!correction?.working,
+  (speechPath, finalModelPath) => {
+    if (speechPath !== undefined) modelPath.value = speechPath;
+    if (finalModelPath !== undefined) correctionModelPath.value = finalModelPath;
+    preferencesMessage.textContent = speechPath !== undefined ? "モデルを設定欄へ反映しました。保存し、音声モデルを読み込んでください。" : "補正モデルの設定を反映しました。設定を保存してください。";
+    render();
+  },
+);
+
 function setText(element: HTMLElement, text: string | null) {
   const value = text ?? "";
   if (element.textContent !== value) element.textContent = value;
 }
 
 function render() {
+  managedModels.refreshControls();
   if (!snapshot) return;
   setText(permission, `マイクの許可: ${permissions[snapshot.permission]}`);
   savePreferences.disabled = busy;
