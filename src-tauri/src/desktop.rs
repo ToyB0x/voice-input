@@ -176,6 +176,8 @@ pub fn save_preferences(
         }
         return Err(format!("以前のショートカットを解除できません: {error}"));
     }
+    app.state::<crate::context::Reader>()
+        .configure(preferences.recognition_context);
     inner.preferences = preferences;
     inner.registered = new;
     inner.error = None;
@@ -221,6 +223,8 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
     app.state::<crate::insertion::Inserter>()
         .configure(preferences.auto_insert);
+    app.state::<crate::context::Reader>()
+        .configure(preferences.recognition_context);
     let state = MenuItem::with_id(app, "voice-state", "待機", false, None::<&str>)?;
     let toggle_item =
         MenuItem::with_id(app, "voice-toggle", "録音を開始 / 停止", true, None::<&str>)?;

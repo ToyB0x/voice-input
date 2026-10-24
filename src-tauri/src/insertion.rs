@@ -20,9 +20,9 @@ use std::{
 type Element = *const c_void;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct Range {
-    location: isize,
-    length: isize,
+pub(crate) struct Range {
+    pub(crate) location: isize,
+    pub(crate) length: isize,
 }
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
@@ -62,7 +62,7 @@ pub fn request_accessibility() -> Result<bool, String> {
     }
     Ok(granted)
 }
-fn attribute(element: &CFType, name: &str) -> Result<CFType, String> {
+pub(crate) fn attribute(element: &CFType, name: &str) -> Result<CFType, String> {
     let mut value = std::ptr::null();
     let code = unsafe {
         AXUIElementCopyAttributeValue(
@@ -86,7 +86,7 @@ fn text(element: &CFType, name: &str) -> Result<String, String> {
     }
     Ok(value.to_string())
 }
-fn selected_range(element: &CFType) -> Result<Range, String> {
+pub(crate) fn selected_range(element: &CFType) -> Result<Range, String> {
     let value = attribute(element, "AXSelectedTextRange")?;
     let mut range = Range {
         location: 0,
@@ -134,7 +134,7 @@ fn editable(element: &CFType) -> Result<(), String> {
     }
     Ok(())
 }
-fn focused() -> Result<(i32, CFType), String> {
+pub(crate) fn focused() -> Result<(i32, CFType), String> {
     if !trusted() {
         return Err("アクセシビリティが未許可です。結果を確認してコピーしてください。".into());
     }

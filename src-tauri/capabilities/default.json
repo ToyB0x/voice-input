@@ -18,6 +18,7 @@
     "allow-desktop-status",
     "allow-save-preferences",
     "allow-insertion-status",
+    "allow-context-status",
     "allow-request-accessibility"
   ]
 }

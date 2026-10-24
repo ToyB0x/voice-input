@@ -14,6 +14,10 @@ struct Corpus {
 struct Case {
     id: String,
     path: String,
+    #[serde(default)]
+    hint: String,
+    #[serde(default)]
+    unrelated_hint: String,
 }
 #[derive(Serialize)]
 struct Observation {
@@ -34,18 +38,36 @@ struct Report {
     cold_first_inference: Observation,
     cases: Vec<CaseReport>,
 }
-fn infer(engine: &Transcriber, audio: &[f32]) -> Result<Observation, Box<dyn std::error::Error>> {
+fn infer(
+    engine: &Transcriber,
+    audio: &[f32],
+    hint: Option<&str>,
+) -> Result<Observation, Box<dyn std::error::Error>> {
     let started = Instant::now();
-    let text = engine.transcribe(audio)?;
+    let text = engine.transcribe_with_hint(audio, hint)?;
     Ok(Observation {
         text,
         inference_ms: started.elapsed().as_secs_f64() * 1000.0,
     })
 }
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    let mut args: Vec<_> = std::env::args_os().skip(1).collect();
+    let hint_mode = if args
+        .last()
+        .is_some_and(|a| a == "--related-hint" || a == "--unrelated-hint")
+    {
+        args.pop()
+            .unwrap()
+            .into_string()
+            .map_err(|_| "invalid hint mode")?
+    } else {
+        String::new()
+    };
     if !(2..=3).contains(&args.len()) || (args.len() == 3 && args[2] != "--cpu") {
-        return Err("usage: evaluate MODEL.bin CORPUS.json [--cpu]".into());
+        return Err(
+            "usage: evaluate MODEL.bin CORPUS.json [--cpu] [--related-hint|--unrelated-hint]"
+                .into(),
+        );
     }
     let (backend, backend_name) = (Backend::Cpu, "cpu");
     #[cfg(target_os = "macos")]
@@ -78,12 +100,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or(Path::new("."))
                 .join(case.path),
         )?;
+        let hint = match hint_mode.as_str() {
+            "--related-hint" => Some(case.hint.as_str()),
+            "--unrelated-hint" => Some(case.unrelated_hint.as_str()),
+            _ => None,
+        };
         if cold.is_none() {
-            cold = Some(infer(&engine, &audio)?);
+            cold = Some(infer(&engine, &audio, hint)?);
         }
         let mut observations = Vec::new();
         for _ in 0..2 {
-            observations.push(infer(&engine, &audio)?);
+            observations.push(infer(&engine, &audio, hint)?);
         }
         cases.push(CaseReport {
             id: case.id,

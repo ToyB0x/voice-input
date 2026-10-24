@@ -1,0 +1,124 @@
+import AppKit
+import ApplicationServices
+import Foundation
+
+func contextCheckbox(_ root: AXUIElement) -> AXUIElement? {
+    axElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Local recognition context") }
+}
+func configureContext(_ voice: AXUIElement, enabled: Bool) throws {
+    try waitForUI("restored context model", seconds: 120) { uiText(voice).contains("モデル準備完了") }
+    try typeField(voice, label: "Recording shortcut", value: "Control+Alt+KeyV")
+    guard let checkbox = contextCheckbox(voice), let insertion = insertionCheckbox(voice) else { throw SmokeFailure(description: "Missing context preference") }
+    if (axValue(insertion, kAXValueAttribute) as? NSNumber)?.intValue == 1 { try press(insertion) }
+    if ((axValue(checkbox, kAXValueAttribute) as? NSNumber)?.intValue == 1) != enabled { try press(checkbox) }
+    try press(uiButton(voice, ["Save preferences"])!)
+    try waitForUI("context preference applied") { uiText(voice).contains(enabled ? "認識補助: 有効" : "認識補助: 無効") && uiText(voice).contains("直接入力: 無効") }
+}
+func contextInteraction(pid: pid_t, scenario: String, output: URL) throws {
+    let voice = AXUIElementCreateApplication(pid)
+    if scenario == "context-restore" {
+        try waitForUI("context preference restored", seconds: 120) {
+            uiText(voice).contains("認識補助: 有効。次の録音") && resultText(voice).isEmpty
+                && (contextCheckbox(voice).flatMap { axValue($0, kAXValueAttribute) as? NSNumber })?.intValue == 1
+        }
+        try writeJSON(["status": "passed", "preferenceRestored": true, "noPendingHintOrTranscript": true], to: output.appendingPathComponent("interaction.json"))
+        return
+    }
+    try configureContext(voice, enabled: true)
+    try hideInsertionWindow(voice)
+    if scenario == "context-denied" {
+        let (_, field) = try openTextTarget(output, name: "context-denied", text: "月日、百代、旅人。")
+        try setRange(field, 0, 0)
+        try recordForInsertion(voice)
+        try trayAction(voice, title: "設定・認識結果を表示")
+        try waitForUI("context permission fallback") { uiText(voice).contains("認識補助: ヒントなしで続行") && fixtureRecognized(resultText(voice)) }
+        try interactionScreenshot(output, name: "denied.png")
+        try configureContext(voice, enabled: false)
+        try writeJSON(["status": "passed", "untrustedFallback": true, "recognitionContinues": true], to: output.appendingPathComponent("interaction.json"))
+        return
+    }
+    guard let fixturePath = ProcessInfo.processInfo.environment["VOICE_INPUT_CONTEXT_TARGET"] else { throw SmokeFailure(description: "Missing context fixture") }
+    let stateURL = output.appendingPathComponent("fixture-state.json")
+    let launch = Process()
+    launch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    launch.arguments = ["-n", "-a", fixturePath, "--args", stateURL.path]
+    try launch.run(); launch.waitUntilExit()
+    var fixture: NSRunningApplication?
+    try waitForUI("context fixture") {
+        fixture = NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == "dev.toyb0x.contextfixture" }
+        return fixture != nil && FileManager.default.fileExists(atPath: stateURL.path)
+    }
+    defer { fixture?.forceTerminate() }
+    let target = AXUIElementCreateApplication(fixture!.processIdentifier)
+    func state() throws -> [String: Any] {
+        try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+    }
+    func counts(_ state: [String: Any], _ key: String) -> Int {
+        (state[key] as? [String: Int] ?? [:]).values.reduce(0, +)
+    }
+    func field(_ label: String) throws -> AXUIElement {
+        guard let element = axElements(target).first(where: { axValue($0, kAXDescriptionAttribute) as? String == label }) else { throw SmokeFailure(description: "Missing labeled context field") }
+        return element
+    }
+    var passed = [String]()
+    for mode in ["bounded", "disabled", "secure", "readonly", "unsupported", "discard", "disable-during-recording"] {
+        try trayAction(voice, title: "設定・認識結果を表示")
+        try configureContext(voice, enabled: mode != "disabled")
+        try hideInsertionWindow(voice)
+        let label = mode == "secure" ? "Protected context" : mode == "readonly" ? "Read only context" : mode == "unsupported" ? "Unsupported context" : "Context input"
+        let element = try field(label)
+        try focusElement(target, element, pid: fixture!.processIdentifier)
+        if mode != "secure" { try setRange(element, mode == "readonly" || mode == "unsupported" ? 0 : (try state()["caret"] as! Int), 0) }
+        // Let pending OS focus notifications finish before measuring AX requests.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        let before = try state()
+        try key(9, flags: [.maskControl, .maskAlternate])
+        try waitForUI("context recording begins") { trayItem(voice).map(axText)?.contains("録音中") == true }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        let after = try state()
+        let reads = counts(after, "rangeReads") - counts(before, "rangeReads")
+        let values = counts(after, "valueReads") - counts(before, "valueReads")
+        guard values == 0 else { throw SmokeFailure(description: "Context requested a full field value: \(mode)") }
+        guard reads == (["disabled", "secure", "readonly"].contains(mode) ? 0 : 1), (after["maximumRange"] as! Int) <= 512 else { throw SmokeFailure(description: "Unexpected or unbounded range read: \(mode)") }
+        try trayAction(voice, title: "設定・認識結果を表示")
+        let expected = mode == "disabled" ? "認識補助: 無効" : ["secure", "readonly", "unsupported"].contains(mode) ? "認識補助: ヒントなしで続行" : "認識補助: 取得済み"
+        try waitForUI("context capture state") { uiText(voice).contains(expected) }
+        if mode == "discard" {
+            try press(uiButton(voice, ["Discard recording"])!)
+            try waitForUI("pending hint discarded") { uiText(voice).contains("認識補助: 次の録音") && resultText(voice).isEmpty }
+        } else {
+            if mode == "disable-during-recording" { try configureContext(voice, enabled: false) }
+            // Audio still comes through the real virtual microphone.
+            let playback = Process()
+            playback.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+            playback.arguments = [ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_AUDIO"]!]
+            try playback.run()
+            try waitForUI("context audio completes", seconds: 30) { !playback.isRunning }
+            try press(uiButton(voice, ["Stop recording"])!)
+            try waitForUI("context result completes", seconds: 120) { !resultText(voice).isEmpty && uiText(voice).contains("文字起こしが完了") }
+            if mode == "bounded" {
+                guard uiText(voice).contains("ローカルヒントを使用しました") else { throw SmokeFailure(description: "Captured hint was not consumed") }
+                try press(uiButton(voice, ["Transcribe recording"])!)
+                try waitForUI("hintless retry begins") { uiText(voice).contains("文字起こし中") }
+                try waitForUI("hintless retry completes", seconds: 120) { uiText(voice).contains("文字起こしが完了") && fixtureRecognized(resultText(voice)) }
+                let retried = try state()
+                guard counts(retried, "rangeReads") == counts(after, "rangeReads") else { throw SmokeFailure(description: "Retry reread field") }
+            }
+        }
+        guard (try state()["firstUnchanged"] as? Bool) == true, (try state()["secureUnchanged"] as? Bool) == true else { throw SmokeFailure(description: "Context feature modified native target") }
+        try uiText(voice).write(to: output.appendingPathComponent(mode + ".txt"), atomically: true, encoding: .utf8)
+        try interactionScreenshot(output, name: mode + ".png")
+        passed.append(mode)
+    }
+    // The user starts recording in Voice Input itself: its settings never become context.
+    try configureContext(voice, enabled: true)
+    let beforeSelf = try state()
+    try press(uiButton(voice, ["Start recording"])!)
+    try waitForUI("own window excluded") { uiText(voice).contains("録音中") && uiText(voice).contains("認識補助: ヒントなしで続行") }
+    try press(uiButton(voice, ["Discard recording"])!)
+    guard counts(try state(), "rangeReads") == counts(beforeSelf, "rangeReads") else { throw SmokeFailure(description: "Self focus read another field") }
+    passed.append("own-app-excluded")
+    // Preference is restored on the next invocation; leave enabled for that check.
+    try writeJSON(["status": "passed", "cases": passed, "maximumUTF16Range": 512, "fullValueReads": 0,
+                   "directInsertionDisabled": true, "realAudioAndRecognition": true], to: output.appendingPathComponent("interaction.json"))
+}

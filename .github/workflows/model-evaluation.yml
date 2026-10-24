@@ -66,6 +66,14 @@ jobs:
               --require-network-denied --timeout 1800 \
               2>&1 | tee "$evidence/$backend.log"
           done
+      - name: Compare related and unrelated local hints with networking denied
+        timeout-minutes: 20
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/evaluate_context.py \
+              --binary crates/local-transcription/target/release/evaluate \
+              --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
+              --output "$RUNNER_TEMP/model-evaluation/context"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

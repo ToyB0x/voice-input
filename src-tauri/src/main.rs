@@ -8,6 +8,8 @@ mod recorder;
 mod transcription;
 
 #[cfg(target_os = "macos")]
+mod context;
+#[cfg(target_os = "macos")]
 mod desktop;
 #[cfg(target_os = "macos")]
 mod insertion;
@@ -19,6 +21,8 @@ fn main() {
     #[cfg(target_os = "macos")]
     let inserter = insertion::Inserter::new();
     #[cfg(target_os = "macos")]
+    let context = context::Reader::new();
+    #[cfg(target_os = "macos")]
     let builder = builder
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -27,7 +31,8 @@ fn main() {
                 })
                 .build(),
         )
-        .manage(recorder::Recorder::new(inserter.clone()))
+        .manage(recorder::Recorder::new(inserter.clone(), context.clone()))
+        .manage(context)
         .manage(inserter)
         .setup(desktop::setup)
         .on_window_event(|window, event| {
@@ -49,6 +54,7 @@ fn main() {
             desktop::desktop_status,
             desktop::save_preferences,
             insertion::insertion_status,
+            context::context_status,
             insertion::request_accessibility,
         ]);
     builder

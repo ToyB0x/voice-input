@@ -46,6 +46,9 @@ impl Transcriber {
         if !path.is_file() || std::fs::File::open(path).is_err() {
             return Err(Error::ModelUnavailable);
         }
+        // No log_backend/tracing_backend features are enabled. The hooks discard
+        // native diagnostics, including prompt tokens in debug builds.
+        whisper_rs::install_logging_hooks();
         let mut options = WhisperContextParameters::default();
         options.use_gpu(!matches!(backend, Backend::Cpu));
         let context =
@@ -68,6 +71,11 @@ impl Transcriber {
     /// Input is normalized mono PCM. Empty/short/oversized/NaN input is rejected.
     /// Digital silence bypasses decoding to avoid silence hallucinations.
     pub fn transcribe(&self, audio: &[f32]) -> Result<String, Error> {
+        self.transcribe_with_hint(audio, None)
+    }
+
+    /// A bounded, per-call local hint. It never becomes cross-recording context.
+    pub fn transcribe_with_hint(&self, audio: &[f32], hint: Option<&str>) -> Result<String, Error> {
         validate_audio(audio)?;
         let energy = audio.iter().map(|&s| f64::from(s).powi(2)).sum::<f64>() / audio.len() as f64;
         if energy.sqrt() < 0.00001 {
@@ -81,6 +89,10 @@ impl Transcriber {
         params.set_language(Some("ja"));
         params.set_translate(false);
         params.set_no_context(true);
+        let hint = recognition_hint(hint.unwrap_or_default());
+        if !hint.is_empty() {
+            params.set_initial_prompt(&hint);
+        }
         params.set_no_timestamps(true);
         params.set_print_special(false);
         params.set_print_progress(false);
@@ -101,6 +113,19 @@ impl Transcriber {
         }
         Ok(text.trim().to_owned())
     }
+}
+
+/// Remove control characters (including NUL) before the C API; bound UTF-8 size.
+/// Shared by AX capture and the evaluation harness so their prompt is identical.
+pub fn recognition_hint(text: &str) -> String {
+    let mut result = String::new();
+    for c in text.chars().filter(|c| !c.is_control()) {
+        if result.len() + c.len_utf8() > 768 {
+            break;
+        }
+        result.push(c);
+    }
+    result.trim().to_owned()
 }
 
 fn validate_audio(audio: &[f32]) -> Result<(), Error> {
@@ -137,6 +162,15 @@ pub fn read_wav(path: &Path) -> Result<Vec<f32>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hints_are_bounded_unicode_and_c_safe() {
+        assert_eq!(recognition_hint("  固有\0名詞\n "), "固有名詞");
+        let hint = recognition_hint(&"😀".repeat(300));
+        assert_eq!(hint.len(), 768);
+        assert_eq!(hint.chars().count(), 192);
+        assert!(recognition_hint("\0\n\t").is_empty());
+    }
 
     #[test]
     fn rejects_unbounded_and_invalid_pcm() {

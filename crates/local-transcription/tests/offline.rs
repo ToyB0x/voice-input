@@ -18,6 +18,20 @@ fn japanese_and_silence_without_network() {
         assert!(text.contains(word), "missing {word}: {text}");
     }
     assert_eq!(model.transcribe(&vec![0.0; 32_000]).unwrap(), "");
+    let hint = "旅のメモ: 月日、百代、過客、旅人。";
+    let text = model.transcribe_with_hint(&audio, Some(hint)).unwrap();
+    for word in ["月日", "旅"] {
+        assert!(text.contains(word), "hinted recognition lost {word}");
+    }
+    assert_eq!(
+        model
+            .transcribe_with_hint(&vec![0.0; 32_000], Some(hint))
+            .unwrap(),
+        ""
+    );
+    // Every call creates a fresh decoder state: unrelated hints cannot persist.
+    let unhinted = model.transcribe(&audio).unwrap();
+    assert!(!unhinted.contains("ゼノヴァリンク"));
     assert!(matches!(
         model.transcribe(&[f32::NAN; 16_000]),
         Err(Error::InvalidAudio)

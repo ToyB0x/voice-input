@@ -11,6 +11,8 @@ pub struct Preferences {
     pub shortcut: String,
     #[serde(default)]
     pub auto_insert: bool,
+    #[serde(default)]
+    pub recognition_context: bool,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -20,6 +22,7 @@ impl Default for Preferences {
             backend: "metal".into(),
             shortcut: "Command+Shift+Space".into(),
             auto_insert: false,
+            recognition_context: false,
         }
     }
 }
@@ -93,6 +96,7 @@ mod tests {
             serde_json::from_str(r#"{"version":1,"modelPath":"","backend":"cpu","shortcut":""}"#)
                 .unwrap();
         assert!(!legacy.auto_insert);
+        assert!(!legacy.recognition_context);
         let settings = Preferences {
             model_path: "/tmp/日本語モデル.bin".into(),
             shortcut: String::new(),

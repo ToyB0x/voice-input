@@ -88,6 +88,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
 
+    if scenario.hasPrefix("context") { try contextInteraction(pid: pid, scenario: scenario, output: output); return }
+
     if scenario.hasPrefix("insertion") { try insertionInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output); return }
 
     if scenario == "desktop" { try desktopInteraction(pid: pid, windowID: windowID, output: output); return }
@@ -446,9 +448,9 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     let settingsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/dev.toyb0x.voiceinput/settings.json")
     let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as! [String: Any]
-    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert"]),
+    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert", "recognitionContext"]),
           stored["modelPath"] as? String == model, stored["backend"] as? String == "cpu",
-          stored["shortcut"] as? String == "Control+Alt+KeyV", stored["autoInsert"] as? Bool == false else {
+          stored["shortcut"] as? String == "Control+Alt+KeyV", stored["autoInsert"] as? Bool == false, stored["recognitionContext"] as? Bool == false else {
         throw SmokeFailure(description: "Persisted preferences mismatch or unexpected private data")
     }
     // Close the actual native window, leaving only the resident process/tray.

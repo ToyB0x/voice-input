@@ -97,3 +97,7 @@ Rust クレートや macOS API 連携で実装し、Mac 実機で検証する。
 - [Global shortcut](https://v2.tauri.app/plugin/global-shortcut/)
 - [GPUI](https://www.gpui.rs/)
 - [Iced](https://iced.rs/)
+
+### ローカル認識補助
+
+独立した初期値falseの`recognitionContext`設定により、録音所有スレッドで入力欄の周辺だけをAXStringForRangeで取得します。ネイティブ側の一時保管庫から一度だけWhisperのinitial_promptへ渡し、キャンセル／無効化で未使用テキストを削除します。取得本文はIPCに含めません。詳細と評価条件は[認識補助](recognition-context.md)を参照してください。
