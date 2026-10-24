@@ -143,7 +143,10 @@ fn send(session: &mut Session, tx: &mpsc::Sender<Job>, job: Job) -> Result<(), S
     Ok(())
 }
 
-pub(crate) fn worker(shared: Arc<Mutex<Capture>>) -> mpsc::Sender<Job> {
+pub(crate) fn worker(
+    shared: Arc<Mutex<Capture>>,
+    inserter: crate::insertion::Inserter,
+) -> mpsc::Sender<Job> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let mut model: Option<Transcriber> = None;
@@ -186,6 +189,18 @@ pub(crate) fn worker(shared: Arc<Mutex<Capture>>) -> mpsc::Sender<Job> {
             if let Ok(mut capture) = shared.lock() {
                 if loading && capture.recognition.generation != generation {
                     model = None;
+                }
+                if !loading {
+                    if let Some(ticket) = capture.insertion_ticket.take() {
+                        if capture.recognition.generation == generation
+                            && let Ok(text) = &result
+                        {
+                            // Serialize with discard: no detached or retried AX write.
+                            inserter.apply(ticket, text);
+                        } else {
+                            inserter.cancel();
+                        }
+                    }
                 }
                 capture.recognition.finish(generation, result, loading);
             }

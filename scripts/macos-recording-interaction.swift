@@ -420,9 +420,9 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     let settingsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/dev.toyb0x.voiceinput/settings.json")
     let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as! [String: Any]
-    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut"]),
+    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert"]),
           stored["modelPath"] as? String == model, stored["backend"] as? String == "cpu",
-          stored["shortcut"] as? String == "Control+Alt+KeyV" else {
+          stored["shortcut"] as? String == "Control+Alt+KeyV", stored["autoInsert"] as? Bool == false else {
         throw SmokeFailure(description: "Persisted preferences mismatch or unexpected private data")
     }
     // Close the actual native window, leaving only the resident process/tray.

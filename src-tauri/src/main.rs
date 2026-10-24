@@ -9,11 +9,15 @@ mod transcription;
 
 #[cfg(target_os = "macos")]
 mod desktop;
+#[cfg(target_os = "macos")]
+mod insertion;
 #[cfg(any(target_os = "macos", test))]
 mod settings;
 
 fn main() {
     let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let inserter = insertion::Inserter::new();
     #[cfg(target_os = "macos")]
     let builder = builder
         .plugin(
@@ -23,7 +27,8 @@ fn main() {
                 })
                 .build(),
         )
-        .manage(recorder::Recorder::new())
+        .manage(recorder::Recorder::new(inserter.clone()))
+        .manage(inserter)
         .setup(desktop::setup)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -43,6 +48,8 @@ fn main() {
             recorder::copy_transcript,
             desktop::desktop_status,
             desktop::save_preferences,
+            insertion::insertion_status,
+            insertion::request_accessibility,
         ]);
     builder
         .build(tauri::generate_context!())

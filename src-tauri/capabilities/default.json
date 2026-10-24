@@ -16,6 +16,8 @@
     "allow-transcribe-recording",
     "allow-copy-transcript",
     "allow-desktop-status",
-    "allow-save-preferences"
+    "allow-save-preferences",
+    "allow-insertion-status",
+    "allow-request-accessibility"
   ]
 }

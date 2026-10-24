@@ -76,6 +76,8 @@ pub fn shortcut_event(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState
         return;
     }
     if state == ShortcutState::Released {
+        app.state::<crate::insertion::Inserter>()
+            .configure(inner.preferences.auto_insert);
         desktop.pressed.store(false, Ordering::Release);
     } else if !desktop.pressed.swap(true, Ordering::AcqRel) {
         toggle(app);
@@ -209,6 +211,8 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         toggling: AtomicBool::new(false),
         pressed: AtomicBool::new(false),
     });
+    app.state::<crate::insertion::Inserter>()
+        .configure(preferences.auto_insert);
     let state = MenuItem::with_id(app, "voice-state", "待機", false, None::<&str>)?;
     let toggle_item =
         MenuItem::with_id(app, "voice-toggle", "録音を開始 / 停止", true, None::<&str>)?;
@@ -243,6 +247,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     "処理中"
                 } else if snapshot.phase == "error"
                     || snapshot.recognition.recognition_error.is_some()
+                    || {
+                        let status = handle.state::<crate::insertion::Inserter>().status();
+                        status.enabled && status.state == "blocked"
+                    }
                     || handle
                         .state::<Desktop>()
                         .inner

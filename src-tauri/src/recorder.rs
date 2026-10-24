@@ -70,6 +70,7 @@ pub(crate) struct Capture {
     phase: Option<&'static str>,
     error: Option<String>,
     pub(crate) recognition: Session,
+    pub(crate) insertion_ticket: Option<u64>,
 }
 
 impl Capture {
@@ -125,10 +126,10 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub fn new() -> Self {
+    pub fn new(inserter: crate::insertion::Inserter) -> Self {
         let (tx, rx) = mpsc::channel::<Request>();
         let capture = Arc::new(Mutex::new(Capture::default()));
-        let jobs = transcription::worker(capture.clone());
+        let jobs = transcription::worker(capture.clone(), inserter.clone());
         let shared = capture.clone();
         std::thread::spawn(move || {
             // The stream stays on its owning thread. Audio callbacks only fill
@@ -166,11 +167,14 @@ impl Recorder {
                             }
                             Action::Start if stream.is_some() => Err("すでに録音中です。".into()),
                             Action::Start => {
+                                inserter.cancel();
+                                let ticket = inserter.begin();
                                 if let Ok(mut c) = shared.lock() {
                                     let mut recognition = std::mem::take(&mut c.recognition);
                                     recognition.clear_result();
                                     *c = Capture {
                                         recognition,
+                                        insertion_ticket: ticket,
                                         ..Capture::default()
                                     };
                                 }
@@ -180,7 +184,9 @@ impl Recorder {
                                         Ok(())
                                     }
                                     Err(error) => {
+                                        inserter.cancel();
                                         if let Ok(mut c) = shared.lock() {
+                                            c.insertion_ticket = None;
                                             c.fail(error.clone());
                                         }
                                         Err(error)
@@ -214,9 +220,11 @@ impl Recorder {
                                 .map_err(|e| e.to_string())
                                 .and_then(|mut c| transcription::recognize(&mut c, &jobs)),
                             Action::Clear => {
+                                inserter.cancel();
                                 drop(stream.take());
                                 if let Ok(mut c) = shared.lock() {
                                     c.audio = None;
+                                    c.insertion_ticket = None;
                                     c.phase = None;
                                     c.error = None;
                                     c.recognition.clear_result();
@@ -407,6 +415,7 @@ mod tests {
             phase: Some("recording"),
             error: None,
             recognition: Session::default(),
+            insertion_ticket: None,
         };
         capture.finish();
         let snapshot = capture.snapshot();
