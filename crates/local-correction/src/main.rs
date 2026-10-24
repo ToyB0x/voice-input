@@ -15,6 +15,7 @@ use std::{
 };
 static REQUESTED: AtomicU8 = AtomicU8::new(0);
 static PHASE: AtomicU8 = AtomicU8::new(0);
+#[cfg(not(feature = "ci-diagnostics"))]
 const PHASES: [&str; 8] = [
     "input",
     "backend",
@@ -52,6 +53,9 @@ unsafe extern "C" fn native_log(
     }
     // Never forward native log text. Only collect a numeric offload signal.
     let bytes = unsafe { CStr::from_ptr(text) }.to_bytes();
+    // Compiled only for CI failure diagnosis using fixed public/synthetic data.
+    #[cfg(feature = "ci-diagnostics")]
+    let _ = std::io::stderr().write_all(bytes);
     if let Ok(text) = std::str::from_utf8(bytes)
         && text.contains("offloaded ")
         && text.contains(" layers to GPU")
@@ -63,6 +67,13 @@ unsafe extern "C" fn native_log(
 }
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len() == 1 && args[0] == "--build-info" {
+        println!(
+            "{}",
+            serde_json::json!({"ci_diagnostics": cfg!(feature = "ci-diagnostics")})
+        );
+        return Ok(());
+    }
     if args.len() != 2 || !["cpu", "metal"].contains(&args[1].as_str()) {
         return Err(
             "usage: local-correction /absolute/model.gguf cpu|metal (JSON on stdin)".into(),
@@ -204,6 +215,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     output.write_all(b"\n")?;
     Ok(())
 }
+#[cfg(feature = "ci-diagnostics")]
+fn main() {
+    // Keep native exception diagnostics observable for public CI fixtures.
+    // This executable is separate from the quiet runtime copied into the app.
+    if let Err(error) = run() {
+        eprintln!("CI correction diagnostic: {error}");
+        std::process::exit(1);
+    }
+}
+#[cfg(not(feature = "ci-diagnostics"))]
 fn main() {
     // Rust bindings can panic with paths or source data. Suppress the panic hook
     // and report only the fixed phase, just as for returned native errors.

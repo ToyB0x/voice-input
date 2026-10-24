@@ -118,6 +118,7 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
           codesign --force --sign - "$fixture"
       - name: Verify actual bundled CPU and Metal correction with networking denied
+        id: correction-probe
         run: |
           sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 - <<'PYCODE'
           import json, os, subprocess
@@ -366,6 +367,24 @@ jobs:
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/insertion" insertion \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion.log"
+      - name: Diagnose native correction failure with synthetic data only
+        if: failure() && steps.correction-probe.outcome == 'failure'
+        timeout-minutes: 5
+        continue-on-error: true
+        run: |
+          cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked --features ci-diagnostics
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 - <<'PYDIAG'
+          import json, os, subprocess
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
+          result = subprocess.run([str(Path('crates/local-correction/target/release/local-correction').resolve()),
+              str(Path(os.environ['RUNNER_TEMP']) / 'correction-model.gguf'), 'metal'],
+              input=json.dumps(dict(transcript='会議は金曜日です',context='会議、金曜日。'),ensure_ascii=False),
+              text=True,capture_output=True,timeout=180)
+          (root / 'synthetic-metal-diagnostic.stdout.log').write_text(result.stdout)
+          (root / 'synthetic-metal-diagnostic.stderr.log').write_text(result.stderr)
+          (root / 'synthetic-metal-diagnostic-exit.json').write_text(json.dumps(dict(exit_status=result.returncode)))
+          PYDIAG
       - name: Remove disposable CI authorization account
         if: always()
         run: |
