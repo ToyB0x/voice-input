@@ -316,12 +316,34 @@ func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) thr
 
 func key(_ code: CGKeyCode, flags: CGEventFlags = []) throws {
     let source = CGEventSource(stateID: .hidSystemState)
+    let modifiers: [(CGEventFlags, CGKeyCode)] = [(.maskControl, 59), (.maskAlternate, 58), (.maskShift, 56), (.maskCommand, 55)]
+    var held: CGEventFlags = []
+    func modifier(_ keyCode: CGKeyCode, flags current: CGEventFlags) throws {
+        guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) else {
+            throw SmokeFailure(description: "Could not construct modifier event")
+        }
+        event.type = .flagsChanged
+        event.flags = current
+        event.post(tap: .cghidEventTap)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    }
+    // Carbon hotkeys need a complete chord/release, not two effectively
+    // simultaneous events carrying permanently-held modifier flags.
+    for (flag, keyCode) in modifiers where flags.contains(flag) {
+        held.insert(flag)
+        try modifier(keyCode, flags: held)
+    }
     for down in [true, false] {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else {
             throw SmokeFailure(description: "Could not construct native key event")
         }
         event.flags = flags
         event.post(tap: .cghidEventTap)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.03))
+    }
+    for (flag, keyCode) in modifiers.reversed() where flags.contains(flag) {
+        held.remove(flag)
+        try modifier(keyCode, flags: held)
     }
 }
 
