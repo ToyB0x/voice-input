@@ -95,6 +95,36 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local Context Fixture' "$fixture/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
           codesign --force --sign - "$fixture"
+      - name: Prepare pinned correction model and synthetic OCR app
+        timeout-minutes: 10
+        run: |
+          python3 scripts/prepare-correction-model.py "$RUNNER_TEMP/correction-model.gguf"
+          fixture="$RUNNER_TEMP/Local OCR Fixture.app"
+          mkdir -p "$fixture/Contents/MacOS"
+          xcrun swiftc scripts/macos-ocr-target.swift -o "$fixture/Contents/MacOS/ocr-fixture"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.ocrfixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string ocr-fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local OCR Fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
+          codesign --force --sign - "$fixture"
+      - name: Verify actual bundled CPU correction with networking denied
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 - <<'PYCODE'
+          import json, os, subprocess
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
+          binary = Path('src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/local-correction').resolve()
+          model = Path(os.environ['RUNNER_TEMP']) / 'correction-model.gguf'
+          result = subprocess.run([str(binary), str(model), 'cpu'],
+              input=json.dumps(dict(transcript='会議は金曜日です', context='会議、金曜日。'), ensure_ascii=False),
+              text=True, capture_output=True, timeout=90)
+          (root / 'correction-cpu-probe.json').write_text(result.stdout)
+          # This CI probe uses only the fixed synthetic sentence and public model.
+          (root / 'correction-cpu-probe.stderr.log').write_text(result.stderr)
+          if result.returncode: raise SystemExit('Bundled correction CPU probe failed; inspect the fixed stage in correction-cpu-probe.json')
+          report = json.loads(result.stdout)
+          assert report['backend'] == 'cpu' and report['offloaded_layers'] == 0 and report['text']
+          PYCODE
       - name: Verify bundled correction runtime starts without a model or network
         run: |
           runtime="$PWD/src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/local-correction"
@@ -256,36 +286,6 @@ jobs:
                 2>&1 | tee -a "$evidence" || true
             fi
           done
-      - name: Prepare pinned correction model and synthetic OCR app
-        timeout-minutes: 10
-        run: |
-          python3 scripts/prepare-correction-model.py "$RUNNER_TEMP/correction-model.gguf"
-          fixture="$RUNNER_TEMP/Local OCR Fixture.app"
-          mkdir -p "$fixture/Contents/MacOS"
-          xcrun swiftc scripts/macos-ocr-target.swift -o "$fixture/Contents/MacOS/ocr-fixture"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.ocrfixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string ocr-fixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local OCR Fixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
-          codesign --force --sign - "$fixture"
-      - name: Verify actual bundled CPU correction with networking denied
-        run: |
-          sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 - <<'PYCODE'
-          import json, os, subprocess
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
-          binary = Path('src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/local-correction').resolve()
-          model = Path(os.environ['RUNNER_TEMP']) / 'correction-model.gguf'
-          result = subprocess.run([str(binary), str(model), 'cpu'],
-              input=json.dumps(dict(transcript='会議は金曜日です', context='会議、金曜日。'), ensure_ascii=False),
-              text=True, capture_output=True, timeout=90)
-          (root / 'correction-cpu-probe.json').write_text(result.stdout)
-          # This CI probe uses only the fixed synthetic sentence and public model.
-          (root / 'correction-cpu-probe.stderr.log').write_text(result.stderr)
-          if result.returncode: raise SystemExit('Bundled correction CPU probe failed; inspect the fixed stage in correction-cpu-probe.json')
-          report = json.loads(result.stdout)
-          assert report['backend'] == 'cpu' and report['offloaded_layers'] == 0 and report['text']
-          PYCODE
       - name: Verify denied screen permission leaves voice input usable
         timeout-minutes: 5
         env:
