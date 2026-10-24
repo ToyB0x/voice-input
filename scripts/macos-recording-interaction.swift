@@ -371,7 +371,7 @@ func trayItem(_ root: AXUIElement) -> AXUIElement? {
     }
 }
 
-func clickAtCenter(_ element: AXUIElement) throws {
+func elementCenter(_ element: AXUIElement) throws -> CGPoint {
     guard let position = axValue(element, kAXPositionAttribute), let size = axValue(element, kAXSizeAttribute),
           CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() else {
         throw SmokeFailure(description: "Native menu bar item has no frame")
@@ -382,7 +382,11 @@ func clickAtCenter(_ element: AXUIElement) throws {
           AXValueGetValue(unsafeBitCast(size, to: AXValue.self), .cgSize, &dimensions) else {
         throw SmokeFailure(description: "Could not read native menu bar frame")
     }
-    let center = CGPoint(x: origin.x + dimensions.width / 2, y: origin.y + dimensions.height / 2)
+    return CGPoint(x: origin.x + dimensions.width / 2, y: origin.y + dimensions.height / 2)
+}
+
+func clickAtCenter(_ element: AXUIElement) throws {
+    let center = try elementCenter(element)
     let source = CGEventSource(stateID: .hidSystemState)
     for kind in [CGEventType.leftMouseDown, .leftMouseUp] {
         guard let event = CGEvent(mouseEventSource: source, mouseType: kind, mouseCursorPosition: center, mouseButton: .left) else {
@@ -400,11 +404,31 @@ func trayAction(_ root: AXUIElement, title: String) throws {
     // tray-icon opens its menu from mouse events; AXPress bypasses that handler.
     try clickAtCenter(tray)
     var choice: AXUIElement?
+    var menuWindow: NSNumber?
+    var pid: pid_t = 0
+    guard AXUIElementGetPid(root, &pid) == .success else { throw SmokeFailure(description: "Could not identify tray owner") }
+    func onScreenWindows() -> [[String: Any]] {
+        CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+    }
     try waitForUI("tray menu \(title)") {
         choice = (trayElements(root) + axElements(root)).first { axValue($0, kAXRoleAttribute) as? String == "AXMenuItem" && axText($0).contains(title) }
-        return choice != nil
+        guard let choice else { return false }
+        let point = try elementCenter(choice)
+        // Closed NSMenus can retain their AX children. Do not press one until
+        // the actual popup is on screen at that item's current coordinates.
+        menuWindow = onScreenWindows().first { window in
+            guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid,
+                  let layer = window[kCGWindowLayer as String] as? NSNumber, layer.intValue > 0,
+                  let bounds = window[kCGWindowBounds as String] as? [String: NSNumber],
+                  let x = bounds["X"], let y = bounds["Y"], let width = bounds["Width"], let height = bounds["Height"] else { return false }
+            return CGRect(x: x.doubleValue, y: y.doubleValue, width: width.doubleValue, height: height.doubleValue).contains(point)
+        }?[kCGWindowNumber as String] as? NSNumber
+        return menuWindow != nil
     }
-    try press(choice!)
+    try clickAtCenter(choice!)
+    try waitForUI("tray menu selection delivered") {
+        !onScreenWindows().contains { ($0[kCGWindowNumber as String] as? NSNumber) == menuWindow }
+    }
 }
 
 func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {

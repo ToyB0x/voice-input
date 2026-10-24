@@ -22,7 +22,7 @@ def run_probes(binary, model, cases, output, model_name, identity, cpu_only=Fals
     report = dict(model=model_name, identity=identity, os=platform.platform(),
                   network_denied=True, cases=records, metal=None, metal_unavailable=False,
                   metal_skipped=cpu_only,
-                  limitation='Nine fixed synthetic cases only. Not a speech/OCR quality comparison. Rejections retain raw text.')
+                  limitation='Fixed synthetic cases only. Not a speech/OCR quality comparison. Rejections retain raw text.')
 
     def persist():
         # Leave complete prior evidence even if the next case or the job times out.
