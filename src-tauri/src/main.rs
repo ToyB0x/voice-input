@@ -80,6 +80,15 @@ fn main() {
             if let tauri::RunEvent::Reopen { .. } = event {
                 desktop::show(app);
             }
+            #[cfg(target_os = "macos")]
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
+                use tauri::Manager;
+                app.state::<context::Reader>().cancel();
+                app.state::<correction::Corrector>().shutdown();
+            }
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);
         });

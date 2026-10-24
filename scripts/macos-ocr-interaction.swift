@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import Darwin
 
 func checkBox(_ root:AXUIElement,_ label:String)->AXUIElement? {
     axElements(root).first {axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains(label)}
@@ -20,12 +21,17 @@ func configureOCR(_ root:AXUIElement, enabled:Bool, correction:Bool=false) throw
     try pressContextButton(root,"Save preferences")
     try waitForUI("OCR preference applied") {uiText(root).contains(enabled ? "OCR: 有効" : "OCR: 無効") && uiText(root).contains("直接入力: 無効")}
 }
-func productChildRunning(_ pid:pid_t)->Bool {
+func productChildPID(_ pid:pid_t)->pid_t? {
     let process=Process();process.executableURL=URL(fileURLWithPath:"/usr/bin/pgrep")
     process.arguments=["-P",String(pid),"-x","local-correction"]
-    process.standardOutput=FileHandle.nullDevice;process.standardError=FileHandle.nullDevice
-    do {try process.run();process.waitUntilExit();return process.terminationStatus==0} catch {return false}
+    let pipe=Pipe();process.standardOutput=pipe;process.standardError=FileHandle.nullDevice
+    do {
+        try process.run();process.waitUntilExit()
+        let text=String(data:pipe.fileHandleForReading.readDataToEndOfFile(),encoding:.utf8) ?? ""
+        return text.split(separator:"\n").first.flatMap{Int32($0)}
+    } catch {return nil}
 }
+func productChildRunning(_ pid:pid_t)->Bool {productChildPID(pid) != nil}
 func grantScreenPermission(_ voice:AXUIElement,output:URL) throws {
     try pressContextButton(voice,"Request screen permission")
     var settings:AXUIElement?
@@ -178,5 +184,11 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     let excludedValues=try state()
     guard excludedValues["valueReads"] as? Int==0, excludedValues["rangeReads"] as? Int==0, excludedValues["secureReads"] as? Int==0 else {throw SmokeFailure(description:"Protected OCR case read AX text")}
     try configureOCR(voice,enabled:false)
-    try writeJSON(["status":"passed","excluded":exclusions,"ocrCharacters":count,"axTextReads":0,"rawPreserved":true,"explicitCopy":true,"childCancellation":true],to:output.appendingPathComponent("interaction.json"))
+    try pressContextButton(voice,"Preview local correction")
+    var quittingChild:pid_t?
+    try waitForUI("correction child before quit") {quittingChild=productChildPID(pid);return quittingChild != nil}
+    let app=NSRunningApplication(processIdentifier:pid)
+    try trayAction(voice,title:"Voice Inputを終了")
+    try waitForUI("app and correction child exited",seconds:20) {app?.isTerminated==true && kill(quittingChild!,0) != 0}
+    try writeJSON(["status":"passed","exitReapedChild":true,"excluded":exclusions,"ocrCharacters":count,"axTextReads":0,"rawPreserved":true,"explicitCopy":true,"childCancellation":true],to:output.appendingPathComponent("interaction.json"))
 }

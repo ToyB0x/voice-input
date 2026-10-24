@@ -6,7 +6,7 @@ use std::{
     process::{Command, Stdio},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -36,6 +36,8 @@ struct Inner {
 pub struct Corrector {
     state: Arc<Mutex<Inner>>,
     epoch: Arc<AtomicU64>,
+    closing: Arc<AtomicBool>,
+    worker: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
 }
 impl Corrector {
     pub fn new() -> Self {
@@ -45,6 +47,8 @@ impl Corrector {
                 epoch: 0,
             })),
             epoch: Arc::new(AtomicU64::new(0)),
+            closing: Arc::new(AtomicBool::new(false)),
+            worker: Arc::new(Mutex::new(None)),
         }
     }
     pub fn cancel(&self) {
@@ -55,6 +59,16 @@ impl Corrector {
                 working,
                 ..Status::default()
             };
+        }
+    }
+    /// Exit must wait until the pipe owner has killed and reaped its child.
+    pub fn shutdown(&self) {
+        self.closing.store(true, Ordering::Release);
+        self.cancel();
+        if let Ok(mut worker) = self.worker.lock()
+            && let Some(handle) = worker.take()
+        {
+            let _ = handle.join();
         }
     }
     fn status(&self) -> Status {
@@ -83,6 +97,15 @@ impl Corrector {
                 "補正ランタイムがありません。利用ガイドのビルド手順を確認してください。".into(),
             );
         }
+        // Serialize publication of the worker with shutdown. The worker itself
+        // never takes this lock, so joining cannot prevent its cancellation.
+        let mut handle = self
+            .worker
+            .lock()
+            .map_err(|_| "補正状態を確認できません。")?;
+        if self.closing.load(Ordering::Acquire) {
+            return Err("アプリを終了しています。".into());
+        }
         let epoch = {
             let mut state = self
                 .state
@@ -99,8 +122,11 @@ impl Corrector {
             };
             epoch
         };
+        if let Some(previous) = handle.take() {
+            let _ = previous.join();
+        }
         let worker = self.clone();
-        std::thread::spawn(move || {
+        *handle = Some(std::thread::spawn(move || {
             let context = hint.and_then(|hint| hint.correction()).unwrap_or_default();
             let result = run(
                 &runtime,
@@ -126,7 +152,7 @@ impl Corrector {
                     }
                 }
             }
-        });
+        }));
         Ok(self.status())
     }
 }
