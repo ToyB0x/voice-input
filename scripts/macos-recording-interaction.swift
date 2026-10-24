@@ -223,6 +223,8 @@ func typeField(_ root: AXUIElement, label: String, value path: String) throws {
         event.flags = .maskCommand
         event.post(tap: .cghidEventTap)
     }
+    // Selecting all alone does not clear the field when the replacement is empty.
+    if path.isEmpty { try key(51) } // Backspace
     let units = Array(path.utf16)
     for offset in stride(from: 0, to: units.count, by: 16) {
         let chunk = Array(units[offset..<min(offset + 16, units.count)])
