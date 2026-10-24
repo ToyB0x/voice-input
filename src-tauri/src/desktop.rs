@@ -65,7 +65,9 @@ pub fn show(app: &AppHandle) {
 }
 
 pub fn shortcut_event(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
-    let desktop = app.state::<Desktop>();
+    let Some(desktop) = app.try_state::<Desktop>() else {
+        return;
+    };
     let active = desktop
         .inner
         .lock()

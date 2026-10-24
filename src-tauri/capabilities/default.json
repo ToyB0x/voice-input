@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Local recording, transcription and explicit result copy for the main window",
+  "description": "Local recording, transcription, explicit copy and resident app preferences for the main window",
   "windows": [
     "main"
   ],
