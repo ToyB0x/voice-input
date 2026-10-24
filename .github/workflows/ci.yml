@@ -67,6 +67,16 @@ jobs:
             ~/.cargo/registry
             src-tauri/target
           key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+      - name: Build observable native context fixture
+        run: |
+          fixture="$RUNNER_TEMP/Local Context Fixture.app"
+          mkdir -p "$fixture/Contents/MacOS"
+          xcrun swiftc scripts/macos-context-target.swift -o "$fixture/Contents/MacOS/context-fixture"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.contextfixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string context-fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local Context Fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
+          codesign --force --sign - "$fixture"
       - name: Verify native window and capture screenshot
         timeout-minutes: 3
         run: |
@@ -225,16 +235,6 @@ jobs:
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/insertion" insertion \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion.log"
-      - name: Build observable native context fixture
-        run: |
-          fixture="$RUNNER_TEMP/Local Context Fixture.app"
-          mkdir -p "$fixture/Contents/MacOS"
-          xcrun swiftc scripts/macos-context-target.swift -o "$fixture/Contents/MacOS/context-fixture"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.contextfixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string context-fixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local Context Fixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
-          codesign --force --sign - "$fixture"
       - name: Verify bounded context, opt-out and protected field exclusions
         timeout-minutes: 10
         env:

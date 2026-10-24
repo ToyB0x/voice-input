@@ -149,6 +149,9 @@ impl Recorder {
                         c.finish();
                         if c.phase == Some("recorded") && c.recognition.model_ready {
                             let _ = transcription::recognize(&mut c, &jobs);
+                        } else if c.phase == Some("error") {
+                            context.cancel();
+                            c.context_hint = None;
                         }
                     }
                 }
@@ -208,6 +211,9 @@ impl Recorder {
                                         if c.phase == Some("recorded") && c.recognition.model_ready
                                         {
                                             let _ = transcription::recognize(&mut c, &jobs);
+                                        } else if c.phase == Some("error") {
+                                            context.cancel();
+                                            c.context_hint = None;
                                         }
                                     }
                                 }
@@ -424,6 +430,7 @@ mod tests {
             error: None,
             recognition: Session::default(),
             insertion_ticket: None,
+            context_hint: None,
         };
         capture.finish();
         let snapshot = capture.snapshot();

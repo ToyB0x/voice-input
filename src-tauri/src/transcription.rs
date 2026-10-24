@@ -181,17 +181,15 @@ pub(crate) fn worker(
                     }
                     Job::Recognize {
                         audio, rate, hint, ..
-                    } => {
-                        let hint = hint.and_then(|hint| hint.take());
-                        prepare_audio(&audio, rate)
-                            .and_then(|pcm| {
-                                model
-                                    .as_ref()
-                                    .expect("model readiness is worker-owned")
-                                    .transcribe_with_hint(&pcm, hint.as_deref())
-                            })
-                            .map_err(|e| format!("文字起こしに失敗しました: {e}"))
-                    }
+                    } => prepare_audio(&audio, rate)
+                        .and_then(|pcm| {
+                            let hint = hint.and_then(|hint| hint.take());
+                            model
+                                .as_ref()
+                                .expect("model readiness is worker-owned")
+                                .transcribe_with_hint(&pcm, hint.as_deref())
+                        })
+                        .map_err(|e| format!("文字起こしに失敗しました: {e}")),
                 }
             };
             if let Ok(mut capture) = shared.lock() {
