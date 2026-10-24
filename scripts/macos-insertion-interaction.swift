@@ -92,11 +92,22 @@ func inspectInsertion(_ root: AXUIElement, output: URL, name: String, inserted: 
     return resultText(root)
 }
 
-func typePrivateCredential(_ element: AXUIElement, value: String) throws {
+func typePrivateCredential(_ element: AXUIElement, value: String, physicalHex: Bool = false) throws {
     guard AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
         throw SmokeFailure(description: "Could not focus CI authorization field")
     }
     try key(0, flags: .maskCommand)
+    if physicalHex {
+        // Secure Input can disable Unicode input methods. The generated secret
+        // is lowercase hex, so send physical U.S.-layout keys for the CI image.
+        let codes: [Character: CGKeyCode] = ["a": 0, "b": 11, "c": 8, "d": 2, "e": 14, "f": 3,
+            "0": 29, "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25]
+        for character in value {
+            guard let code = codes[character] else { throw SmokeFailure(description: "Unexpected CI credential format") }
+            try key(code)
+        }
+        return
+    }
     let source = CGEventSource(stateID: .hidSystemState)
     let units = Array(value.utf16)
     for offset in stride(from: 0, to: units.count, by: 16) {
@@ -138,7 +149,7 @@ func authorizeCISettingsChange() throws {
         throw SmokeFailure(description: "CI authorization form fields not found")
     }
     try typePrivateCredential(user, value: username)
-    try typePrivateCredential(secret, value: password)
+    try typePrivateCredential(secret, value: password, physicalHex: true)
     try press(uiButton(dialog!, ["Modify Settings"])!)
     try waitForUI("admin confirmation completes", seconds: 30) { uiButton(dialog!, ["Modify Settings"]) == nil }
 }
