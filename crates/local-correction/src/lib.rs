@@ -128,24 +128,36 @@ fn normalized(text: &str) -> String {
     significant(text).into_iter().collect()
 }
 
+fn literal_boundary(c: char) -> bool {
+    c.is_whitespace()
+        || c.is_ascii_punctuation()
+        || "。、，．！？「」『』（）・：；…“”‘’【】［］｛｝〈〉《》".contains(c)
+}
+fn is_kana(c: char) -> bool {
+    ('ぁ'..='ゖ').contains(&c) || ('ァ'..='ヺ').contains(&c) || ('ｦ'..='ﾟ').contains(&c) || c == 'ー'
+}
+
 fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'static str> {
     let source = normalized(original);
     let candidate = normalized(candidate);
     for marker in ["ない", "ません"] {
-        let mut fragments = std::collections::BTreeSet::new();
+        // Marker counts also protect repeated negatives when a phonetic
+        // stem is too ambiguous for literal target matching.
+        let mut fragments = std::collections::BTreeSet::from([marker.to_owned()]);
         for (index, _) in original.match_indices(marker) {
             // Keep clause boundaries until the stem is extracted. A filler
             // before a comma is not the target of a following bare negation.
             let clause = original[..index]
-                .rsplit(|c: char| {
-                    c.is_whitespace()
-                        || c.is_ascii_punctuation()
-                        || "。、，．！？「」『』（）・：；…".contains(c)
-                })
+                .rsplit(literal_boundary)
                 .next()
                 .unwrap_or("");
             let mut stem: Vec<_> = normalized(clause).chars().rev().take(2).collect();
             stem.reverse();
+            // Allow phonetic spelling to become kanji (のまない -> 飲まない).
+            // This is not a morphological analyzer; decline ambiguous kana.
+            if stem.iter().all(|&c| is_kana(c)) {
+                continue;
+            }
             fragments.insert(format!("{}{marker}", stem.into_iter().collect::<String>()));
         }
         for fragment in fragments {
@@ -160,11 +172,8 @@ fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'st
 // These are literal, bounded checks, not Japanese morphological analysis.
 // Topic extraction deliberately declines long/ambiguous fragments.
 fn subject_term(text: &str) -> String {
-    let prefix = text.trim_end_matches(['、', ',', ' ', '\n']);
-    let clause = prefix
-        .rsplit(|c: char| c.is_whitespace() || "。！？、,：:".contains(c))
-        .next()
-        .unwrap_or("");
+    let prefix = text.trim_end_matches(literal_boundary);
+    let clause = prefix.rsplit(literal_boundary).next().unwrap_or("");
     let value = if let Some((topic, rest)) = clause.split_once('は') {
         if !topic.is_empty() { rest } else { clause }
     } else {
@@ -199,7 +208,7 @@ fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static st
     for marker in ["ではなく", "じゃなく", "でなく"] {
         for (index, _) in original.match_indices(marker) {
             let target = subject_term(&original[..index]);
-            if !target.is_empty() {
+            if !target.is_empty() && !target.chars().all(is_kana) {
                 let fragment = format!("{target}ではなく");
                 if candidate.matches(&fragment).count() < source.matches(&fragment).count() {
                     return Err("correction removed a contrast target");
@@ -209,26 +218,31 @@ fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static st
     }
     Ok(())
 }
-fn connective_counts(text: &str) -> [usize; 2] {
+fn connective_counts(text: &str, classify_source: bool) -> [usize; 2] {
     let mut counts = [0, 0];
-    for clause in text.split(['。', '！', '？', '\n', '、', ',']) {
+    for clause in text
+        .split(|c: char| matches!(c, '\n' | '\r') || (!c.is_whitespace() && literal_boundary(c)))
+    {
         let start =
             clause.trim_start_matches(|c: char| c.is_whitespace() || "-・「『（(\"".contains(c));
-        if start.starts_with("しかし") {
-            counts[0] += 1;
-        }
-        if let Some(tail) = start.strip_prefix("また")
-            && !tail.starts_with(['は', 'が', 'ぐ', 'ぎ', 'げ', 'ご', 'い', 'た', 'に'])
-        {
-            counts[1] += 1;
+        for (index, word) in ["しかし", "また"].into_iter().enumerate() {
+            if let Some(tail) = start.strip_prefix(word)
+                // Adjacent kana can be an ordinary word: またず, またせ,
+                // または, またぐ, しかしか (鹿しか). Decline that source
+                // rather than guessing its word class. Candidate checking
+                // only counts retained literal prefixes, not semantic roles.
+                && (!classify_source || tail.trim_start().chars().next().is_none_or(|c| !is_kana(c)))
+            {
+                counts[index] += 1;
+            }
         }
     }
     counts
 }
 fn preserve_connectives(original: &str, candidate: &str) -> Result<(), &'static str> {
-    if connective_counts(original)
+    if connective_counts(original, true)
         .into_iter()
-        .zip(connective_counts(candidate))
+        .zip(connective_counts(candidate, false))
         .any(|(before, after)| after < before)
     {
         return Err("correction removed a sentence connective");
@@ -461,12 +475,45 @@ mod tests {
             ("えっと、ないです", "ないです。"),
             ("えー ないです", "ないです。"),
             ("えー 東京ではなく大阪です", "東京ではなく大阪です。"),
+            ("えー，東京ではなく大阪です", "東京ではなく大阪です。"),
+            ("（えー）東京ではなく大阪です", "東京ではなく大阪です。"),
             ("えっと　東京じゃなく大阪です", "東京じゃなく大阪です。"),
             ("えー，ないです", "ないです。"),
             ("（えー）ないです", "ないです。"),
             ("えー、ありません", "ありません。"),
             ("予約しません。えっと、ないです", "予約しません。ないです。"),
             ("えー、しません", "しません。"),
+        ] {
+            let json = serde_json::to_vec(&Answer {
+                text: candidate.into(),
+            })
+            .unwrap();
+            assert!(
+                parse_answer(&json, original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+    }
+
+    #[test]
+    fn kana_words_are_not_assumed_to_be_sentence_connectives() {
+        for (original, candidate) in [
+            ("またずに進めてください", "待たずに進めてください。"),
+            ("また ずに進めてください", "待たずに進めてください。"),
+            ("また は別館を使います", "又は別館を使います。"),
+            (
+                "資料を確認。また日程も共有します",
+                "資料を確認．また日程も共有します。",
+            ),
+            ("また日程を共有します", "“また、日程を共有します。”"),
+            ("またせてしまいました", "待たせてしまいました。"),
+            ("またせないでください", "待たせないでください。"),
+            ("またないでください", "待たないでください。"),
+            ("しかしかいません", "鹿しかいません。"),
+            ("しかし会議は延期です", "しかしながら、会議は延期です。"),
+            ("のまないでください", "飲まないでください。"),
+            ("とうきょうではなく大阪です", "東京ではなく大阪です。"),
+            ("トウキョウではなく大阪です", "東京ではなく大阪です。"),
         ] {
             let json = serde_json::to_vec(&Answer {
                 text: candidate.into(),
