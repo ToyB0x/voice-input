@@ -223,18 +223,15 @@ struct Repair {
 }
 fn explicit_repair(text: &str) -> Option<Repair> {
     let (prefix, tail) = text.rsplit_once("いや")?;
-    if prefix.trim().is_empty() {
-        return None;
-    }
     let separated = prefix.ends_with(['、', ',', ' ']);
     let tail = tail
         .trim_start_matches(['、', ',', ' '])
         .split(['。', '！', '？', '\n'])
         .next()?;
-    // Ordinary いやな / いやし must not be interpreted as a final repair.
-    if !separated && tail.starts_with(['な', 'に', 'し', 'す', 'だ']) {
-        return None;
-    }
+    // Ordinary いやな / いやし makes the retired phrase ambiguous. Never
+    // disable the final-target check: the same kana can start a real repair
+    // (そばいやすし, 水曜日いやなし).
+    let ambiguous_word_boundary = !separated && tail.starts_with(['な', 'に', 'し', 'す', 'だ']);
     let mut core = tail.trim();
     for ending in ["でお願いします", "にしてください", "でした", "です"] {
         if let Some(value) = core.strip_suffix(ending) {
@@ -249,7 +246,7 @@ fn explicit_repair(text: &str) -> Option<Repair> {
     // Preserve the final correction even when earlier repairs make extracting
     // a single retired phrase ambiguous. Only the new retired-name check
     // declines those inputs; the existing final-target check still applies.
-    let retired = if prefix.contains("いや") {
+    let retired = if prefix.contains("いや") || ambiguous_word_boundary {
         String::new()
     } else {
         subject_term(prefix)
@@ -374,6 +371,46 @@ mod tests {
             parse_answer(&bad, original),
             Err("correction omitted the explicit final repair")
         );
+    }
+
+    #[test]
+    fn kana_final_targets_are_not_treated_as_ordinary_words() {
+        for (original, good, bad) in [
+            ("いや木曜日です", "木曜日です。", "水曜日です。"),
+            (
+                "昼食はそばいやすしにします",
+                "昼食はすしにします。",
+                "昼食はそばにします。",
+            ),
+            (
+                "会議は水曜日いやなしです",
+                "会議はなしです。",
+                "会議は水曜日です。",
+            ),
+            (
+                "昼食はそばいやにくです",
+                "昼食はにくです。",
+                "昼食はそばです。",
+            ),
+            (
+                "昼食はそばいやしらすです",
+                "昼食はしらすです。",
+                "昼食はそばです。",
+            ),
+            (
+                "味付けは塩いやだしです",
+                "味付けはだしです。",
+                "味付けは塩です。",
+            ),
+        ] {
+            let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+            assert!(parse_answer(&encode(good), original).is_ok(), "{original}");
+            assert_eq!(
+                parse_answer(&encode(bad), original),
+                Err("correction omitted the explicit final repair"),
+                "{original}"
+            );
+        }
     }
 
     #[test]
