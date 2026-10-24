@@ -92,6 +92,57 @@ func inspectInsertion(_ root: AXUIElement, output: URL, name: String, inserted: 
     return resultText(root)
 }
 
+func typePrivateCredential(_ element: AXUIElement, value: String) throws {
+    guard AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
+        throw SmokeFailure(description: "Could not focus CI authorization field")
+    }
+    try key(0, flags: .maskCommand)
+    let source = CGEventSource(stateID: .hidSystemState)
+    let units = Array(value.utf16)
+    for offset in stride(from: 0, to: units.count, by: 16) {
+        let chunk = Array(units[offset..<min(offset + 16, units.count)])
+        for down in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else {
+                throw SmokeFailure(description: "Could not create CI authorization input")
+            }
+            event.flags = []
+            chunk.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress!) }
+            event.post(tap: .cghidEventTap)
+        }
+    }
+}
+
+func authorizeCISettingsChange() throws {
+    guard let path = ProcessInfo.processInfo.environment["VOICE_INPUT_CI_AUTH_FILE"],
+          let credentials = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: String],
+          let username = credentials["username"], let password = credentials["password"] else {
+        throw SmokeFailure(description: "Missing ephemeral CI authorization configuration")
+    }
+    var dialog: AXUIElement?
+    try waitForUI("real Privacy & Security admin confirmation", seconds: 20) {
+        for app in NSWorkspace.shared.runningApplications {
+            let root = AXUIElementCreateApplication(app.processIdentifier)
+            AXUIElementSetMessagingTimeout(root, 0.2)
+            let text = uiText(root)
+            if text.contains("Privacy & Security") && text.contains("trying to modify your system settings"),
+               uiButton(root, ["Modify Settings"]) != nil {
+                dialog = root
+                return true
+            }
+        }
+        return false
+    }
+    let fields = axElements(dialog!).filter { axValue($0, kAXRoleAttribute) as? String == "AXTextField" }
+    guard let user = fields.first(where: { axValue($0, kAXSubroleAttribute) as? String != "AXSecureTextField" }),
+          let secret = fields.first(where: { axValue($0, kAXSubroleAttribute) as? String == "AXSecureTextField" }) else {
+        throw SmokeFailure(description: "CI authorization form fields not found")
+    }
+    try typePrivateCredential(user, value: username)
+    try typePrivateCredential(secret, value: password)
+    try press(uiButton(dialog!, ["Modify Settings"])!)
+    try waitForUI("admin confirmation completes", seconds: 30) { uiButton(dialog!, ["Modify Settings"]) == nil }
+}
+
 func grantInsertionPermission(_ voice: AXUIElement, output: URL) throws {
     guard let request = uiButton(voice, ["Request accessibility permission"]) else { throw SmokeFailure(description: "Permission request control missing") }
     try press(request)
@@ -128,13 +179,14 @@ func grantInsertionPermission(_ voice: AXUIElement, output: URL) throws {
             return false
         }
         if (axValue(toggle!, kAXValueAttribute) as? NSNumber)?.intValue != 1 { try press(toggle!) }
-        try waitForUI("accessibility switch enabled", seconds: 30) { (axValue(toggle!, kAXValueAttribute) as? NSNumber)?.intValue == 1 }
+        try authorizeCISettingsChange()
+        try waitForUI("accessibility switch enabled after admin confirmation", seconds: 30) { (axValue(toggle!, kAXValueAttribute) as? NSNumber)?.intValue == 1 }
         // The switch changes before TCC necessarily commits/invalidates its cache.
         RunLoop.current.run(until: Date().addingTimeInterval(3))
         try uiText(settings!).write(to: output.appendingPathComponent("system-settings.txt"), atomically: true, encoding: .utf8)
         try uiText(voice).write(to: output.appendingPathComponent("product-after-grant.txt"), atomically: true, encoding: .utf8)
         try interactionScreenshot(output, name: "accessibility-granted.png")
-        try writeJSON(["status": "passed", "method": "System Settings UI", "productSwitchEnabled": true], to: output.appendingPathComponent("permission.json"))
+        try writeJSON(["status": "passed", "method": "System Settings UI with ephemeral CI admin confirmation", "productSwitchEnabled": true], to: output.appendingPathComponent("permission.json"))
     } catch {
         try? uiText(settings!).write(to: output.appendingPathComponent("system-settings.txt"), atomically: true, encoding: .utf8)
         throw error
@@ -176,6 +228,25 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
             throw SmokeFailure(description: "Cursor/selection insertion mismatch")
         }
         passed.append(name)
+        if name == "cursor" {
+            // Restore the exact original target while retrying. Even with the
+            // same identity/value/range, a consumed delivery must not repeat.
+            try press(uiButton(voice, ["Transcribe recording"])!)
+            try waitForUI("retry in progress") { uiText(voice).contains("文字起こし中") }
+            NSRunningApplication(processIdentifier: targetPID)?.activate(options: [.activateAllWindows])
+            let current = axValue(field, kAXValueAttribute) as? String ?? ""
+            try setRange(field, 0, current.utf16.count)
+            guard AXUIElementSetAttributeValue(field, kAXSelectedTextAttribute as CFString, initial as CFString) == .success else {
+                throw SmokeFailure(description: "Could not restore synthetic retry baseline")
+            }
+            try setRange(field, location, length)
+            try waitForUI("retry completes without delivery", seconds: 120) {
+                trayItem(voice).map(axText)?.contains("待機") == true
+            }
+            guard axValue(field, kAXValueAttribute) as? String == initial else { throw SmokeFailure(description: "Retry inserted a second time") }
+            passed.append("retry-with-restored-target")
+            try trayAction(voice, title: "設定・認識結果を表示")
+        }
         try hideInsertionWindow(voice)
     }
     guard let fixturePath = ProcessInfo.processInfo.environment["VOICE_INPUT_INSERTION_TARGET"] else { throw SmokeFailure(description: "Missing native guard fixture") }
@@ -213,13 +284,17 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
             if mode == "app-change" { _ = try openTextTarget(output, name: "changed-app", text: "other-app-sentinel") }
             if mode == "discard" {
                 try trayAction(voice, title: "設定・認識結果を表示")
-                try waitForUI("discard enabled") { uiButton(voice, ["Discard recording"]) != nil }
+                try waitForUI("discard enabled during inference") { uiText(voice).contains("文字起こし中") && uiButton(voice, ["Discard recording"]) != nil }
                 try press(uiButton(voice, ["Discard recording"])!)
             }
         })
         if mode != "discard" {
             _ = try inspectInsertion(voice, output: output, name: mode, inserted: false)
-            guard !uiText(voice).contains("入力先へ挿入しました") else { throw SmokeFailure(description: "Guard did not block \(mode)") }
+            let deliveryState = uiText(voice)
+            guard !deliveryState.contains("入力先へ挿入しました") else { throw SmokeFailure(description: "Guard did not block \(mode)") }
+            if ["field-change", "selection-change", "content-change", "app-change"].contains(mode) && !deliveryState.contains("入力先・位置・内容が変わった") {
+                throw SmokeFailure(description: "The target was rejected before the intended change guard: \(mode)")
+            }
         } else {
             try waitForUI("discarded result") { resultText(voice).isEmpty && uiButton(voice, ["Copy transcript"]) == nil }
             try interactionScreenshot(output, name: "discard.png")

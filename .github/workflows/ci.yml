@@ -171,11 +171,24 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion-denied.log"
       - name: Allow product Accessibility through System Settings in disposable CI
         timeout-minutes: 4
+        env:
+          VOICE_INPUT_CI_AUTH_FILE: ${{ runner.temp }}/voice-input-ci-authorization.json
         run: |
-          # CI-only authorization policy: no password material and no product bypass.
-          # These rights disappear with this disposable runner; never install in the app.
-          sudo security authorizationdb write system.preferences.security allow
-          sudo security authorizationdb write system.preferences.accessibility allow
+          # A fresh, disposable credential only for this runner's real OS dialog.
+          # Never print it, include it in exceptions, or put it under artifacts.
+          python3 - <<'PY'
+          import json, os, secrets, subprocess
+          from pathlib import Path
+          credential = dict(username='voiceinput-ci', password=secrets.token_hex(24))
+          path = Path(os.environ['VOICE_INPUT_CI_AUTH_FILE'])
+          with path.open('w', opener=lambda p, f: os.open(p, f, 0o600)) as output:
+              json.dump(credential, output)
+          result = subprocess.run(['sudo', 'sysadminctl', '-addUser', credential['username'],
+              '-fullName', 'Voice Input CI', '-home', str(path.parent / 'voice-input-ci-home'),
+              '-password', credential['password'], '-admin'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          if result.returncode:
+              raise SystemExit('Could not create disposable CI authorization account')
+          PY
           "$RUNNER_TEMP/voice-input-smoke-runner" \
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/insertion-grant" insertion-grant \
@@ -202,6 +215,11 @@ jobs:
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/insertion" insertion \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion.log"
+      - name: Remove disposable CI authorization account
+        if: always()
+        run: |
+          sudo sysadminctl -deleteUser voiceinput-ci >/dev/null 2>&1 || true
+          rm -f "$RUNNER_TEMP/voice-input-ci-authorization.json"
       - name: Check compiler and smoke failure exit statuses
         run: |
           negative="$RUNNER_TEMP/voice-input-smoke/expected-failures"
