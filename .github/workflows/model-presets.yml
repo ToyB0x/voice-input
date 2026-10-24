@@ -99,7 +99,8 @@ jobs:
           python3 scripts/run-offline-linux.py python3 scripts/evaluate_correction.py \
             --binary crates/local-correction/target/release/local-correction \
             --model "$RUNNER_TEMP/correction.gguf" --model-name qwen3-4b --asr-model '${{ matrix.asr }}' \
-            --asr "$RUNNER_TEMP/preset-asr" --output "$RUNNER_TEMP/preset-correction" --cpu-only --require-network-denied
+            --asr "$RUNNER_TEMP/preset-asr" --output "$RUNNER_TEMP/preset-correction" --cpu-only --require-network-denied \
+            --baseline evaluation/correction-baseline/qwen3-4b-preservation.json
           cat "$RUNNER_TEMP/preset-correction/summary.md" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()

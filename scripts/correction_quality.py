@@ -7,6 +7,7 @@ from pathlib import Path
 
 def constraints(text, case):
     missing = [word for word in case.get('required', []) if word not in text]
+    missing += ['one-of:'+'|'.join(group) for group in case.get('required_any', []) if not any(word in text for word in group)]
     invented = [word for word in case.get('forbidden', []) if word in text]
     violations = []
     if case.get('line_break') and '\n' not in text:
@@ -35,6 +36,8 @@ def load_cases(path):
         for key in ['required', 'forbidden', 'forbidden_format']:
             if not isinstance(case.get(key, []), list) or any(not isinstance(word, str) or not word for word in case.get(key, [])):
                 raise ValueError('Invalid correction constraint')
+        if not isinstance(case.get('required_any', []), list) or any(not isinstance(group,list) or not group or any(not isinstance(word,str) or not word for word in group) for group in case.get('required_any', [])):
+            raise ValueError('Invalid alternative constraint')
         for key in ['bullets', 'paragraphs']:
             if key in case and (type(case[key]) is not int or case[key] < 1):
                 raise ValueError('Invalid format count')
@@ -43,7 +46,11 @@ def load_cases(path):
 
 def quality_summary(items):
     generated = [item for item in items if item['case']['transcript'] and not item['failed'] and not item['rejected']]
-    return dict(completed=len(items), generated=len(generated),
+    final = [item for item in items if item['case']['transcript']]
+    return dict(final_checked=len(final), final_facts_passed=sum(item['constraints']['facts_ok'] for item in final),
+                missing_required_cases=sum(bool(item['constraints']['missing']) for item in final),
+                forbidden_cases=sum(bool(item['constraints']['invented']) for item in final),
+                completed=len(items), generated=len(generated),
                 rejected=sum(item['rejected'] for item in items),
                 runtime_failures=sum(item['failed'] and not item['rejected'] for item in items),
                 facts_passed=sum(item['constraints']['facts_ok'] for item in generated),

@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 from correction_quality import load_cases
 from evaluate_models import ROOT
+from evaluate_correction import MODES
+from correction_baselines import validate_frozen,render_baseline
 from summarize_correction import validate_report, validate_sources
 
 EXPECTED = ['medium', 'large-v3-turbo']
@@ -34,6 +36,8 @@ def render(indexed):
     for asr in EXPECTED:
         for mode, item in indexed[asr]['summary'].items():
             lines.append(f"| {asr} | {mode} | {item['raw_cer']:.2%} | {item['cer']:.2%} | {item['rejected']} | {item['mean_wall_ms']:.0f} | {item['peak_rss_bytes']/1048576:.1f} |")
+    for asr in EXPECTED:
+        lines += ['', asr+' preservation comparison:', '', render_baseline(indexed[asr])]
     lines += ['', 'Each ASR model uses its own current-run outputs and raw baseline. All four modes run final correction. '
               'Public read speech with fixed reference-vocabulary hints; this is not a general dictation or live-OCR ranking. '
               'CER normalizes punctuation, so formatting benefits are separate. Rejections keep raw text; quality checks, '
@@ -50,7 +54,9 @@ def main():
     cases=load_cases(ROOT/'evaluation/correction-cases.json')
     revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     indexed=validate(reports,corpus,cases,revision)
-    for report in indexed.values():validate_sources(report)
+    for report in indexed.values():
+        validate_sources(report)
+        validate_frozen(report,corpus,cases,MODES)
     args.output.mkdir(parents=True,exist_ok=True)
     (args.output/'comparison.json').write_text(json.dumps(indexed,ensure_ascii=False,indent=2)+'\n')
     (args.output/'summary.md').write_text(render(indexed))
