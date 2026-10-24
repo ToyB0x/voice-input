@@ -5,13 +5,22 @@ import Foundation
 func contextCheckbox(_ root: AXUIElement) -> AXUIElement? {
     axElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Local recognition context") }
 }
+func pressContextButton(_ root: AXUIElement, _ label: String) throws {
+    var button: AXUIElement?
+    try waitForUI("enabled context control: " + label) {
+        button = uiButton(root, [label])
+        return button != nil
+    }
+    guard let button else { throw SmokeFailure(description: "Context control missing: " + label) }
+    try press(button)
+}
 func configureContext(_ voice: AXUIElement, enabled: Bool) throws {
     try waitForUI("restored context model", seconds: 120) { uiText(voice).contains("モデル準備完了") }
     try typeField(voice, label: "Recording shortcut", value: "Control+Alt+KeyV")
     guard let checkbox = contextCheckbox(voice), let insertion = insertionCheckbox(voice) else { throw SmokeFailure(description: "Missing context preference") }
     if (axValue(insertion, kAXValueAttribute) as? NSNumber)?.intValue == 1 { try press(insertion) }
     if ((axValue(checkbox, kAXValueAttribute) as? NSNumber)?.intValue == 1) != enabled { try press(checkbox) }
-    try press(uiButton(voice, ["Save preferences"])!)
+    try pressContextButton(voice, "Save preferences")
     try waitForUI("context preference applied") {
         let text = uiText(voice)
         return (enabled ? text.contains("認識補助:") && !text.contains("認識補助: 無効") : text.contains("認識補助: 無効")) && text.contains("直接入力: 無効")
@@ -94,27 +103,42 @@ func contextInteraction(pid: pid_t, scenario: String, output: URL) throws {
             guard after["lastRangeStart"] as? Int == (after["caret"] as! Int) - 256,
                   after["lastRangeLength"] as? Int == 512 else { throw SmokeFailure(description: "Context range did not surround caret") }
         }
-        try trayAction(voice, title: "設定・認識結果を表示")
-        let expected = mode == "disabled" ? "認識補助: 無効" : ["secure", "readonly", "unsupported"].contains(mode) ? "認識補助: ヒントなしで続行" : "認識補助: 取得済み"
-        try waitForUI("context capture state") { uiText(voice).contains(expected) }
+        print("Context case \(mode): full value reads=\(values), range reads=\(reads)")
+        if mode == "discard" || mode == "disable-during-recording" {
+            try trayAction(voice, title: "設定・認識結果を表示")
+            try waitForUI("recording context controls") {
+                uiText(voice).contains("録音中") && uiButton(voice, ["Discard recording"]) != nil
+            }
+            try waitForUI("pending context captured") { uiText(voice).contains("認識補助: 取得済み") }
+        }
         if mode == "discard" {
-            try press(uiButton(voice, ["Discard recording"])!)
+            try pressContextButton(voice, "Discard recording")
             try waitForUI("pending hint discarded") { uiText(voice).contains("認識補助: 次の録音") && resultText(voice).isEmpty }
         } else {
             if mode == "disable-during-recording" { try configureContext(voice, enabled: false) }
-            // Audio still comes through the real virtual microphone.
+            // Keep normal cases in the real target app, using the same proven
+            // global shortcut path for both recording and stopping.
             let playback = Process()
             playback.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
-            playback.arguments = [ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_AUDIO"]!]
+            guard let audio = ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_AUDIO"] else { throw SmokeFailure(description: "Missing context audio") }
+            playback.arguments = [audio]
             try playback.run()
+            defer { if playback.isRunning { playback.terminate() } }
             try waitForUI("context audio completes", seconds: 30) { !playback.isRunning }
-            try press(uiButton(voice, ["Stop recording"])!)
+            guard playback.terminationStatus == 0, trayItem(voice).map(axText)?.contains("録音中") == true else {
+                throw SmokeFailure(description: "Context recording ended before stop: " + mode)
+            }
+            try key(9, flags: [.maskControl, .maskAlternate])
+            try waitForUI("context inference starts") { trayItem(voice).map(axText)?.contains("処理中") == true }
+            try waitForUI("context inference ends", seconds: 120) { trayItem(voice).map(axText)?.contains("待機") == true }
+            if visibleWindows(for: pid).isEmpty { try trayAction(voice, title: "設定・認識結果を表示") }
             try waitForUI("context result completes", seconds: 120) { !resultText(voice).isEmpty && uiText(voice).contains("文字起こしが完了") }
+            let expected = ["disabled", "disable-during-recording"].contains(mode) ? "認識補助: 無効" : ["secure", "readonly", "unsupported"].contains(mode) ? "認識補助: ヒントなしで続行" : "ローカルヒントを使用しました"
+            try waitForUI("context delivery state") { uiText(voice).contains(expected) }
             if mode == "bounded" {
-                guard uiText(voice).contains("ローカルヒントを使用しました") else { throw SmokeFailure(description: "Captured hint was not consumed") }
-                try press(uiButton(voice, ["Transcribe recording"])!)
-                try waitForUI("hintless retry begins") { uiText(voice).contains("文字起こし中") }
-                try waitForUI("hintless retry completes", seconds: 120) { uiText(voice).contains("文字起こしが完了") && fixtureRecognized(resultText(voice)) }
+                try pressContextButton(voice, "Transcribe recording")
+                try waitForUI("hintless retry begins") { uiText(voice).contains("文字起こし中") && trayItem(voice).map(axText)?.contains("処理中") == true }
+                try waitForUI("hintless retry completes", seconds: 120) { uiText(voice).contains("文字起こしが完了") && fixtureRecognized(resultText(voice)) && trayItem(voice).map(axText)?.contains("待機") == true }
                 let retried = try state()
                 guard counts(retried, "rangeReads") == counts(after, "rangeReads") else { throw SmokeFailure(description: "Retry reread field") }
             }
@@ -127,9 +151,9 @@ func contextInteraction(pid: pid_t, scenario: String, output: URL) throws {
     // The user starts recording in Voice Input itself: its settings never become context.
     try configureContext(voice, enabled: true)
     let beforeSelf = try state()
-    try press(uiButton(voice, ["Start recording"])!)
+    try pressContextButton(voice, "Start recording")
     try waitForUI("own window excluded") { uiText(voice).contains("録音中") && uiText(voice).contains("認識補助: ヒントなしで続行") }
-    try press(uiButton(voice, ["Discard recording"])!)
+    try pressContextButton(voice, "Discard recording")
     guard counts(try state(), "rangeReads") == counts(beforeSelf, "rangeReads") else { throw SmokeFailure(description: "Self focus read another field") }
     passed.append("own-app-excluded")
     // Preference is restored on the next invocation; leave enabled for that check.
