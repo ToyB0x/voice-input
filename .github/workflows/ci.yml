@@ -45,6 +45,14 @@ jobs:
       - uses: actions/cache/restore@v4
         id: correction-cache
         with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: macos-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Restore previous correction target cache
+        if: steps.correction-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
           path: crates/local-correction/target
           key: macos-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Check and build isolated local correction runtime
@@ -56,7 +64,9 @@ jobs:
       - uses: actions/cache/save@v4
         if: steps.correction-cache.outputs.cache-hit != 'true'
         with:
-          path: crates/local-correction/target
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
           key: ${{ steps.correction-cache.outputs.cache-primary-key }}
       - name: Inspect macOS permission automation support
         run: |

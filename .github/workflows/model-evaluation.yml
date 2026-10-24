@@ -129,7 +129,7 @@ jobs:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
-          key: macos-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          key: macos-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
       - uses: actions/download-artifact@v4
         with:
           name: model-evaluation-small

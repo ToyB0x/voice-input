@@ -113,6 +113,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     PHASE.store(3, Ordering::Relaxed);
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4)) as i32;
     let params = LlamaContextParams::default()
+        .with_offload_kqv(metal)
+        .with_op_offload(metal)
         .with_n_ctx(NonZeroU32::new(4096))
         .with_n_batch(2048)
         .with_n_ubatch(256)
