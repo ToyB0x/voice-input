@@ -63,11 +63,13 @@ impl Corrector {
     }
     /// Exit must wait until the pipe owner has killed and reaped its child.
     pub fn shutdown(&self) {
+        let mut worker = self
+            .worker
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         self.closing.store(true, Ordering::Release);
         self.cancel();
-        if let Ok(mut worker) = self.worker.lock()
-            && let Some(handle) = worker.take()
-        {
+        if let Some(handle) = worker.take() {
             let _ = handle.join();
         }
     }
