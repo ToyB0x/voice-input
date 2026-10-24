@@ -2,10 +2,12 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 spec = importlib.util.spec_from_file_location('capability_probe', Path(__file__).resolve().parents[1]/'probe-correction-model.py')
 probe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(probe)
