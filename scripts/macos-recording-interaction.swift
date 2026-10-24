@@ -71,7 +71,7 @@ func recordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
         try runRecordingInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output)
     } catch {
         // Authentication may still be open; never capture credential-entry UI.
-        if scenario == "insertion-grant" { throw error }
+        if scenario == "insertion-grant" || scenario == "ocr-grant" { throw error }
         try? interactionScreenshot(output, name: "interaction-failure.png")
         try? uiText(AXUIElementCreateApplication(pid)).write(
             to: output.appendingPathComponent("failure-app-state.txt"), atomically: true, encoding: .utf8)
@@ -87,6 +87,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
     guard AXIsProcessTrusted() else {
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
+
+    if scenario.hasPrefix("ocr") { try ocrInteraction(pid:pid,scenario:scenario,output:output); return }
 
     if scenario.hasPrefix("context") { try contextInteraction(pid: pid, scenario: scenario, output: output); return }
 

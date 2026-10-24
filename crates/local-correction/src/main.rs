@@ -86,7 +86,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let name = model.meta_val_str("general.name")?;
     let layers = OFFLOADED.load(Ordering::Relaxed);
-    if metal && layers == 0 {
+    if (metal && layers == 0) || (!metal && layers != 0) {
         return Err("requested GPU offload did not occur".into());
     }
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4)) as i32;

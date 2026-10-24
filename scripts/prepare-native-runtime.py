@@ -13,4 +13,5 @@ source=Path(os.environ.get('CARGO_TARGET_DIR',ROOT/'crates/local-correction/targ
 target=ROOT/'src-tauri/resources/local-correction'
 target.parent.mkdir(parents=True,exist_ok=True)
 shutil.copy2(source,target)
+subprocess.run(['codesign','--force','--sign','-',str(target)],check=True)
 print('Local correction runtime prepared (no model weights downloaded).')

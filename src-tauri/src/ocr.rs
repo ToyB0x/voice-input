@@ -1,9 +1,6 @@
 //! ScreenCaptureKit crops only the focused editable field; Vision runs in memory.
 use crate::insertion::{Range, attribute, focused, selected_range};
-use core_foundation::{
-    base::{CFType, CFTypeRef, TCFType},
-    string::CFString,
-};
+use core_foundation::base::{CFType, CFTypeRef, TCFType};
 use objc2::{AnyThread, rc::autoreleasepool};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_core_graphics::CGImage;

@@ -41,7 +41,8 @@
       "icons/icon.icns"
     ],
     "resources": {
-      "resources/local-correction": "bin/local-correction"
+      "resources/local-correction": "bin/local-correction",
+      "resources/CORRECTION-NOTICES.txt": "CORRECTION-NOTICES.txt"
     }
   }
 }
