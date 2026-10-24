@@ -72,6 +72,7 @@ pub(crate) struct Capture {
     pub(crate) recognition: Session,
     pub(crate) insertion_ticket: Option<u64>,
     pub(crate) context_hint: Option<crate::context::Hint>,
+    pub(crate) correction_hint: Option<crate::context::Hint>,
 }
 
 impl Capture {
@@ -127,7 +128,11 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub fn new(inserter: crate::insertion::Inserter, context: crate::context::Reader) -> Self {
+    pub fn new(
+        inserter: crate::insertion::Inserter,
+        context: crate::context::Reader,
+        corrector: crate::correction::Corrector,
+    ) -> Self {
         let (tx, rx) = mpsc::channel::<Request>();
         let capture = Arc::new(Mutex::new(Capture::default()));
         let jobs = transcription::worker(capture.clone(), inserter.clone());
@@ -152,6 +157,7 @@ impl Recorder {
                         } else if c.phase == Some("error") {
                             context.cancel();
                             c.context_hint = None;
+                            c.correction_hint = None;
                         }
                     }
                 }
@@ -171,10 +177,16 @@ impl Recorder {
                             }
                             Action::Start if stream.is_some() => Err("すでに録音中です。".into()),
                             Action::Start => {
+                                corrector.cancel();
                                 inserter.cancel();
                                 let ticket = inserter.begin();
                                 context.cancel();
                                 let hint = context.capture();
+                                let correction_hint = if context.retain_for_correction() {
+                                    hint.clone()
+                                } else {
+                                    None
+                                };
                                 if let Ok(mut c) = shared.lock() {
                                     let mut recognition = std::mem::take(&mut c.recognition);
                                     recognition.clear_result();
@@ -182,6 +194,7 @@ impl Recorder {
                                         recognition,
                                         insertion_ticket: ticket,
                                         context_hint: hint,
+                                        correction_hint,
                                         ..Capture::default()
                                     };
                                 }
@@ -196,6 +209,7 @@ impl Recorder {
                                         if let Ok(mut c) = shared.lock() {
                                             c.insertion_ticket = None;
                                             c.context_hint = None;
+                                            c.correction_hint = None;
                                             c.fail(error.clone());
                                         }
                                         Err(error)
@@ -214,6 +228,7 @@ impl Recorder {
                                         } else if c.phase == Some("error") {
                                             context.cancel();
                                             c.context_hint = None;
+                                            c.correction_hint = None;
                                         }
                                     }
                                 }
@@ -223,15 +238,20 @@ impl Recorder {
                                 Err("録音を停止してから操作してください。".into())
                             }
                             Action::LoadModel(path, backend) => {
+                                corrector.cancel();
                                 shared.lock().map_err(|e| e.to_string()).and_then(|mut c| {
                                     transcription::load(&mut c.recognition, path, &backend, &jobs)
                                 })
                             }
-                            Action::Transcribe => shared
-                                .lock()
-                                .map_err(|e| e.to_string())
-                                .and_then(|mut c| transcription::recognize(&mut c, &jobs)),
+                            Action::Transcribe => {
+                                corrector.cancel();
+                                shared
+                                    .lock()
+                                    .map_err(|e| e.to_string())
+                                    .and_then(|mut c| transcription::recognize(&mut c, &jobs))
+                            }
                             Action::Clear => {
+                                corrector.cancel();
                                 inserter.cancel();
                                 context.cancel();
                                 drop(stream.take());
@@ -239,6 +259,7 @@ impl Recorder {
                                     c.audio = None;
                                     c.insertion_ticket = None;
                                     c.context_hint = None;
+                                    c.correction_hint = None;
                                     c.phase = None;
                                     c.error = None;
                                     c.recognition.clear_result();
@@ -265,6 +286,24 @@ impl Recorder {
         }
     }
 
+    pub(crate) fn correction_input(
+        &self,
+    ) -> Result<(String, Option<crate::context::Hint>), String> {
+        let mut capture = self
+            .capture
+            .lock()
+            .map_err(|_| "録音状態を確認できません。")?;
+        if capture.recognition.working || capture.phase == Some("recording") {
+            return Err("録音と文字起こしの終了をお待ちください。".into());
+        }
+        let text = capture
+            .recognition
+            .transcript
+            .clone()
+            .filter(|text| !text.trim().is_empty())
+            .ok_or("先に音声を文字起こししてください。")?;
+        Ok((text, capture.correction_hint.take()))
+    }
     pub(crate) fn status(&self) -> Result<Snapshot, String> {
         self.capture
             .lock()
@@ -431,6 +470,7 @@ mod tests {
             recognition: Session::default(),
             insertion_ticket: None,
             context_hint: None,
+            correction_hint: None,
         };
         capture.finish();
         let snapshot = capture.snapshot();

@@ -13,6 +13,10 @@ fn main() {
         "save_preferences",
         "insertion_status",
         "context_status",
+        "request_screen_permission",
+        "correct_transcript",
+        "correction_status",
+        "copy_correction",
         "request_accessibility",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))

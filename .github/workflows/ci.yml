@@ -16,7 +16,7 @@ jobs:
   macos:
     name: macOS app
     runs-on: macos-14
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
@@ -40,6 +40,16 @@ jobs:
             src-tauri/target
           key: macos-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: macos-${{ runner.arch }}-app-rust-v1-
+      - uses: actions/cache@v4
+        with:
+          path: crates/local-correction/target
+          key: macos-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Check and build isolated local correction runtime
+        run: |
+          cargo fmt --manifest-path crates/local-correction/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/local-correction/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path crates/local-correction/Cargo.toml --locked
+          npm run prepare-native
       - name: Inspect macOS permission automation support
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
@@ -247,7 +257,7 @@ jobs:
           from pathlib import Path
           settings = json.loads((Path.home() / 'Library/Application Support/dev.toyb0x.voiceinput/settings.json').read_text())
           assert settings['recognitionContext'] is True
-          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'recognitionContext'}
+          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'recognitionContext', 'ocrContext', 'whisperContext', 'correctionContext', 'correctionModelPath', 'correctionBackend'}
           PY
       - name: Verify trusted product insertion and cancellation guards
         timeout-minutes: 12

@@ -13,6 +13,22 @@ pub struct Preferences {
     pub auto_insert: bool,
     #[serde(default)]
     pub recognition_context: bool,
+    #[serde(default)]
+    pub ocr_context: bool,
+    #[serde(default = "default_whisper_context")]
+    pub whisper_context: bool,
+    #[serde(default)]
+    pub correction_context: bool,
+    #[serde(default)]
+    pub correction_model_path: String,
+    #[serde(default = "default_correction_backend")]
+    pub correction_backend: String,
+}
+fn default_whisper_context() -> bool {
+    true
+}
+fn default_correction_backend() -> String {
+    "metal".into()
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -23,13 +39,27 @@ impl Default for Preferences {
             shortcut: "Command+Shift+Space".into(),
             auto_insert: false,
             recognition_context: false,
+            ocr_context: false,
+            whisper_context: true,
+            correction_context: false,
+            correction_model_path: String::new(),
+            correction_backend: "metal".into(),
         }
     }
 }
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
-        if self.version != 1 || !["cpu", "metal"].contains(&self.backend.as_str()) {
+        if self.version != 1
+            || !["cpu", "metal"].contains(&self.backend.as_str())
+            || !["cpu", "metal"].contains(&self.correction_backend.as_str())
+        {
             return Err("設定のバージョンまたは実行方式が不正です。".into());
+        }
+        if self.correction_model_path.len() > 4096
+            || (!self.correction_model_path.is_empty()
+                && !Path::new(&self.correction_model_path).is_absolute())
+        {
+            return Err("補正モデルには絶対パスを指定してください。".into());
         }
         if self.model_path.len() > 4096
             || (!self.model_path.is_empty() && !Path::new(&self.model_path).is_absolute())
@@ -97,6 +127,8 @@ mod tests {
                 .unwrap();
         assert!(!legacy.auto_insert);
         assert!(!legacy.recognition_context);
+        assert!(!legacy.ocr_context && !legacy.correction_context);
+        assert!(legacy.whisper_context);
         let settings = Preferences {
             model_path: "/tmp/日本語モデル.bin".into(),
             shortcut: String::new(),
@@ -128,5 +160,17 @@ mod tests {
         settings.model_path.clear();
         settings.version = 2;
         assert!(settings.validate().is_err());
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Preferences {
+    pub fn context_config(&self) -> crate::context::Config {
+        crate::context::Config {
+            ax: self.recognition_context,
+            ocr: self.ocr_context,
+            whisper: self.whisper_context,
+            correction: self.correction_context,
+        }
     }
 }

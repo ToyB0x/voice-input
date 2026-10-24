@@ -206,6 +206,9 @@ pub(crate) fn worker(
                         inserter.cancel();
                     }
                 }
+                if !loading && !result.as_ref().is_ok_and(|text| !text.trim().is_empty()) {
+                    capture.correction_hint = None;
+                }
                 capture.recognition.finish(generation, result, loading);
             }
         }
