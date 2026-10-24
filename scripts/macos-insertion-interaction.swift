@@ -153,6 +153,7 @@ func grantInsertionPermission(_ voice: AXUIElement, output: URL) throws {
         AXUIElementSetMessagingTimeout(settings!, 0.25)
         return true
     }
+    var authorizationAttempted = false
     do {
         var toggle: AXUIElement?
         try waitForUI("Voice Input accessibility switch", seconds: 45) {
@@ -179,6 +180,7 @@ func grantInsertionPermission(_ voice: AXUIElement, output: URL) throws {
             return false
         }
         if (axValue(toggle!, kAXValueAttribute) as? NSNumber)?.intValue != 1 { try press(toggle!) }
+        authorizationAttempted = true
         try authorizeCISettingsChange()
         try waitForUI("accessibility switch enabled after admin confirmation", seconds: 30) { (axValue(toggle!, kAXValueAttribute) as? NSNumber)?.intValue == 1 }
         // The switch changes before TCC necessarily commits/invalidates its cache.
@@ -188,7 +190,9 @@ func grantInsertionPermission(_ voice: AXUIElement, output: URL) throws {
         try interactionScreenshot(output, name: "accessibility-granted.png")
         try writeJSON(["status": "passed", "method": "System Settings UI with ephemeral CI admin confirmation", "productSwitchEnabled": true], to: output.appendingPathComponent("permission.json"))
     } catch {
-        try? uiText(settings!).write(to: output.appendingPathComponent("system-settings.txt"), atomically: true, encoding: .utf8)
+        if !authorizationAttempted {
+            try? uiText(settings!).write(to: output.appendingPathComponent("system-settings.txt"), atomically: true, encoding: .utf8)
+        }
         throw error
     }
 }

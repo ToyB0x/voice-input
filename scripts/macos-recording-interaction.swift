@@ -70,6 +70,8 @@ func recordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
     do {
         try runRecordingInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output)
     } catch {
+        // Authentication may still be open; never capture credential-entry UI.
+        if scenario == "insertion-grant" { throw error }
         try? interactionScreenshot(output, name: "interaction-failure.png")
         try? uiText(AXUIElementCreateApplication(pid)).write(
             to: output.appendingPathComponent("failure-app-state.txt"), atomically: true, encoding: .utf8)
