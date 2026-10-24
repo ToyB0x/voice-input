@@ -117,10 +117,29 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
         if visibleWindows(for:pid).isEmpty {try trayAction(voice,title:"設定・認識結果を表示")}
         try waitForUI("OCR app shown") {!visibleWindows(for:pid).isEmpty}
     }
+    func record() throws {
+        guard let audio=ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_AUDIO"] else {throw SmokeFailure(description:"Missing OCR audio fixture")}
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("insertion-clipboard-sentinel",forType:.string)
+        try key(9,flags:[.maskControl,.maskAlternate])
+        try waitForUI("OCR shortcut recording") {trayItem(voice).map(axText)?.contains("録音中")==true}
+        let playback=Process();playback.executableURL=URL(fileURLWithPath:"/usr/bin/afplay");playback.arguments=[audio]
+        try playback.run()
+        defer {if playback.isRunning {playback.terminate()}}
+        try waitForUI("OCR audio playback",seconds:30) {!playback.isRunning}
+        guard playback.terminationStatus==0 else {throw SmokeFailure(description:"OCR playback failed")}
+        // Capture has already finished during playback. Use the explicit stop
+        // control and wait for the result rather than a transient tray label.
+        // Direct insertion is disabled throughout these OCR cases.
+        try show()
+        try pressContextButton(voice,"Stop recording")
+        try waitForUI("OCR real audio transcription",seconds:120) {fixtureRecognized(resultText(voice))}
+        guard NSPasteboard.general.string(forType:.string)=="insertion-clipboard-sentinel" else {throw SmokeFailure(description:"OCR changed clipboard")}
+    }
     try hideInsertionWindow(voice)
     try focusElement(target,field("OCR input"),pid:fixture!.processIdentifier)
     try setRange(field("OCR input"),0,0)
-    try recordForInsertion(voice)
+    try record()
     try show()
     if scenario=="ocr-denied" {
         try waitForUI("OCR denied but ASR continues") {uiText(voice).contains("画面収録が未許可") && fixtureRecognized(resultText(voice))}
@@ -176,7 +195,7 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     for label in ["Protected OCR input","Read only OCR input"] {
         try hideInsertionWindow(voice)
         try focusElement(target,field(label),pid:fixture!.processIdentifier)
-        try recordForInsertion(voice)
+        try record()
         try show()
         try waitForUI("OCR protected target excluded") {uiText(voice).contains("OCR: 安全な撮影対象がない") && fixtureRecognized(resultText(voice))}
         exclusions.append(label)
