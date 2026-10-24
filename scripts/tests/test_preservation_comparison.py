@@ -17,6 +17,8 @@ class PreservationComparisonTests(unittest.TestCase):
         result=metrics(cases,[dict(id='good',accepted=False),dict(id='bad',accepted=True)])
         self.assertEqual((result['false_rejections'],result['false_accepts']),(1,1))
         with self.assertRaises(ValueError):metrics(cases,[dict(id='bad',accepted=False)])
+        policy=metrics([dict(id='policy',should_accept=False,category='conservative-repair')],[dict(id='policy',accepted=False)])
+        self.assertEqual((policy['harmful_cases'],policy['policy_cases'],policy['policy_rejected']),(0,1,1))
 
     def test_alternative_wording_is_declared_and_missing_is_counted(self):
         case=dict(required=['木曜'],required_any=[['水曜ではなく','水曜じゃなく']])
