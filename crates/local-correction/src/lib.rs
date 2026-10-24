@@ -88,15 +88,23 @@ pub fn parse_answer(json: &[u8], original: &str) -> Result<String, &'static str>
         if !candidate.contains(&repair.final_text) {
             return Err("correction omitted the explicit final repair");
         }
-        // A corrected name can include the old name (山田 -> 山田太郎).
-        // Other mentions of the retired name remain legitimate; remove only
-        // one occurrence from the allowed count, not every mention globally.
-        if !repair.retired.is_empty()
-            && !repair.final_text.contains(&repair.retired)
-            && candidate.matches(&repair.retired).count()
-                > source.matches(&repair.retired).count().saturating_sub(1)
-        {
-            return Err("correction retained the discarded repair");
+        // Detect the observed failure of turning a repair into a choice.
+        // Do not require every occurrence of a guessed old phrase to vanish:
+        // いや can occur inside ordinary words such as 思いやり, and shared
+        // name prefixes / mentions elsewhere in the source remain legitimate.
+        if !repair.retired.is_empty() {
+            let choices = |text: &str| {
+                ["や", "または", "又は", "もしくは", "か", "と"]
+                    .into_iter()
+                    .map(|connector| {
+                        let choice = format!("{}{connector}{}", repair.retired, repair.final_text);
+                        text.matches(&choice).count()
+                    })
+                    .sum::<usize>()
+            };
+            if choices(&candidate) > choices(&source) {
+                return Err("correction retained the discarded repair");
+            }
         }
     }
     let source = significant(&comparison_source);
@@ -125,8 +133,18 @@ fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'st
     let candidate = normalized(candidate);
     for marker in ["ない", "ません"] {
         let mut fragments = std::collections::BTreeSet::new();
-        for (index, _) in source.match_indices(marker) {
-            let mut stem: Vec<_> = source[..index].chars().rev().take(2).collect();
+        for (index, _) in original.match_indices(marker) {
+            // Keep clause boundaries until the stem is extracted. A filler
+            // before a comma is not the target of a following bare negation.
+            let clause = original[..index]
+                .rsplit(|c: char| {
+                    c.is_whitespace()
+                        || c.is_ascii_punctuation()
+                        || "。、，．！？「」『』（）・：；…".contains(c)
+                })
+                .next()
+                .unwrap_or("");
+            let mut stem: Vec<_> = normalized(clause).chars().rev().take(2).collect();
             stem.reverse();
             fragments.insert(format!("{}{marker}", stem.into_iter().collect::<String>()));
         }
@@ -223,15 +241,10 @@ struct Repair {
 }
 fn explicit_repair(text: &str) -> Option<Repair> {
     let (prefix, tail) = text.rsplit_once("いや")?;
-    let separated = prefix.ends_with(['、', ',', ' ']);
     let tail = tail
         .trim_start_matches(['、', ',', ' '])
         .split(['。', '！', '？', '\n'])
         .next()?;
-    // Ordinary いやな / いやし makes the retired phrase ambiguous. Never
-    // disable the final-target check: the same kana can start a real repair
-    // (そばいやすし, 水曜日いやなし).
-    let ambiguous_word_boundary = !separated && tail.starts_with(['な', 'に', 'し', 'す', 'だ']);
     let mut core = tail.trim();
     for ending in ["でお願いします", "にしてください", "でした", "です"] {
         if let Some(value) = core.strip_suffix(ending) {
@@ -246,7 +259,7 @@ fn explicit_repair(text: &str) -> Option<Repair> {
     // Preserve the final correction even when earlier repairs make extracting
     // a single retired phrase ambiguous. Only the new retired-name check
     // declines those inputs; the existing final-target check still applies.
-    let retired = if prefix.contains("いや") || ambiguous_word_boundary {
+    let retired = if prefix.contains("いや") {
         String::new()
     } else {
         subject_term(prefix)
@@ -409,6 +422,57 @@ mod tests {
                 parse_answer(&encode(bad), original),
                 Err("correction omitted the explicit final repair"),
                 "{original}"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_iya_words_do_not_retire_the_prefix() {
+        for (original, candidate) in [
+            (
+                "山田さん又は鈴木さんに相談しました。宛先は山田さんいや鈴木さんです",
+                "山田さんまたは鈴木さんに相談しました。宛先は鈴木さんです。",
+            ),
+            ("思いやりを大切にします", "思いやりを大切にします。"),
+            ("私は思いやりを大切にします", "私は思いやりを大切にします。"),
+            ("私は思いやりを大切にします", "私は思い遣りを大切にします。"),
+            ("このいやな天気です", "この嫌な天気です。"),
+            ("本当に、いやな天気です", "本当に、嫌な天気です。"),
+            (
+                "山田さんや鈴木さんに相談しました。宛先は山田さんいや鈴木さんです",
+                "山田さんや鈴木さんに相談しました。宛先は鈴木さんです。",
+            ),
+        ] {
+            let json = serde_json::to_vec(&Answer {
+                text: candidate.into(),
+            })
+            .unwrap();
+            assert!(
+                parse_answer(&json, original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+    }
+
+    #[test]
+    fn fillers_before_bare_negation_are_not_negation_targets() {
+        for (original, candidate) in [
+            ("えー、ないです", "ないです。"),
+            ("えっと、ないです", "ないです。"),
+            ("えー ないです", "ないです。"),
+            ("えー，ないです", "ないです。"),
+            ("（えー）ないです", "ないです。"),
+            ("えー、ありません", "ありません。"),
+            ("予約しません。えっと、ないです", "予約しません。ないです。"),
+            ("えー、しません", "しません。"),
+        ] {
+            let json = serde_json::to_vec(&Answer {
+                text: candidate.into(),
+            })
+            .unwrap();
+            assert!(
+                parse_answer(&json, original).is_ok(),
+                "{original} -> {candidate}"
             );
         }
     }
