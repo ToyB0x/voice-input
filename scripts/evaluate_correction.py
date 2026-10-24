@@ -11,7 +11,7 @@ MODES={'none':(False,False),'asr_only':(True,False),'correction_only':(False,Tru
 def constraints(text,case):
     return dict(missing=[word for word in case.get('required',[]) if word not in text],
                 invented=[word for word in case.get('forbidden',[]) if word in text],
-                format_ok=not case.get('line_break') or '\n' in text)
+                format_ok=(not case.get('line_break') or '\n' in text) and (not case.get('punctuation') or text.endswith(('。','！','？'))))
 
 def infer(binary,model,backend,raw,context):
     command=[str(binary.resolve()),str(model.resolve()),backend]
@@ -73,8 +73,9 @@ def main():
     for mode in MODES:
         rows=[r for r in records if r['mode']==mode]
         chars=sum(r['final_score']['reference_chars'] for r in rows)
-        summaries[mode]=dict(cer=sum(r['final_score']['edits'] for r in rows if r['reference'])/chars,
-            rejected=sum(r['rejected'] for r in rows),mean_wall_ms=sum(r['wall_ms'] for r in rows)/len(rows),
+        spoken=[r for r in rows if r['reference']]
+        summaries[mode]=dict(raw_cer=sum(r['raw_score']['edits'] for r in rows if r['reference'])/chars,cer=sum(r['final_score']['edits'] for r in rows if r['reference'])/chars,
+            rejected=sum(r['rejected'] for r in rows),mean_wall_ms=sum(r['wall_ms'] for r in spoken)/len(spoken),
             peak_rss_bytes=max((r['peak_rss_bytes'] or 0) for r in rows),
             silence_false_positives=sum(bool(r['text']) for r in rows if not r['reference']))
     report=dict(model=args.model_name,model_identity=MODELS[args.model_name],source_revision=os.environ.get('GITHUB_SHA'),
@@ -85,8 +86,8 @@ def main():
                    'Constraint checks cover only listed facts/negations/formatting; they do not establish general semantic equivalence. '
                    'Rejected previews retain raw ASR and are counted separately. VM timings do not predict physical Mac performance.')
     (args.output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
-    lines=['| Context routing | CER | Rejected previews | Mean ms | Peak MiB |','|---|---:|---:|---:|---:|']
-    for mode,item in summaries.items():lines.append(f"| {mode} | {item['cer']:.2%} | {item['rejected']} | {item['mean_wall_ms']:.0f} | {item['peak_rss_bytes']/1048576:.1f} |")
+    lines=['| Context routing | Raw ASR CER | Final CER | Rejected previews | Mean spoken ms | Peak MiB |','|---|---:|---:|---:|---:|---:|']
+    for mode,item in summaries.items():lines.append(f"| {mode} | {item['raw_cer']:.2%} | {item['cer']:.2%} | {item['rejected']} | {item['mean_wall_ms']:.0f} | {item['peak_rss_bytes']/1048576:.1f} |")
     lines+=['',report['limitation'],'','Supplemental constraints:']
     for item in supplemental:lines.append(f"- {item['case']['id']}: rejected={item['rejected']}, {item['constraints']}")
     (args.output/'summary.md').write_text('\n'.join(lines)+'\n')

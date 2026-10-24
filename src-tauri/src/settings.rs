@@ -112,6 +112,18 @@ pub fn save(path: &Path, settings: &Preferences) -> Result<(), String> {
     result.map_err(|e| format!("設定を保存できません: {e}"))
 }
 
+#[cfg(target_os = "macos")]
+impl Preferences {
+    pub fn context_config(&self) -> crate::context::Config {
+        crate::context::Config {
+            ax: self.recognition_context,
+            ocr: self.ocr_context,
+            whisper: self.whisper_context,
+            correction: self.correction_context,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,17 +172,5 @@ mod tests {
         settings.model_path.clear();
         settings.version = 2;
         assert!(settings.validate().is_err());
-    }
-}
-
-#[cfg(target_os = "macos")]
-impl Preferences {
-    pub fn context_config(&self) -> crate::context::Config {
-        crate::context::Config {
-            ax: self.recognition_context,
-            ocr: self.ocr_context,
-            whisper: self.whisper_context,
-            correction: self.correction_context,
-        }
     }
 }

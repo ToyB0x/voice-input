@@ -307,6 +307,14 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+pub fn preferences(app: &AppHandle) -> Result<Preferences, String> {
+    app.state::<Desktop>()
+        .inner
+        .lock()
+        .map(|state| state.preferences.clone())
+        .map_err(|_| "設定を確認できません。".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,12 +342,4 @@ mod tests {
         assert!(parse_shortcut("Shift+Space").is_err());
         assert!(parse_shortcut("Command+not-a-key").is_err());
     }
-}
-
-pub fn preferences(app: &AppHandle) -> Result<Preferences, String> {
-    app.state::<Desktop>()
-        .inner
-        .lock()
-        .map(|state| state.preferences.clone())
-        .map_err(|_| "設定を確認できません。".into())
 }

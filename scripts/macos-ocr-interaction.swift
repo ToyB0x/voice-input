@@ -30,6 +30,12 @@ func grantScreenPermission(_ voice:AXUIElement,output:URL) throws {
     try pressContextButton(voice,"Request screen permission")
     var settings:AXUIElement?
     try waitForUI("Screen Recording system settings",seconds:40) {
+        for process in NSWorkspace.shared.runningApplications {
+            let root=AXUIElementCreateApplication(process.processIdentifier)
+            let text=uiText(root)
+            if text.contains("Voice Input") && (text.lowercased().contains("screen") || text.contains("画面")),
+               let open=uiButton(root,["Open System Settings","Open System Preferences","システム設定を開く"]) {try press(open)}
+        }
         guard let app=NSWorkspace.shared.runningApplications.first(where:{$0.bundleIdentifier=="com.apple.systempreferences"}) else {return false}
         settings=AXUIElementCreateApplication(app.processIdentifier)
         let text=uiText(settings!).lowercased()
@@ -70,7 +76,10 @@ func grantScreenPermission(_ voice:AXUIElement,output:URL) throws {
         try waitForUI("Screen Recording switch on") {(axValue(toggle!,kAXValueAttribute) as? NSNumber)?.intValue==1}
         for app in NSWorkspace.shared.runningApplications {
             let root=AXUIElementCreateApplication(app.processIdentifier)
-            if uiText(root).contains("Voice Input"), let later=uiButton(root,["Later","Not Now","あとで"]) {try press(later)}
+            if uiText(root).contains("Voice Input") {
+                if let later=uiButton(root,["Later","Not Now","あとで"]) {try press(later)}
+                else if let restart=uiButton(root,["Quit & Reopen","Quit and Reopen","終了して再度開く"]) {try press(restart)}
+            }
         }
         try writeJSON(["status":"passed","method":"System Settings real Screen Recording consent","enabled":true],to:output.appendingPathComponent("permission.json"))
         try interactionScreenshot(output,name:"screen-permission.png")
@@ -119,7 +128,8 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     let expression=try NSRegularExpression(pattern:"OCR: 取得済み（([0-9]+)文字）")
     guard let match=expression.firstMatch(in:productState,range:NSRange(productState.startIndex...,in:productState)),
           let range=Range(match.range(at:1),in:productState), let count=Int(productState[range]), (8...22).contains(count) else {throw SmokeFailure(description:"OCR crop included unexpected surrounding text")}
-    guard try state()["valueReads"] as? Int==0, try state()["rangeReads"] as? Int==0 else {throw SmokeFailure(description:"OCR-only capture read AX text")}
+    let capturedValues=try state()
+    guard capturedValues["valueReads"] as? Int==0, capturedValues["rangeReads"] as? Int==0 else {throw SmokeFailure(description:"OCR-only capture read AX text")}
     try interactionScreenshot(output,name:"ocr-preview.png")
     let raw=resultText(voice)
     guard let model=ProcessInfo.processInfo.environment["VOICE_INPUT_CORRECTION_MODEL"] else {throw SmokeFailure(description:"Missing correction model")}
@@ -154,7 +164,8 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     try waitForUI("native correction child started") {productChildRunning(pid)}
     try pressContextButton(voice,"Discard recording")
     try waitForUI("correction child cancelled",seconds:15) {!productChildRunning(pid) && resultText(voice).isEmpty && !uiText(voice).contains("ローカル補正中")}
-    guard try state()["unchanged"] as? Bool==true, try state()["secureUnchanged"] as? Bool==true else {throw SmokeFailure(description:"OCR modified source")}
+    let afterCorrection=try state()
+    guard afterCorrection["unchanged"] as? Bool==true, afterCorrection["secureUnchanged"] as? Bool==true else {throw SmokeFailure(description:"OCR modified source")}
     var exclusions=[String]()
     for label in ["Protected OCR input","Read only OCR input"] {
         try hideInsertionWindow(voice)
@@ -164,7 +175,8 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
         try waitForUI("OCR protected target excluded") {uiText(voice).contains("OCR: 安全な撮影対象がない") && fixtureRecognized(resultText(voice))}
         exclusions.append(label)
     }
-    guard try state()["valueReads"] as? Int==0, try state()["rangeReads"] as? Int==0, try state()["secureReads"] as? Int==0 else {throw SmokeFailure(description:"Protected OCR case read AX text")}
+    let excludedValues=try state()
+    guard excludedValues["valueReads"] as? Int==0, excludedValues["rangeReads"] as? Int==0, excludedValues["secureReads"] as? Int==0 else {throw SmokeFailure(description:"Protected OCR case read AX text")}
     try configureOCR(voice,enabled:false)
     try writeJSON(["status":"passed","excluded":exclusions,"ocrCharacters":count,"axTextReads":0,"rawPreserved":true,"explicitCopy":true,"childCancellation":true],to:output.appendingPathComponent("interaction.json"))
 }
