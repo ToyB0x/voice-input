@@ -149,7 +149,11 @@ func authorizeCISettingsChange() throws {
         throw SmokeFailure(description: "CI authorization form fields not found")
     }
     try typePrivateCredential(user, value: username)
+    try waitForUI("CI authorization user entered") { axValue(user, kAXValueAttribute) as? String == username }
     try typePrivateCredential(secret, value: password, physicalHex: true)
+    // Password values are intentionally unreadable; drain posted key events
+    // before submitting, without reading or recording the secret field.
+    RunLoop.current.run(until: Date().addingTimeInterval(0.5))
     try press(uiButton(dialog!, ["Modify Settings"])!)
     try waitForUI("admin confirmation completes", seconds: 30) { uiButton(dialog!, ["Modify Settings"]) == nil }
 }
