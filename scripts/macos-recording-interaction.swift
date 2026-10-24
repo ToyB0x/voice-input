@@ -216,20 +216,20 @@ func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
 }
 
 func typeField(_ root: AXUIElement, label: String, value path: String) throws {
-    guard CGPreflightPostEventAccess(), let field = textField(root, label: label),
-          AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
-        throw SmokeFailure(description: "Could not focus model path for native keyboard input")
+    guard CGPreflightPostEventAccess(), let field = textField(root, label: label) else {
+        throw SmokeFailure(description: "Could not find native input field")
+    }
+    // Otherwise the value predicate can pass before already-correct replacement
+    // events drain, letting later checkbox clicks redirect pending keystrokes.
+    if axValue(field, kAXValueAttribute) as? String == path { return }
+    guard AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
+        throw SmokeFailure(description: "Could not focus native input field")
     }
     // WebKit can acknowledge AXValue writes without updating the DOM input.
     // Exercise the same keyboard route as the user instead of injecting JS.
+    // Use a complete modifier chord and drain it before posting replacement text.
+    try key(0, flags: .maskCommand)
     let source = CGEventSource(stateID: .hidSystemState)
-    for down in [true, false] {
-        guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else {
-            throw SmokeFailure(description: "Could not create Select All keyboard event")
-        }
-        event.flags = .maskCommand
-        event.post(tap: .cghidEventTap)
-    }
     // Selecting all alone does not clear the field when the replacement is empty.
     if path.isEmpty { try key(51) } // Backspace
     let units = Array(path.utf16)
