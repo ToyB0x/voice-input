@@ -3,7 +3,7 @@ from unittest.mock import patch
 from subprocess import CompletedProcess
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from evaluate_correction import constraints,MODES,infer
+from evaluate_correction import constraints,MODES,infer,metal_unavailable
 class CorrectionTests(unittest.TestCase):
     def test_four_routes_change_destinations_independently(self):
         self.assertEqual(set(MODES.values()),{(False,False),(True,False),(False,True),(True,True)})
@@ -20,3 +20,8 @@ class CorrectionTests(unittest.TestCase):
             self.assertTrue(item['failed'])
             self.assertEqual(item['rejected'],rejected)
             self.assertEqual(item['text'],'original')
+    def test_only_explicit_missing_hardware_is_unavailable(self):
+        failure=dict(error='runtime',stage='backend',reason='metal-simd-unavailable',requested_backend='metal',offloaded_layers=0)
+        self.assertTrue(metal_unavailable(failure))
+        for update in [dict(reason='metal-backend-unavailable'),dict(stage='generation'),dict(offloaded_layers=1),dict(requested_backend='cpu')]:
+            self.assertFalse(metal_unavailable(dict(failure,**update)))

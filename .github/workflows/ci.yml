@@ -49,6 +49,7 @@ jobs:
             ~/.cargo/registry
             crates/local-correction/target
           key: macos-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos-${{ runner.arch }}-correction-runtime-v2-
       - name: Restore previous correction target cache
         if: steps.correction-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@v4
@@ -117,12 +118,14 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local OCR Fixture' "$fixture/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
           codesign --force --sign - "$fixture"
-      - name: Verify actual bundled CPU and Metal correction with networking denied
+      - name: Verify bundled CPU inference and Metal capability with networking denied
         id: correction-probe
         run: |
           sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 - <<'PYCODE'
-          import json, os, subprocess
+          import json, os, subprocess, sys
           from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          from evaluate_correction import metal_unavailable
           root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
           binary = Path('src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/local-correction').resolve()
           model = Path(os.environ['RUNNER_TEMP']) / 'correction-model.gguf'
@@ -133,7 +136,12 @@ jobs:
               (root / f'correction-{backend}-probe.json').write_text(result.stdout)
               # This CI probe uses only the fixed synthetic sentence and public model.
               (root / f'correction-{backend}-probe.stderr.log').write_text(result.stderr)
-              if result.returncode: raise SystemExit(f'Bundled correction {backend} probe failed; inspect the fixed stage in correction-{backend}-probe.json')
+              if result.returncode:
+                  failure = json.loads(result.stdout) if result.stdout.strip() else {}
+                  if backend == 'metal' and metal_unavailable(failure):
+                      print('Metal inference NOT verified: host lacks required GPU capability; CPU remains explicitly selectable.')
+                      continue
+                  raise SystemExit(f'Bundled correction {backend} probe failed; inspect the fixed stage in correction-{backend}-probe.json')
               report = json.loads(result.stdout)
               assert report['backend'] == backend and report['text']
               assert (report['offloaded_layers'] == 0) if backend == 'cpu' else (report['offloaded_layers'] > 0)
@@ -484,3 +492,17 @@ jobs:
           path: ${{ runner.temp }}/transcription-evidence/
           retention-days: 14
           if-no-files-found: warn
+
+  metal-capability:
+    name: Inspect Metal capability (latest macOS)
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect actual default GPU features
+        run: xcrun swift scripts/macos-metal-capability.swift > "$RUNNER_TEMP/metal-capability.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metal-host-capability
+          path: ${{ runner.temp }}/metal-capability.json
+          retention-days: 14

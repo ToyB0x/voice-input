@@ -242,6 +242,12 @@ fn run(
             return Err("ローカル補正に失敗しました（OSがプロセスを停止）。空きメモリ・モデルサイズ・実行方式を確認してください。元の認識結果は保持しています。".into());
         }
         let failure: serde_json::Value = serde_json::from_slice(&output).unwrap_or_default();
+        if matches!(
+            failure["reason"].as_str(),
+            Some("metal-device-unavailable" | "metal-simd-unavailable")
+        ) {
+            return Err("このMacのGPUは補正に必要な演算機能を利用できません。CPUを選んで設定を保存してください。元の認識結果は保持しています。".into());
+        }
         if failure["error"] == "rejected" {
             return Err("補正結果が原文保持のチェックを満たさず棄却されました。元の認識結果を確認してください。".into());
         }

@@ -65,6 +65,24 @@ unsafe extern "C" fn native_log(
         OFFLOADED.store(number, Ordering::Relaxed);
     }
 }
+fn require_metal_device() -> Result<(), SafeRuntimeError> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily};
+        let device =
+            MTLCreateSystemDefaultDevice().ok_or(SafeRuntimeError("metal-device-unavailable"))?;
+        // Matches ggml-metal's SIMD reduction requirement for quantized matmul.
+        // The Apple5 paravirtual GPU advertises Metal but lacks these operations.
+        if MTLDevice::supportsFamily(&*device, MTLGPUFamily::Apple7)
+            || MTLDevice::supportsFamily(&*device, MTLGPUFamily::Metal3)
+        {
+            return Ok(());
+        }
+        Err(SafeRuntimeError("metal-simd-unavailable"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err(SafeRuntimeError("metal-device-unavailable"))
+}
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args.len() == 1 && args[0] == "--build-info" {
@@ -112,10 +130,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         llama_cpp_sys_2::ggml_log_set(Some(native_log), std::ptr::null_mut());
     }
     PHASE.store(1, Ordering::Relaxed);
-    let backend = LlamaBackend::init()?;
     let metal = args[1] == "metal";
+    if metal {
+        require_metal_device()?;
+    }
+    let backend = LlamaBackend::init()?;
     if metal && !backend.supports_gpu_offload() {
-        return Err(SafeRuntimeError("metal-unavailable").into());
+        return Err(SafeRuntimeError("metal-backend-unavailable").into());
     }
     PHASE.store(2, Ordering::Relaxed);
     let model = LlamaModel::load_from_file(

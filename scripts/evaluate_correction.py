@@ -13,6 +13,11 @@ def constraints(text,case):
                 invented=[word for word in case.get('forbidden',[]) if word in text],
                 format_ok=(not case.get('line_break') or '\n' in text) and (not case.get('punctuation') or text.endswith(('。','！','？'))))
 
+def metal_unavailable(failure):
+    return (failure.get('error')=='runtime' and failure.get('stage')=='backend'
+        and failure.get('reason') in {'metal-device-unavailable','metal-simd-unavailable'}
+        and failure.get('requested_backend')=='metal' and failure.get('offloaded_layers')==0)
+
 def infer(binary,model,backend,raw,context):
     command=[str(binary.resolve()),str(model.resolve()),backend]
     if platform.system()=='Darwin':command=['/usr/bin/time','-l',*command]
@@ -60,7 +65,8 @@ def main():
     # report before spending time on the full four-route CPU comparison.
     gpu=infer(args.binary,args.model,'metal','会議は金曜日です','会議、金曜日。')
     (args.output/'metal-smoke.json').write_text(json.dumps(gpu,ensure_ascii=False,indent=2)+'\n')
-    if gpu['failed']:raise ValueError('Actual Metal inference failed; inspect metal-smoke.json for the fixed failure stage')
+    gpu_unavailable=gpu['failed'] and metal_unavailable(gpu.get('failure',{}))
+    if gpu['failed'] and not gpu_unavailable:raise ValueError('Actual Metal inference failed; inspect metal-smoke.json for the fixed failure stage')
     records=[]
     for index,case in enumerate(corpus['cases']):
         for mode,(asr_context,correction_context) in MODES.items():
@@ -89,14 +95,15 @@ def main():
     report=dict(model=args.model_name,model_identity=MODELS[args.model_name],source_revision=os.environ.get('GITHUB_SHA'),
         network_denied=args.require_network_denied,asr_input_sha256={mode:checksum(args.asr/(mode+'.json')) for mode in asr},
         corpus_sha256=checksum(ROOT/'evaluation/corpus.json'),supplemental_sha256=checksum(ROOT/'evaluation/correction-cases.json'),
-        summary=summaries,records=records,supplemental=supplemental,metal_smoke=gpu,
+        summary=summaries,records=records,supplemental=supplemental,metal_smoke=gpu,metal_unavailable=gpu_unavailable,
         limitation='Fixed reference-vocabulary contexts and public read speech. Real screen OCR integration is tested separately. '
                    'Constraint checks cover only listed facts/negations/formatting; they do not establish general semantic equivalence. '
                    'Rejected previews retain raw ASR and are counted separately. VM timings do not predict physical Mac performance.')
     (args.output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     lines=['| Context routing | Raw ASR CER | Final CER | Rejected previews | Runtime failures | Mean spoken ms | Peak MiB |','|---|---:|---:|---:|---:|---:|---:|']
     for mode,item in summaries.items():lines.append(f"| {mode} | {item['raw_cer']:.2%} | {item['cer']:.2%} | {item['rejected']} | {item['runtime_failures']} | {item['mean_wall_ms']:.0f} | {item['peak_rss_bytes']/1048576:.1f} |")
-    lines+=['',report['limitation'],'','Supplemental constraints:']
+    metal_status=('UNAVAILABLE: required GPU capability is absent; actual Metal inference was NOT verified.' if gpu_unavailable else f"Verified Metal inference: {gpu['model_report']['offloaded_layers']} layers offloaded.")
+    lines+=['',metal_status,'',report['limitation'],'','Supplemental constraints:']
     for item in supplemental:lines.append(f"- {item['case']['id']}: rejected={item['rejected']}, {item['constraints']}")
     (args.output/'summary.md').write_text('\n'.join(lines)+'\n')
     print('\n'.join(lines))
