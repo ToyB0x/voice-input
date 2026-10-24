@@ -41,7 +41,7 @@ unsafe extern "C" {
     fn AXUIElementSetAttributeValue(element: Element, attr: CFStringRef, value: CFTypeRef) -> i32;
     fn AXValueGetTypeID() -> usize;
     fn AXValueGetType(value: CFTypeRef) -> i32;
-    fn AXValueGetValue(value: CFTypeRef, kind: i32, output: *mut c_void) -> bool;
+    fn AXValueGetValue(value: CFTypeRef, kind: i32, output: *mut c_void) -> u8;
 }
 
 pub fn trusted() -> bool {
