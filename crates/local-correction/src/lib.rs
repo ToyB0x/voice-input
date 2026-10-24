@@ -161,18 +161,36 @@ fn edits(left: &[char], right: &[char]) -> usize {
     previous[right.len()]
 }
 fn numbers(text: &str) -> Vec<String> {
+    let characters: Vec<_> = text
+        .chars()
+        .map(|c| {
+            if c == '−' {
+                '-'
+            } else if ('！'..='～').contains(&c) {
+                char::from_u32(c as u32 - 0xfee0).unwrap_or(c)
+            } else {
+                c
+            }
+        })
+        .collect();
     let mut output = Vec::new();
     let mut current = String::new();
-    for c in text.chars().map(|c| {
-        if ('０'..='９').contains(&c) {
-            char::from_u32(c as u32 - 0xfee0).unwrap_or(c)
-        } else {
-            c
-        }
-    }) {
-        if c.is_ascii_digit() || (c == '.' && !current.is_empty()) {
+    for (index, &c) in characters.iter().enumerate() {
+        let next_digit = characters.get(index + 1).is_some_and(char::is_ascii_digit);
+        let fraction_follows = characters.get(index + 1) == Some(&'.')
+            && characters.get(index + 2).is_some_and(char::is_ascii_digit);
+        if c.is_ascii_digit()
+            || (matches!(c, '+' | '-') && current.is_empty() && (next_digit || fraction_follows))
+        {
             current.push(c);
-        } else if c == ',' && !current.is_empty() {
+        } else if c == '.' && next_digit {
+            // A decimal point connects digits. Normalize leading .5 to 0.5,
+            // but leave sentence-ending periods outside the numeric fact.
+            if current.is_empty() || current == "+" || current == "-" {
+                current.push('0');
+            }
+            current.push('.');
+        } else if c == ',' && !current.is_empty() && next_digit {
             continue;
         } else if !current.is_empty() {
             output.push(std::mem::take(&mut current));
@@ -245,6 +263,48 @@ mod tests {
             )
             .is_ok()
         );
+    }
+    #[test]
+    fn signed_values_cannot_lose_or_reverse_their_sign() {
+        for (original, changed) in [
+            ("気温は-5度です", "気温は5度です。"),
+            ("気温は-5度です", "気温は+5度です。"),
+            ("気温は+5度です", "気温は-5度です。"),
+            ("気温は−5度です", "気温は5度です。"),
+            ("気温は－５度です", "気温は５度です。"),
+            ("変化は-.5です", "変化は.5です。"),
+        ] {
+            let json = serde_json::to_vec(&Answer {
+                text: changed.into(),
+            })
+            .unwrap();
+            assert!(
+                parse_answer(&json, original).is_err(),
+                "{original} -> {changed}"
+            );
+        }
+        assert!(
+            parse_answer(
+                "{\"text\":\"気温は-5度です。\"}".as_bytes(),
+                "気温は−５度です"
+            )
+            .is_ok()
+        );
+    }
+    #[test]
+    fn sentence_periods_are_separate_from_decimal_facts() {
+        for (original, corrected) in [
+            ("The budget is 120", "The budget is 120."),
+            ("The budget is 120.", "The budget is 120"),
+            ("The value is 12.5", "The value is 12.5."),
+        ] {
+            let json = serde_json::to_vec(&Answer {
+                text: corrected.into(),
+            })
+            .unwrap();
+            assert!(parse_answer(&json, original).is_ok());
+        }
+        assert!(parse_answer(br#"{"text":"The value is 125."}"#, "The value is 12.5").is_err());
     }
     #[test]
     fn numeric_and_obvious_negation_changes_are_rejected() {
