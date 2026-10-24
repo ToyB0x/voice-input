@@ -41,6 +41,7 @@ func uiButton(_ root: AXUIElement, _ names: [String]) -> AXUIElement? {
 }
 
 func press(_ button: AXUIElement) throws {
+    _ = AXUIElementPerformAction(button, "AXScrollToVisible" as CFString)
     let result = AXUIElementPerformAction(button, kAXPressAction as CFString)
     guard result == .success else { throw SmokeFailure(description: "AXPress failed: \(result.rawValue)") }
 }
@@ -84,6 +85,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
     guard AXIsProcessTrusted() else {
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
+
+    if scenario == "desktop" { try desktopInteraction(pid: pid, windowID: windowID, output: output); return }
 
     if scenario == "transcribe" { try configureModel(root: root, windowID: windowID, output: output) }
 
@@ -206,8 +209,8 @@ func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
     }
 }
 
-func setModelPath(_ root: AXUIElement, _ path: String) throws {
-    guard CGPreflightPostEventAccess(), let field = textField(root, label: "Model path"),
+func typeField(_ root: AXUIElement, label: String, value path: String) throws {
+    guard CGPreflightPostEventAccess(), let field = textField(root, label: label),
           AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
         throw SmokeFailure(description: "Could not focus model path for native keyboard input")
     }
@@ -221,6 +224,8 @@ func setModelPath(_ root: AXUIElement, _ path: String) throws {
         event.flags = .maskCommand
         event.post(tap: .cghidEventTap)
     }
+    // Selecting all alone does not clear the field when the replacement is empty.
+    if path.isEmpty { try key(51) } // Backspace
     let units = Array(path.utf16)
     for offset in stride(from: 0, to: units.count, by: 16) {
         let chunk = Array(units[offset..<min(offset + 16, units.count)])
@@ -236,8 +241,13 @@ func setModelPath(_ root: AXUIElement, _ path: String) throws {
         }
     }
     try waitForUI("typed model path and enabled load control") {
-        axValue(field, kAXValueAttribute) as? String == path && uiButton(root, ["Load local model"]) != nil
+        axValue(field, kAXValueAttribute) as? String == path
     }
+}
+
+func setModelPath(_ root: AXUIElement, _ path: String) throws {
+    try typeField(root, label: "Model path", value: path)
+    try waitForUI("enabled load control") { uiButton(root, ["Load local model"]) != nil }
 }
 
 func configureModel(root: AXUIElement, windowID: NSNumber, output: URL) throws {
@@ -262,10 +272,15 @@ func resultText(_ root: AXUIElement) -> String {
     return axValue(field, kAXValueAttribute) as? String ?? ""
 }
 
+func fixtureRecognized(_ text: String) -> Bool {
+    // This checks the real audio path, not CER. Kana is a valid spelling of 旅.
+    text.contains("船") && (text.contains("旅") || text.contains("たび"))
+}
+
 func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) throws {
     try waitForUI("Japanese recognition result", seconds: 120) {
         let text = resultText(root)
-        return text.contains("船") && text.contains("旅") && uiButton(root, ["Copy transcript"]) != nil
+        return fixtureRecognized(text) && uiButton(root, ["Copy transcript"]) != nil
     }
     let text = resultText(root)
     try text.write(to: output.appendingPathComponent("transcript.txt"), atomically: true, encoding: .utf8)
@@ -290,7 +305,209 @@ func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) thr
     }
     try interactionScreenshot(output, name: "discarded.png", windowID: windowID)
     try writeJSON(["status": "passed", "scenario": "transcribe", "realPermissionDialog": true,
-                   "missingModelError": true, "japaneseWords": ["船", "旅"], "clipboardMatches": true,
+                   "missingModelError": true, "japaneseWords": ["船", text.contains("旅") ? "旅" : "たび"], "clipboardMatches": true,
                    "discardedDuringInference": true, "modelRetained": true],
                   to: output.appendingPathComponent("interaction.json"))
+}
+
+func key(_ code: CGKeyCode, flags: CGEventFlags = []) throws {
+    let source = CGEventSource(stateID: .hidSystemState)
+    for down in [true, false] {
+        guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else {
+            throw SmokeFailure(description: "Could not construct native key event")
+        }
+        event.flags = flags
+        event.post(tap: .cghidEventTap)
+    }
+}
+
+func trayElements(_ root: AXUIElement) -> [AXUIElement] {
+    if let extra = axValue(root, "AXExtrasMenuBar"), CFGetTypeID(extra) == AXUIElementGetTypeID() {
+        return axElements(unsafeBitCast(extra, to: AXUIElement.self))
+    }
+    return axElements(root)
+}
+
+func trayItem(_ root: AXUIElement) -> AXUIElement? {
+    trayElements(root).first { element in
+        let role = axValue(element, kAXRoleAttribute) as? String ?? ""
+        return ["AXMenuBarItem", "AXMenuBarExtra"].contains(role) && axText(element).contains("VI ")
+    }
+}
+
+func clickAtCenter(_ element: AXUIElement) throws {
+    guard let position = axValue(element, kAXPositionAttribute), let size = axValue(element, kAXSizeAttribute),
+          CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() else {
+        throw SmokeFailure(description: "Native menu bar item has no frame")
+    }
+    var origin = CGPoint.zero
+    var dimensions = CGSize.zero
+    guard AXValueGetValue(unsafeBitCast(position, to: AXValue.self), .cgPoint, &origin),
+          AXValueGetValue(unsafeBitCast(size, to: AXValue.self), .cgSize, &dimensions) else {
+        throw SmokeFailure(description: "Could not read native menu bar frame")
+    }
+    let center = CGPoint(x: origin.x + dimensions.width / 2, y: origin.y + dimensions.height / 2)
+    let source = CGEventSource(stateID: .hidSystemState)
+    for kind in [CGEventType.leftMouseDown, .leftMouseUp] {
+        guard let event = CGEvent(mouseEventSource: source, mouseType: kind, mouseCursorPosition: center, mouseButton: .left) else {
+            throw SmokeFailure(description: "Could not create native pointer event")
+        }
+        event.flags = []
+        event.post(tap: .cghidEventTap)
+    }
+}
+
+func trayAction(_ root: AXUIElement, title: String) throws {
+    guard let tray = trayItem(root) else {
+        throw SmokeFailure(description: "Voice Input menu bar item missing: \(trayElements(root).map(axText))")
+    }
+    // tray-icon opens its menu from mouse events; AXPress bypasses that handler.
+    try clickAtCenter(tray)
+    var choice: AXUIElement?
+    try waitForUI("tray menu \(title)") {
+        choice = (trayElements(root) + axElements(root)).first { axValue($0, kAXRoleAttribute) as? String == "AXMenuItem" && axText($0).contains(title) }
+        return choice != nil
+    }
+    try press(choice!)
+}
+
+func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
+    let root = AXUIElementCreateApplication(pid)
+    guard let app = NSRunningApplication(processIdentifier: pid), let appURL = app.bundleURL,
+          let model = ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_MODEL"],
+          let audio = ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_AUDIO"] else {
+        throw SmokeFailure(description: "Missing app or desktop fixture configuration")
+    }
+    try configureModel(root: root, windowID: windowID, output: output)
+    // Reject a bare key without replacing the working default shortcut.
+    try typeField(root, label: "Recording shortcut", value: "Space")
+    try press(uiButton(root, ["Save preferences"])!)
+    try waitForUI("invalid shortcut error preserves default") {
+        let text = uiText(root)
+        return text.contains("いずれかを含めて") && text.contains("Command+Shift+Space（登録済み）")
+    }
+    try typeField(root, label: "Recording shortcut", value: "Control+Alt+KeyV")
+    // Wait for the native popup to exist, then select its actual CPU menu item.
+    guard let backend = axElements(root).first(where: {
+        axValue($0, kAXRoleAttribute) as? String == "AXPopUpButton" && axText($0).contains("Inference backend")
+    }) else { throw SmokeFailure(description: "Inference backend popup missing") }
+    AXUIElementSetAttributeValue(backend, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    try press(backend)
+    var cpuOption: AXUIElement?
+    try waitForUI("native CPU menu option") {
+        cpuOption = (axElements(root) + axElements(backend)).first { element in
+            axValue(element, kAXRoleAttribute) as? String == "AXMenuItem" &&
+            [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute].contains {
+                axValue(element, $0) as? String == "CPU"
+            }
+        }
+        return cpuOption != nil
+    }
+    try press(cpuOption!)
+    try waitForUI("CPU selected") {
+        axElements(root).contains { element in
+            axValue(element, kAXRoleAttribute) as? String == "AXPopUpButton" &&
+            axText(element).contains("Inference backend") &&
+            (axValue(element, kAXValueAttribute) as? String ?? "").contains("CPU")
+        }
+    }
+    try press(uiButton(root, ["Save preferences"])!)
+    try waitForUI("custom shortcut saved and registered") {
+        let text = uiText(root)
+        return text.contains("Control+Alt+KeyV（登録済み）") && text.contains("設定を保存しました")
+    }
+    try interactionScreenshot(output, name: "preferences-saved.png", windowID: windowID)
+    let settingsURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/dev.toyb0x.voiceinput/settings.json")
+    let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as! [String: Any]
+    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut"]),
+          stored["modelPath"] as? String == model, stored["backend"] as? String == "cpu",
+          stored["shortcut"] as? String == "Control+Alt+KeyV" else {
+        throw SmokeFailure(description: "Persisted preferences mismatch or unexpected private data")
+    }
+    // Close the actual native window, leaving only the resident process/tray.
+    guard let window = (axValue(root, kAXWindowsAttribute) as? [AXUIElement])?.first,
+          let closeRef = axValue(window, kAXCloseButtonAttribute) else {
+        throw SmokeFailure(description: "Window close control missing")
+    }
+    try press(unsafeBitCast(closeRef, to: AXUIElement.self))
+    try waitForUI("closed window keeps resident process") { visibleWindows(for: pid).isEmpty && !app.isTerminated }
+    try trayElements(root).map(axText).joined(separator: "\n").write(to: output.appendingPathComponent("tray-before.txt"), atomically: true, encoding: .utf8)
+
+    let textURL = output.appendingPathComponent("focus-target.txt")
+    try "Voice Input shortcut test target\n".write(to: textURL, atomically: true, encoding: .utf8)
+    let open = Process()
+    open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    open.arguments = ["-a", "TextEdit", textURL.path]
+    try open.run(); open.waitUntilExit()
+    try waitForUI("TextEdit foreground") { NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString("voice-input-background-sentinel", forType: .string)
+    try key(9, flags: [.maskControl, .maskAlternate]) // Control+Option+V
+    try waitForUI("global shortcut starts hidden recording") { trayItem(root).map(axText)?.contains("録音中") == true }
+    guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" else {
+        throw SmokeFailure(description: "Background recording stole focus")
+    }
+    let playback = Process()
+    playback.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+    playback.arguments = [audio]
+    try playback.run()
+    defer { if playback.isRunning { playback.terminate() } }
+    try waitForUI("Japanese playback", seconds: 30) { !playback.isRunning }
+    guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Playback failed") }
+    try interactionScreenshot(output, name: "background-recording.png")
+    try key(9, flags: [.maskControl, .maskAlternate])
+    try waitForUI("tray shows recognition") { trayItem(root).map(axText)?.contains("処理中") == true }
+    try interactionScreenshot(output, name: "background-transcribing.png")
+    try waitForUI("tray returns to idle", seconds: 120) { trayItem(root).map(axText)?.contains("待機") == true }
+    guard visibleWindows(for: pid).isEmpty,
+          NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit",
+          NSPasteboard.general.string(forType: .string) == "voice-input-background-sentinel" else {
+        throw SmokeFailure(description: "Background processing changed focus, clipboard or window visibility")
+    }
+    try writeJSON(["status": "passed", "foregroundPreserved": true, "clipboardUnchanged": true,
+                   "hiddenRecordingAndRecognition": true], to: output.appendingPathComponent("background.json"))
+    try trayAction(root, title: "設定・認識結果を表示")
+    try waitForUI("tray opens recognized result") { fixtureRecognized(resultText(root)) }
+    try interactionScreenshot(output, name: "tray-result.png")
+    try trayAction(root, title: "Voice Inputを終了")
+    try waitForUI("explicit tray quit") { app.isTerminated }
+
+    let relaunch = Process()
+    relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    relaunch.arguments = ["-n", "-a", appURL.path]
+    try relaunch.run(); relaunch.waitUntilExit()
+    var restarted: NSRunningApplication?
+    try waitForUI("application restart") {
+        restarted = NSWorkspace.shared.runningApplications.first {
+            $0.bundleIdentifier == "dev.toyb0x.voiceinput" && $0.processIdentifier != pid
+        }
+        return restarted != nil
+    }
+    defer { if let restarted, !restarted.isTerminated { restarted.forceTerminate() } }
+    let restored = AXUIElementCreateApplication(restarted!.processIdentifier)
+    try waitForUI("persisted preferences and automatic CPU model load", seconds: 120) {
+        let text = uiText(restored)
+        return text.contains("Control+Alt+KeyV（登録済み）") && text.contains("モデル準備完了（CPUを選択）")
+            && textField(restored, label: "Model path").flatMap { axValue($0, kAXValueAttribute) as? String } == model
+    }
+    guard resultText(restored).isEmpty, uiButton(restored, ["Discard recording"]) == nil,
+          uiButton(restored, ["Copy transcript"]) == nil else {
+        throw SmokeFailure(description: "Audio or result unexpectedly survived restart")
+    }
+    try interactionScreenshot(output, name: "restored-settings.png")
+    // Empty setting disables the actual global hotkey.
+    try typeField(restored, label: "Recording shortcut", value: "")
+    try press(uiButton(restored, ["Save preferences"])!)
+    try waitForUI("shortcut disabled") { uiText(restored).contains("無効または未登録") }
+    try key(9, flags: [.maskControl, .maskAlternate])
+    RunLoop.current.run(until: Date().addingTimeInterval(1))
+    guard !uiText(restored).contains("録音中…") else { throw SmokeFailure(description: "Disabled shortcut still records") }
+    try trayAction(restored, title: "Voice Inputを終了")
+    try waitForUI("restarted app explicit quit") { restarted!.isTerminated }
+    try writeJSON(["status": "passed", "scenario": "desktop", "closedWindowRemainsResident": true,
+                   "backgroundGlobalShortcut": true, "foregroundPreserved": true, "clipboardUnchanged": true,
+                   "trayRecognitionState": true, "trayShowAndQuit": true, "preferencesRestored": true,
+                   "restoredBackend": "cpu", "privateDataNotPersisted": true, "invalidShortcutRejected": true,
+                   "shortcutDisabled": true], to: output.appendingPathComponent("interaction.json"))
 }

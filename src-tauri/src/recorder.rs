@@ -16,7 +16,7 @@ fn permission_name(status: isize) -> &'static str {
     }
 }
 
-fn permission_status() -> &'static str {
+pub(crate) fn permission_status() -> &'static str {
     // AVMediaTypeAudio is the framework's constant. Supplying it is valid for
     // these class methods; no Objective-C object is shared across threads.
     unsafe {
@@ -53,7 +53,7 @@ pub async fn request_microphone_permission() -> Result<&'static str, String> {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
-    phase: &'static str,
+    pub(crate) phase: &'static str,
     permission: &'static str,
     elapsed_ms: u64,
     level: f32,
@@ -61,7 +61,7 @@ pub struct Snapshot {
     sample_rate: u32,
     error: Option<String>,
     #[serde(flatten)]
-    recognition: Session,
+    pub(crate) recognition: Session,
 }
 
 #[derive(Default)]
@@ -108,6 +108,7 @@ impl Capture {
 
 enum Action {
     Start,
+    Toggle,
     Stop,
     Clear,
     LoadModel(String, String),
@@ -151,7 +152,15 @@ impl Recorder {
                 }
                 match rx.recv_timeout(Duration::from_millis(100)) {
                     Ok(request) => {
-                        let result = match request.action {
+                        let action = match request.action {
+                            Action::Toggle if stream.is_some() => Action::Stop,
+                            Action::Toggle => Action::Start,
+                            other => other,
+                        };
+                        let result = match action {
+                            Action::Toggle => {
+                                unreachable!("toggle is resolved on the stream-owning thread")
+                            }
                             Action::Start if shared.lock().is_ok_and(|c| c.recognition.working) => {
                                 Err("処理が終わるまでお待ちください。".into())
                             }
@@ -232,6 +241,25 @@ impl Recorder {
             requests: tx,
             capture,
         }
+    }
+
+    pub(crate) fn status(&self) -> Result<Snapshot, String> {
+        self.capture
+            .lock()
+            .map(|c| c.snapshot())
+            .map_err(|e| e.to_string())
+    }
+
+    pub(crate) async fn toggle(&self) -> Result<Snapshot, String> {
+        self.send(Action::Toggle).await
+    }
+
+    pub(crate) async fn restore_model(
+        &self,
+        path: String,
+        backend: String,
+    ) -> Result<Snapshot, String> {
+        self.send(Action::LoadModel(path, backend)).await
     }
 
     async fn send(&self, action: Action) -> Result<Snapshot, String> {

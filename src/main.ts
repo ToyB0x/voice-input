@@ -1,6 +1,9 @@
 import "./styles.css";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
+type Preferences = { version: number; modelPath: string; backend: string; shortcut: string };
+type DesktopStatus = { preferences: Preferences; shortcutRegistered: boolean; error: string | null };
+
 type Permission = "not_determined" | "authorized" | "denied" | "restricted" | "unavailable";
 type Snapshot = {
   phase: "idle" | "recording" | "recorded" | "error";
@@ -49,6 +52,12 @@ const permissions: Record<Permission, string> = {
   unavailable: "利用できません",
 };
 
+const shortcut = document.querySelector<HTMLInputElement>("#shortcut")!;
+const savePreferences = document.querySelector<HTMLButtonElement>("#save-preferences")!;
+const desktopStatus = document.querySelector<HTMLParagraphElement>("#desktop-status")!;
+const preferencesMessage = document.querySelector<HTMLParagraphElement>("#preferences-message")!;
+let preferencesInitialized = false;
+let desktop: DesktopStatus | undefined;
 let snapshot: Snapshot | undefined;
 let busy = false;
 let refreshing = false;
@@ -63,6 +72,11 @@ function setText(element: HTMLElement, text: string | null) {
 function render() {
   if (!snapshot) return;
   setText(permission, `マイクの許可: ${permissions[snapshot.permission]}`);
+  savePreferences.disabled = busy;
+  shortcut.disabled = busy;
+  setText(desktopStatus, desktop?.error ?? (desktop?.shortcutRegistered
+    ? `録音ショートカット: ${desktop.preferences.shortcut}（登録済み）`
+    : "録音ショートカット: 無効または未登録。画面・メニューバーから録音できます。"));
   const recording = snapshot.phase === "recording";
   const working = snapshot.working;
   start.disabled = busy || working || recording || ["denied", "restricted", "unavailable"].includes(snapshot.permission);
@@ -114,9 +128,18 @@ async function refresh() {
   refreshing = true;
   const version = ++refreshVersion;
   try {
-    const next = await invoke<Snapshot>("recording_status");
+    const [next, nextDesktop] = await Promise.all([
+      invoke<Snapshot>("recording_status"), invoke<DesktopStatus>("desktop_status"),
+    ]);
     if (!busy && version === refreshVersion) {
       snapshot = next;
+      desktop = nextDesktop;
+      if (!preferencesInitialized) {
+        modelPath.value = desktop.preferences.modelPath;
+        backend.value = desktop.preferences.backend;
+        shortcut.value = desktop.preferences.shortcut;
+        preferencesInitialized = true;
+      }
       render();
     }
   } catch (cause) {
@@ -147,6 +170,15 @@ async function action(operation: () => Promise<unknown>) {
   }
 }
 
+savePreferences.addEventListener("click", () => void action(async () => {
+  desktop = await invoke<DesktopStatus>("save_preferences", { preferences: {
+    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value,
+  } });
+  preferencesMessage.textContent = "設定を保存しました。ショートカットは反映済みです。";
+}));
+for (const field of [modelPath, backend, shortcut]) {
+  field.addEventListener("input", () => { preferencesMessage.textContent = "未保存の設定があります。"; });
+}
 modelPath.addEventListener("input", render);
 loadModel.addEventListener("click", () => void action(() => invoke("load_model", { path: modelPath.value, backend: backend.value })));
 transcribe.addEventListener("click", () => void action(() => invoke("transcribe_recording")));

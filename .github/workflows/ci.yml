@@ -138,6 +138,16 @@ jobs:
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/transcription" transcribe \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/transcription.log"
+      - name: Verify resident tray, background shortcut and preference restoration
+        timeout-minutes: 8
+        env:
+          VOICE_INPUT_TEST_MODEL: ${{ runner.temp }}/local-model.bin
+          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
+        run: |
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/desktop" desktop \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/desktop.log"
       - name: Check compiler and smoke failure exit statuses
         run: |
           negative="$RUNNER_TEMP/voice-input-smoke/expected-failures"
