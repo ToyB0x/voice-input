@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: evaluation-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   evaluate:
@@ -123,7 +123,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install pinned Rust toolchain
         run: rustup show
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: correction-cache
         with:
           path: |
             ~/.cargo/registry
@@ -139,6 +140,13 @@ jobs:
           cargo clippy --manifest-path crates/local-correction/Cargo.toml --locked --all-targets -- -D warnings
           cargo test --manifest-path crates/local-correction/Cargo.toml --locked
           cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked
+      - uses: actions/cache/save@v4
+        if: steps.correction-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: ${{ steps.correction-cache.outputs.cache-primary-key }}
       - name: Prepare checksum-verified official model (setup only)
         run: python3 scripts/prepare-correction-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/correction-model.gguf"
       - name: Compare all four context routes with networking denied

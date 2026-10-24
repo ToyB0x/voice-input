@@ -1,7 +1,9 @@
-import sys,unittest
+import json,sys,unittest
+from unittest.mock import patch
+from subprocess import CompletedProcess
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from evaluate_correction import constraints,MODES
+from evaluate_correction import constraints,MODES,infer
 class CorrectionTests(unittest.TestCase):
     def test_four_routes_change_destinations_independently(self):
         self.assertEqual(set(MODES.values()),{(False,False),(True,False),(False,True),(True,True)})
@@ -10,3 +12,11 @@ class CorrectionTests(unittest.TestCase):
         self.assertEqual(result['missing'],['しません','120万円'])
         self.assertEqual(result['invented'],['150万円'])
         self.assertFalse(result['format_ok'])
+    def test_runtime_failure_is_distinct_from_protocol_rejection(self):
+        for kind,rejected in [('runtime',False),('rejected',True)]:
+            result=CompletedProcess([],1,json.dumps(dict(error=kind,stage='validation' if rejected else 'model')),'')
+            with patch('evaluate_correction.subprocess.run',return_value=result):
+                item=infer(Path('/binary'),Path('/model'),'cpu','original','')
+            self.assertTrue(item['failed'])
+            self.assertEqual(item['rejected'],rejected)
+            self.assertEqual(item['text'],'original')

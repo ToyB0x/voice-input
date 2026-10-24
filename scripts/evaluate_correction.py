@@ -19,11 +19,13 @@ def infer(binary,model,backend,raw,context):
     started=time.monotonic()
     result=subprocess.run(command,input=json.dumps(dict(transcript=raw,context=context),ensure_ascii=False),capture_output=True,text=True,timeout=90)
     memory=re.search(r'(\d+)\s+maximum resident set size',result.stderr)
-    item=dict(wall_ms=(time.monotonic()-started)*1000,peak_rss_bytes=int(memory[1]) if memory else None,rejected=result.returncode!=0)
+    item=dict(wall_ms=(time.monotonic()-started)*1000,peak_rss_bytes=int(memory[1]) if memory else None,rejected=False,failed=result.returncode!=0)
     if result.returncode:
         # A rejected preview preserves raw ASR in the actual app. Include both
         # rejection count and fallback text; never present fallback as a correction.
-        item.update(text=raw,model_report=None)
+        try:failure=json.loads(result.stdout)
+        except (ValueError,TypeError):failure={"error":"runtime","stage":"unknown"}
+        item.update(text=raw,model_report=None,rejected=failure.get('error')=='rejected',failure=failure)
     else:
         report=json.loads(result.stdout)
         if report['backend']!=backend or (backend=='metal' and raw and report['offloaded_layers']<1) or (backend=='cpu' and report['offloaded_layers']!=0):
@@ -60,7 +62,7 @@ def main():
                         raw_score=score(normalize(case['reference']),normalize(raw)),
                         final_score=score(normalize(case['reference']),normalize(item['text'])))
             records.append(item)
-            print(case['id'],mode,'rejected' if item['rejected'] else 'accepted',flush=True)
+            print(case['id'],mode,'rejected' if item['rejected'] else ('runtime-failed' if item['failed'] else 'accepted'),flush=True)
     supplemental=[]
     for case in json.loads((ROOT/'evaluation/correction-cases.json').read_text())['cases']:
         item=infer(args.binary,args.model,'cpu',case['transcript'],case['context'])
@@ -68,14 +70,13 @@ def main():
         supplemental.append(item)
         if not case['transcript'] and item['text']:raise ValueError('Correction hallucinated on empty input')
     gpu=infer(args.binary,args.model,'metal','会議は金曜日です','会議、金曜日。')
-    if gpu['rejected']:raise ValueError('Actual Metal inference failed')
     summaries={}
     for mode in MODES:
         rows=[r for r in records if r['mode']==mode]
         chars=sum(r['final_score']['reference_chars'] for r in rows)
         spoken=[r for r in rows if r['reference']]
         summaries[mode]=dict(raw_cer=sum(r['raw_score']['edits'] for r in rows if r['reference'])/chars,cer=sum(r['final_score']['edits'] for r in rows if r['reference'])/chars,
-            rejected=sum(r['rejected'] for r in rows),mean_wall_ms=sum(r['wall_ms'] for r in spoken)/len(spoken),
+            rejected=sum(r['rejected'] for r in rows),runtime_failures=sum(r['failed'] and not r['rejected'] for r in rows),mean_wall_ms=sum(r['wall_ms'] for r in spoken)/len(spoken),
             peak_rss_bytes=max((r['peak_rss_bytes'] or 0) for r in rows),
             silence_false_positives=sum(bool(r['text']) for r in rows if not r['reference']))
     report=dict(model=args.model_name,model_identity=MODELS[args.model_name],source_revision=os.environ.get('GITHUB_SHA'),
@@ -86,12 +87,14 @@ def main():
                    'Constraint checks cover only listed facts/negations/formatting; they do not establish general semantic equivalence. '
                    'Rejected previews retain raw ASR and are counted separately. VM timings do not predict physical Mac performance.')
     (args.output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
-    lines=['| Context routing | Raw ASR CER | Final CER | Rejected previews | Mean spoken ms | Peak MiB |','|---|---:|---:|---:|---:|---:|']
-    for mode,item in summaries.items():lines.append(f"| {mode} | {item['raw_cer']:.2%} | {item['cer']:.2%} | {item['rejected']} | {item['mean_wall_ms']:.0f} | {item['peak_rss_bytes']/1048576:.1f} |")
+    lines=['| Context routing | Raw ASR CER | Final CER | Rejected previews | Runtime failures | Mean spoken ms | Peak MiB |','|---|---:|---:|---:|---:|---:|---:|']
+    for mode,item in summaries.items():lines.append(f"| {mode} | {item['raw_cer']:.2%} | {item['cer']:.2%} | {item['rejected']} | {item['runtime_failures']} | {item['mean_wall_ms']:.0f} | {item['peak_rss_bytes']/1048576:.1f} |")
     lines+=['',report['limitation'],'','Supplemental constraints:']
     for item in supplemental:lines.append(f"- {item['case']['id']}: rejected={item['rejected']}, {item['constraints']}")
     (args.output/'summary.md').write_text('\n'.join(lines)+'\n')
     print('\n'.join(lines))
+    if gpu['failed']:raise ValueError('Actual Metal inference failed; see report.json for the safe failure stage')
+    if any(item['failed'] and not item['rejected'] for item in records+supplemental):raise ValueError('Correction runtime failed; see report.json for safe failure stages')
     if any(item['silence_false_positives'] for item in summaries.values()):raise ValueError('Silence invariant failed')
 
 if __name__=='__main__':main()

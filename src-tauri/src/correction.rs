@@ -232,8 +232,26 @@ fn run(
     };
     let written = writer.join().map_err(|_| failed())?.map_err(|_| failed());
     let output = reader.join().map_err(|_| failed())?.map_err(|_| failed())?;
-    if !status.success() || written.is_err() || output.len() > 24_576 {
+    if written.is_err() || output.len() > 24_576 {
         return Err(failed());
+    }
+    if !status.success() {
+        let failure: serde_json::Value = serde_json::from_slice(&output).unwrap_or_default();
+        if failure["error"] == "rejected" {
+            return Err("補正結果が原文保持のチェックを満たさず棄却されました。元の認識結果を確認してください。".into());
+        }
+        let stage = match failure["stage"].as_str() {
+            Some("input") => "入力の確認",
+            Some("backend") => "実行方式の初期化",
+            Some("model") => "モデルの読み込み",
+            Some("prompt") => "補正入力の準備",
+            Some("prefill") => "補正入力の処理",
+            Some("generation") => "文章の生成",
+            _ => "実行結果の確認",
+        };
+        return Err(format!(
+            "ローカル補正に失敗しました（{stage}）。モデル・実行方式・入力上限を確認してください。元の認識結果は保持しています。"
+        ));
     }
     let report: Report = serde_json::from_slice(&output).map_err(|_| failed())?;
     if report.text.len() > 8192

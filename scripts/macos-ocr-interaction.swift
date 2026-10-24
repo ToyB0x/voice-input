@@ -175,6 +175,8 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     try pressContextButton(voice,"Save preferences")
     try pressContextButton(voice,"Preview local correction")
     try waitForUI("native correction preview",seconds:120) {
+        let text=uiText(voice)
+        if text.contains("ローカル補正に失敗しました") || text.contains("補正結果が原文保持のチェックを満たさず") {throw SmokeFailure(description:"Native correction failed; inspect failure-app-state.txt for the fixed failure stage")}
         let fields=axElements(voice)
         return fields.contains{axValue($0,kAXRoleAttribute) as? String=="AXTextArea" && axText($0).contains("Corrected text") && !(axValue($0,kAXValueAttribute) as? String ?? "").isEmpty} && uiText(voice).contains("補正プレビュー:")
     }

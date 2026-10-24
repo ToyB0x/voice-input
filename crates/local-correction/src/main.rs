@@ -10,9 +10,28 @@ use std::{
     ffi::{CStr, c_char, c_void},
     io::{Read, Write},
     num::NonZeroU32,
-    sync::atomic::{AtomicU32, Ordering},
+    sync::atomic::{AtomicU8, AtomicU32, Ordering},
     time::Instant,
 };
+static PHASE: AtomicU8 = AtomicU8::new(0);
+const PHASES: [&str; 8] = [
+    "input",
+    "backend",
+    "model",
+    "prompt",
+    "prefill",
+    "generation",
+    "validation",
+    "output",
+];
+#[derive(Debug)]
+struct Rejection(&'static str);
+impl std::fmt::Display for Rejection {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
+impl std::error::Error for Rejection {}
 static OFFLOADED: AtomicU32 = AtomicU32::new(0);
 unsafe extern "C" fn native_log(
     _: llama_cpp_sys_2::ggml_log_level,
@@ -71,11 +90,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         llama_cpp_sys_2::llama_log_set(Some(native_log), std::ptr::null_mut());
         llama_cpp_sys_2::ggml_log_set(Some(native_log), std::ptr::null_mut());
     }
+    PHASE.store(1, Ordering::Relaxed);
     let backend = LlamaBackend::init()?;
     let metal = args[1] == "metal";
     if metal && !backend.supports_gpu_offload() {
         return Err("Metal is unavailable; choose CPU explicitly".into());
     }
+    PHASE.store(2, Ordering::Relaxed);
     let model = LlamaModel::load_from_file(
         &backend,
         &args[0],
@@ -89,6 +110,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if (metal && layers == 0) || (!metal && layers != 0) {
         return Err("requested GPU offload did not occur".into());
     }
+    PHASE.store(3, Ordering::Relaxed);
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4)) as i32;
     let params = LlamaContextParams::default()
         .with_n_ctx(NonZeroU32::new(4096))
@@ -102,6 +124,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if tokens.is_empty() || tokens.len() > 3500 {
         return Err("correction prompt exceeds context budget".into());
     }
+    PHASE.store(4, Ordering::Relaxed);
     let mut batch = LlamaBatch::new(2048, 1);
     // Decode in bounded chunks, preserving token positions across chunks.
     for (chunk_index, chunk) in tokens.chunks(2048).enumerate() {
@@ -112,6 +135,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         context.decode(&mut batch)?;
     }
+    PHASE.store(5, Ordering::Relaxed);
     const GRAMMAR: &str = "root ::= \"{\" ws \"\\\"text\\\"\" ws \":\" ws string ws \"}\"\nws ::= [ \\t\\n\\r]*\nstring ::= \"\\\"\" char* \"\\\"\"\nchar ::= [^\"\\\\\\x00-\\x1F] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])";
     let mut sampler = LlamaSampler::chain_simple([
         LlamaSampler::grammar(&model, GRAMMAR, "root")?,
@@ -145,10 +169,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if !ended {
         return Err("correction output was truncated".into());
     }
+    PHASE.store(6, Ordering::Relaxed);
     let text = parse_answer(
         &vocab.detokenize(&generated, false, false),
         &request.transcript,
-    )?;
+    )
+    .map_err(Rejection)?;
+    PHASE.store(7, Ordering::Relaxed);
     let report = Report {
         text,
         model: name,
@@ -162,8 +189,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 fn main() {
-    if run().is_err() {
-        // Errors from native libraries can include paths or user data. Emit only a fixed error.
+    // Rust bindings can panic with paths or source data. Suppress the panic hook
+    // and report only the fixed phase, just as for returned native errors.
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(run);
+    if !matches!(&result, Ok(Ok(()))) {
+        let rejection = match &result {
+            Ok(Err(error)) => error.downcast_ref::<Rejection>(),
+            _ => None,
+        };
+        let mut output = std::io::stdout().lock();
+        let _ = serde_json::to_writer(
+            &mut output,
+            &serde_json::json!({
+                "error": if rejection.is_some() { "rejected" } else { "runtime" },
+                "stage": PHASES[usize::from(PHASE.load(Ordering::Relaxed))],
+                "reason": rejection.map(|error| error.0),
+            }),
+        );
+        let _ = output.write_all(b"\n");
+        let _ = output.flush();
         eprintln!(
             "Local correction failed. Check model, backend and input limits; the original transcript is unchanged."
         );
