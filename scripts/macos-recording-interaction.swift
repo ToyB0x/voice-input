@@ -335,14 +335,37 @@ func trayItem(_ root: AXUIElement) -> AXUIElement? {
     }
 }
 
+func clickAtCenter(_ element: AXUIElement) throws {
+    guard let position = axValue(element, kAXPositionAttribute), let size = axValue(element, kAXSizeAttribute),
+          CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() else {
+        throw SmokeFailure(description: "Native menu bar item has no frame")
+    }
+    var origin = CGPoint.zero
+    var dimensions = CGSize.zero
+    guard AXValueGetValue(unsafeBitCast(position, to: AXValue.self), .cgPoint, &origin),
+          AXValueGetValue(unsafeBitCast(size, to: AXValue.self), .cgSize, &dimensions) else {
+        throw SmokeFailure(description: "Could not read native menu bar frame")
+    }
+    let center = CGPoint(x: origin.x + dimensions.width / 2, y: origin.y + dimensions.height / 2)
+    let source = CGEventSource(stateID: .hidSystemState)
+    for kind in [CGEventType.leftMouseDown, .leftMouseUp] {
+        guard let event = CGEvent(mouseEventSource: source, mouseType: kind, mouseCursorPosition: center, mouseButton: .left) else {
+            throw SmokeFailure(description: "Could not create native pointer event")
+        }
+        event.flags = []
+        event.post(tap: .cghidEventTap)
+    }
+}
+
 func trayAction(_ root: AXUIElement, title: String) throws {
     guard let tray = trayItem(root) else {
         throw SmokeFailure(description: "Voice Input menu bar item missing: \(trayElements(root).map(axText))")
     }
-    try press(tray)
+    // tray-icon opens its menu from mouse events; AXPress bypasses that handler.
+    try clickAtCenter(tray)
     var choice: AXUIElement?
     try waitForUI("tray menu \(title)") {
-        choice = trayElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXMenuItem" && axText($0).contains(title) }
+        choice = (trayElements(root) + axElements(root)).first { axValue($0, kAXRoleAttribute) as? String == "AXMenuItem" && axText($0).contains(title) }
         return choice != nil
     }
     try press(choice!)
@@ -442,6 +465,8 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
           NSPasteboard.general.string(forType: .string) == "voice-input-background-sentinel" else {
         throw SmokeFailure(description: "Background processing changed focus, clipboard or window visibility")
     }
+    try writeJSON(["status": "passed", "foregroundPreserved": true, "clipboardUnchanged": true,
+                   "hiddenRecordingAndRecognition": true], to: output.appendingPathComponent("background.json"))
     try trayAction(root, title: "設定・認識結果を表示")
     try waitForUI("tray opens recognized result") { fixtureRecognized(resultText(root)) }
     try interactionScreenshot(output, name: "tray-result.png")
