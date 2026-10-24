@@ -9,6 +9,8 @@ pub struct Preferences {
     pub model_path: String,
     pub backend: String,
     pub shortcut: String,
+    #[serde(default)]
+    pub auto_insert: bool,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -17,6 +19,7 @@ impl Default for Preferences {
             model_path: String::new(),
             backend: "metal".into(),
             shortcut: "Command+Shift+Space".into(),
+            auto_insert: false,
         }
     }
 }
@@ -86,6 +89,10 @@ mod tests {
         let path = root.join("settings.json");
         let _ = fs::remove_dir_all(&root);
         assert_eq!(load(&path).unwrap(), Preferences::default());
+        let legacy: Preferences =
+            serde_json::from_str(r#"{"version":1,"modelPath":"","backend":"cpu","shortcut":""}"#)
+                .unwrap();
+        assert!(!legacy.auto_insert);
         let settings = Preferences {
             model_path: "/tmp/日本語モデル.bin".into(),
             shortcut: String::new(),

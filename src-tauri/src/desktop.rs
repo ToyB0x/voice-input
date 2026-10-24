@@ -28,7 +28,7 @@ pub struct Desktop {
     path: PathBuf,
     inner: Mutex<Inner>,
     toggling: AtomicBool,
-    pressed: AtomicBool,
+    shortcut_armed: AtomicBool,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,10 +75,18 @@ pub fn shortcut_event(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState
     if !active {
         return;
     }
-    if state == ShortcutState::Released {
-        desktop.pressed.store(false, Ordering::Release);
-    } else if !desktop.pressed.swap(true, Ordering::AcqRel) {
+    if release_action(&desktop.shortcut_armed, state) {
         toggle(app);
+    }
+}
+
+fn release_action(armed: &AtomicBool, state: ShortcutState) -> bool {
+    match state {
+        ShortcutState::Pressed => {
+            armed.store(true, Ordering::Release);
+            false
+        }
+        ShortcutState::Released => armed.swap(false, Ordering::AcqRel),
     }
 }
 
@@ -171,7 +179,9 @@ pub fn save_preferences(
     inner.preferences = preferences;
     inner.registered = new;
     inner.error = None;
-    desktop.pressed.store(false, Ordering::Release);
+    desktop.shortcut_armed.store(false, Ordering::Release);
+    app.state::<crate::insertion::Inserter>()
+        .configure(inner.preferences.auto_insert);
     Ok(Status {
         preferences: inner.preferences.clone(),
         shortcut_registered: new.is_some(),
@@ -207,8 +217,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             error,
         }),
         toggling: AtomicBool::new(false),
-        pressed: AtomicBool::new(false),
+        shortcut_armed: AtomicBool::new(false),
     });
+    app.state::<crate::insertion::Inserter>()
+        .configure(preferences.auto_insert);
     let state = MenuItem::with_id(app, "voice-state", "待機", false, None::<&str>)?;
     let toggle_item =
         MenuItem::with_id(app, "voice-toggle", "録音を開始 / 停止", true, None::<&str>)?;
@@ -243,6 +255,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     "処理中"
                 } else if snapshot.phase == "error"
                     || snapshot.recognition.recognition_error.is_some()
+                    || {
+                        let status = handle.state::<crate::insertion::Inserter>().status();
+                        status.enabled && status.state == "blocked"
+                    }
                     || handle
                         .state::<Desktop>()
                         .inner
@@ -283,6 +299,22 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn release_actions_ignore_repeat_and_duplicate_events_and_recover_missing_releases() {
+        use ShortcutState::{Pressed, Released};
+        let armed = AtomicBool::new(false);
+        let events = [
+            Released, Pressed, Pressed, Released, Released, Pressed, Pressed, Released,
+        ];
+        let actions: Vec<_> = events
+            .into_iter()
+            .map(|event| release_action(&armed, event))
+            .collect();
+        assert_eq!(
+            actions,
+            [false, false, false, true, false, false, false, true]
+        );
+    }
     #[test]
     fn shortcuts_require_a_modifier_and_allow_disabling() {
         assert!(parse_shortcut("").unwrap().is_none());

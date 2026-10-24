@@ -55,10 +55,15 @@
         <h2 id="desktop-title">常駐・ショートカット設定</h2>
         <label for="shortcut">録音開始 / 停止（空欄で無効）</label>
         <input id="shortcut" aria-label="Recording shortcut" type="text" value="Command+Shift+Space" spellcheck="false" autocomplete="off" />
+        <label class="check"><input id="auto-insert" aria-label="Automatic text insertion" type="checkbox" />認識結果を録音開始時の入力欄へ直接入力する（初期状態は無効）</label>
+        <p id="insertion-status" role="status">直接入力: 無効</p>
+        <p id="insertion-message" role="status"></p>
+        <button id="accessibility" aria-label="Request accessibility permission">アクセシビリティの許可を確認・設定</button>
+        <p class="hint">設定保存後に有効になります。入力先でショートカットを使ってください。入力先・位置・内容が変わった場合やパスワード欄では挿入せず、結果を保持します。</p>
         <button id="save-preferences" aria-label="Save preferences" disabled>設定を保存</button>
         <p id="desktop-status" role="status"></p>
         <p id="preferences-message" role="status"></p>
-        <p class="hint">モデルのパス・実行方式・ショートカットだけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
+        <p class="hint">モデルのパス・実行方式・ショートカット・直接入力の有効／無効だけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
         <p class="hint">ウィンドウを閉じても常駐します。メニューバーの VI から設定・結果を表示、終了できます。</p>
       </section>
     </main>

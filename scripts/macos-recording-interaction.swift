@@ -70,6 +70,8 @@ func recordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
     do {
         try runRecordingInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output)
     } catch {
+        // Authentication may still be open; never capture credential-entry UI.
+        if scenario == "insertion-grant" { throw error }
         try? interactionScreenshot(output, name: "interaction-failure.png")
         try? uiText(AXUIElementCreateApplication(pid)).write(
             to: output.appendingPathComponent("failure-app-state.txt"), atomically: true, encoding: .utf8)
@@ -85,6 +87,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
     guard AXIsProcessTrusted() else {
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
+
+    if scenario.hasPrefix("insertion") { try insertionInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output); return }
 
     if scenario == "desktop" { try desktopInteraction(pid: pid, windowID: windowID, output: output); return }
 
@@ -312,12 +316,34 @@ func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) thr
 
 func key(_ code: CGKeyCode, flags: CGEventFlags = []) throws {
     let source = CGEventSource(stateID: .hidSystemState)
+    let modifiers: [(CGEventFlags, CGKeyCode)] = [(.maskControl, 59), (.maskAlternate, 58), (.maskShift, 56), (.maskCommand, 55)]
+    var held: CGEventFlags = []
+    func modifier(_ keyCode: CGKeyCode, flags current: CGEventFlags) throws {
+        guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) else {
+            throw SmokeFailure(description: "Could not construct modifier event")
+        }
+        event.type = .flagsChanged
+        event.flags = current
+        event.post(tap: .cghidEventTap)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    }
+    // Carbon hotkeys need a complete chord/release, not two effectively
+    // simultaneous events carrying permanently-held modifier flags.
+    for (flag, keyCode) in modifiers where flags.contains(flag) {
+        held.insert(flag)
+        try modifier(keyCode, flags: held)
+    }
     for down in [true, false] {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else {
             throw SmokeFailure(description: "Could not construct native key event")
         }
         event.flags = flags
         event.post(tap: .cghidEventTap)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.03))
+    }
+    for (flag, keyCode) in modifiers.reversed() where flags.contains(flag) {
+        held.remove(flag)
+        try modifier(keyCode, flags: held)
     }
 }
 
@@ -420,9 +446,9 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     let settingsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/dev.toyb0x.voiceinput/settings.json")
     let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as! [String: Any]
-    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut"]),
+    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert"]),
           stored["modelPath"] as? String == model, stored["backend"] as? String == "cpu",
-          stored["shortcut"] as? String == "Control+Alt+KeyV" else {
+          stored["shortcut"] as? String == "Control+Alt+KeyV", stored["autoInsert"] as? Bool == false else {
         throw SmokeFailure(description: "Persisted preferences mismatch or unexpected private data")
     }
     // Close the actual native window, leaving only the resident process/tray.
