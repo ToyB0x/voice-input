@@ -146,6 +146,7 @@ pub fn save_preferences(
     mut preferences: Preferences,
 ) -> Result<Status, String> {
     preferences.model_path = preferences.model_path.trim().into();
+    preferences.correction_model_path = preferences.correction_model_path.trim().into();
     preferences.shortcut = preferences.shortcut.trim().into();
     preferences.validate()?;
     let new = parse_shortcut(&preferences.shortcut)?;
@@ -177,7 +178,13 @@ pub fn save_preferences(
         return Err(format!("以前のショートカットを解除できません: {error}"));
     }
     app.state::<crate::context::Reader>()
-        .configure(preferences.recognition_context);
+        .configure(preferences.context_config());
+    if inner.preferences.correction_model_path != preferences.correction_model_path
+        || inner.preferences.correction_backend != preferences.correction_backend
+        || inner.preferences.context_config() != preferences.context_config()
+    {
+        app.state::<crate::correction::Corrector>().cancel();
+    }
     inner.preferences = preferences;
     inner.registered = new;
     inner.error = None;
@@ -224,7 +231,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.state::<crate::insertion::Inserter>()
         .configure(preferences.auto_insert);
     app.state::<crate::context::Reader>()
-        .configure(preferences.recognition_context);
+        .configure(preferences.context_config());
     let state = MenuItem::with_id(app, "voice-state", "待機", false, None::<&str>)?;
     let toggle_item =
         MenuItem::with_id(app, "voice-toggle", "録音を開始 / 停止", true, None::<&str>)?;
@@ -298,6 +305,14 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
     Ok(())
+}
+
+pub fn preferences(app: &AppHandle) -> Result<Preferences, String> {
+    app.state::<Desktop>()
+        .inner
+        .lock()
+        .map(|state| state.preferences.clone())
+        .map_err(|_| "設定を確認できません。".into())
 }
 
 #[cfg(test)]

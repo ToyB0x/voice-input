@@ -13,3 +13,6 @@ models/
 
 __pycache__/
 evaluation/results/
+
+crates/local-correction/target/
+src-tauri/resources/local-correction

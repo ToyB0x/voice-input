@@ -23,3 +23,26 @@ objc2-av-foundation = { version = "0.3", default-features = false, features = ["
 
 local-transcription = { path = "../crates/local-transcription" }
 arboard = { version = "3.6", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-foundation]
+version = "0.3"
+default-features = false
+features = ["std", "NSArray", "NSDictionary", "NSError", "NSString", "NSObject"]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-screen-capture-kit]
+version = "=0.3.2"
+default-features = false
+features = ["std", "SCStream", "SCShareableContent", "SCScreenshotManager", "block2", "objc2-core-foundation", "objc2-core-graphics", "objc2-core-media", "libc"]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-vision]
+version = "=0.3.2"
+default-features = false
+features = ["std", "VNRequest", "VNRequestHandler", "VNRecognizeTextRequest", "VNObservation", "VNTypes", "objc2-core-graphics", "block2"]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-core-foundation]
+version = "0.3"
+features = ["CFCGTypes"]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-core-graphics]
+version = "0.3"
+features = ["CGImage"]

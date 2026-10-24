@@ -56,9 +56,14 @@
         <label for="shortcut">録音開始 / 停止（空欄で無効）</label>
         <input id="shortcut" aria-label="Recording shortcut" type="text" value="Command+Shift+Space" spellcheck="false" autocomplete="off" />
         <label class="check"><input id="auto-insert" aria-label="Automatic text insertion" type="checkbox" />認識結果を録音開始時の入力欄へ直接入力する（初期状態は無効）</label>
-        <label class="check"><input id="recognition-context" aria-label="Local recognition context" type="checkbox" />入力欄の周辺テキストで認識を補助する（実験的・初期状態は無効）</label>
+        <label class="check"><input id="recognition-context" aria-label="Local recognition context" type="checkbox" />Accessibilityで入力欄の周辺テキストを取得する（初期状態は無効）</label>
+        <label class="check"><input id="ocr-context" aria-label="Local OCR context" type="checkbox" />入力先の欄だけを撮影し、このMac内でOCRする（初期状態は無効）</label>
+        <label class="check"><input id="whisper-context" aria-label="Use context in Whisper" type="checkbox" checked />取得テキストをWhisperの認識ヒントに使う</label>
+        <label class="check"><input id="correction-context" aria-label="Use context in correction" type="checkbox" />取得テキストを最終補正に使う（初期状態は無効）</label>
+        <p id="ocr-status" role="status">OCR: 無効</p>
+        <button id="screen-permission" aria-label="Request screen permission">画面収録の許可を確認・設定</button>
         <p id="context-status" role="status">認識補助: 無効</p>
-        <p class="hint">録音開始時に、別アプリの編集可能な入力欄からカーソル周辺だけを取得し、このMac内の認識ヒントに使います。保存・送信はしません。誤認識が増える場合は無効にしてください。再試行はヒントなしです。</p>
+        <p class="hint">取得元と利用先を選んで保存してください。利用先が両方無効なら取得しません。取得テキストは保存・送信せず、最終補正へ使う場合はその録音の初回補正まで保持します。Whisperの再試行はヒントなしです。誤認識が増える場合は無効にしてください。</p>
         <p id="insertion-status" role="status">直接入力: 無効</p>
         <p id="insertion-message" role="status"></p>
         <button id="accessibility" aria-label="Request accessibility permission">アクセシビリティの許可を確認・設定</button>
@@ -66,8 +71,21 @@
         <button id="save-preferences" aria-label="Save preferences" disabled>設定を保存</button>
         <p id="desktop-status" role="status"></p>
         <p id="preferences-message" role="status"></p>
-        <p class="hint">モデルのパス・実行方式・ショートカット・直接入力・認識補助の有効／無効だけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
+        <p class="hint">モデルのパス・実行方式・ショートカット・取得元と利用先の設定だけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
         <p class="hint">ウィンドウを閉じても常駐します。メニューバーの VI から設定・結果を表示、終了できます。</p>
+      </section>
+      <section aria-labelledby="correction-title">
+        <h2 id="correction-title">ローカル最終補正（実験的プレビュー）</h2>
+        <label for="correction-model-path">補正モデルの絶対パス（Qwen3 GGUF）</label>
+        <input id="correction-model-path" aria-label="Correction model path" type="text" placeholder="/Users/you/Models/Qwen3-1.7B-Q8_0.gguf" spellcheck="false" autocomplete="off" />
+        <label for="correction-backend">補正の実行方式</label>
+        <select id="correction-backend" aria-label="Correction backend"><option value="metal">GPU（Metal）</option><option value="cpu">CPU</option></select>
+        <p class="hint">上の「設定を保存」で反映します。モデルは自動ダウンロードしません。音声の認識結果と、設定で許可したテキストだけをこのMac内で補正します。</p>
+        <button id="correct" aria-label="Preview local correction" disabled>最終補正をプレビュー</button>
+        <p id="correction-status" role="status">補正は未実行です。</p>
+        <textarea id="corrected" aria-label="Corrected text" rows="4" readonly placeholder="元の文字起こしは上の認識結果に保持します。"></textarea>
+        <button id="copy-correction" aria-label="Copy correction" disabled>補正結果をコピー</button>
+        <p class="hint">補正結果は自動入力しません。意味・数値・否定・固有名詞が変わっていないか確認してからコピーしてください。再試行は取得テキストなしで行います。画像・取得テキスト・補正結果をファイルに保存・クラウド送信しません。</p>
       </section>
     </main>
     <script type="module" src="/src/main.ts"></script>

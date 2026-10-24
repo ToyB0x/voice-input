@@ -10,9 +10,13 @@ mod transcription;
 #[cfg(target_os = "macos")]
 mod context;
 #[cfg(target_os = "macos")]
+mod correction;
+#[cfg(target_os = "macos")]
 mod desktop;
 #[cfg(target_os = "macos")]
 mod insertion;
+#[cfg(target_os = "macos")]
+mod ocr;
 #[cfg(any(target_os = "macos", test))]
 mod settings;
 
@@ -23,6 +27,8 @@ fn main() {
     #[cfg(target_os = "macos")]
     let context = context::Reader::new();
     #[cfg(target_os = "macos")]
+    let corrector = correction::Corrector::new();
+    #[cfg(target_os = "macos")]
     let builder = builder
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -31,8 +37,13 @@ fn main() {
                 })
                 .build(),
         )
-        .manage(recorder::Recorder::new(inserter.clone(), context.clone()))
+        .manage(recorder::Recorder::new(
+            inserter.clone(),
+            context.clone(),
+            corrector.clone(),
+        ))
         .manage(context)
+        .manage(corrector)
         .manage(inserter)
         .setup(desktop::setup)
         .on_window_event(|window, event| {
@@ -55,6 +66,10 @@ fn main() {
             desktop::save_preferences,
             insertion::insertion_status,
             context::context_status,
+            ocr::request_screen_permission,
+            correction::correct_transcript,
+            correction::correction_status,
+            correction::copy_correction,
             insertion::request_accessibility,
         ]);
     builder
@@ -64,6 +79,15 @@ fn main() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 desktop::show(app);
+            }
+            #[cfg(target_os = "macos")]
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
+                use tauri::Manager;
+                app.state::<context::Reader>().cancel();
+                app.state::<correction::Corrector>().shutdown();
             }
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);

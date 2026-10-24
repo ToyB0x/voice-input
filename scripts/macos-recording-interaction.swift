@@ -71,7 +71,13 @@ func recordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
         try runRecordingInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output)
     } catch {
         // Authentication may still be open; never capture credential-entry UI.
-        if scenario == "insertion-grant" { throw error }
+        if scenario == "insertion-grant" || scenario == "ocr-grant" { throw error }
+        // A hidden app exposes only its menu tree. Show it for useful OCR
+        // failure evidence after the synthetic fixture operation has stopped.
+        if scenario.hasPrefix("ocr"), visibleWindows(for:pid).isEmpty {
+            try? trayAction(AXUIElementCreateApplication(pid),title:"設定・認識結果を表示")
+            try? waitForUI("OCR failure window") {!visibleWindows(for:pid).isEmpty}
+        }
         try? interactionScreenshot(output, name: "interaction-failure.png")
         try? uiText(AXUIElementCreateApplication(pid)).write(
             to: output.appendingPathComponent("failure-app-state.txt"), atomically: true, encoding: .utf8)
@@ -87,6 +93,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
     guard AXIsProcessTrusted() else {
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
+
+    if scenario.hasPrefix("ocr") { try ocrInteraction(pid:pid,scenario:scenario,output:output); return }
 
     if scenario.hasPrefix("context") { try contextInteraction(pid: pid, scenario: scenario, output: output); return }
 
@@ -448,7 +456,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     let settingsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/dev.toyb0x.voiceinput/settings.json")
     let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as! [String: Any]
-    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert", "recognitionContext"]),
+    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert", "recognitionContext", "ocrContext", "whisperContext", "correctionContext", "correctionModelPath", "correctionBackend"]),
           stored["modelPath"] as? String == model, stored["backend"] as? String == "cpu",
           stored["shortcut"] as? String == "Control+Alt+KeyV", stored["autoInsert"] as? Bool == false, stored["recognitionContext"] as? Bool == false else {
         throw SmokeFailure(description: "Persisted preferences mismatch or unexpected private data")

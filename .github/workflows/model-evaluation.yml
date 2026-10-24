@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: evaluation-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   evaluate:
@@ -104,3 +104,67 @@ jobs:
           name: model-evaluation-summary
           path: ${{ runner.temp }}/evaluation-summary/
           retention-days: 14
+
+  correction:
+    name: Local correction ${{ matrix.model }} (macOS)
+    needs: evaluate
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [qwen3-1.7b, qwen3-4b]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - uses: actions/cache/restore@v4
+        id: correction-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: macos-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos-${{ runner.arch }}-correction-runtime-v2-
+      - uses: actions/download-artifact@v4
+        with:
+          name: model-evaluation-small
+          path: ${{ runner.temp }}/small-asr
+      - name: Build and test local correction engine
+        run: |
+          cargo fmt --manifest-path crates/local-correction/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/local-correction/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path crates/local-correction/Cargo.toml --locked
+          cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked
+      - uses: actions/cache/save@v4
+        if: steps.correction-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: ${{ steps.correction-cache.outputs.cache-primary-key }}
+      - name: Prepare checksum-verified official model (setup only)
+        run: python3 scripts/prepare-correction-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/correction-model.gguf"
+      - name: Compare all four context routes with networking denied
+        run: |
+          mkdir -p "$RUNNER_TEMP/correction-evaluation"
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/evaluate_correction.py \
+              --binary crates/local-correction/target/release/local-correction \
+              --model "$RUNNER_TEMP/correction-model.gguf" --model-name '${{ matrix.model }}' \
+              --asr "$RUNNER_TEMP/small-asr/context" --output "$RUNNER_TEMP/correction-evaluation" \
+              --require-network-denied \
+              2>&1 | tee "$RUNNER_TEMP/correction-evaluation/run.log"
+          cat "$RUNNER_TEMP/correction-evaluation/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: correction-evaluation-${{ matrix.model }}
+          path: ${{ runner.temp }}/correction-evaluation/
+          retention-days: 14
+          if-no-files-found: warn
