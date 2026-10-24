@@ -53,6 +53,11 @@ def main():
     for report in asr.values():
         if report['model_name']!='small' or [case['id'] for case in report['cases']]!=expected:raise ValueError('Incomplete or wrong ASR evaluation input')
     args.output.mkdir(parents=True,exist_ok=True)
+    # Hardware support is a prerequisite, so keep a safe standalone failure
+    # report before spending time on the full four-route CPU comparison.
+    gpu=infer(args.binary,args.model,'metal','会議は金曜日です','会議、金曜日。')
+    (args.output/'metal-smoke.json').write_text(json.dumps(gpu,ensure_ascii=False,indent=2)+'\n')
+    if gpu['failed']:raise ValueError('Actual Metal inference failed; inspect metal-smoke.json for the fixed failure stage')
     records=[]
     for index,case in enumerate(corpus['cases']):
         for mode,(asr_context,correction_context) in MODES.items():
@@ -69,7 +74,6 @@ def main():
         item.update(case=case,constraints=constraints(item['text'],case))
         supplemental.append(item)
         if not case['transcript'] and item['text']:raise ValueError('Correction hallucinated on empty input')
-    gpu=infer(args.binary,args.model,'metal','会議は金曜日です','会議、金曜日。')
     summaries={}
     for mode in MODES:
         rows=[r for r in records if r['mode']==mode]
@@ -93,7 +97,6 @@ def main():
     for item in supplemental:lines.append(f"- {item['case']['id']}: rejected={item['rejected']}, {item['constraints']}")
     (args.output/'summary.md').write_text('\n'.join(lines)+'\n')
     print('\n'.join(lines))
-    if gpu['failed']:raise ValueError('Actual Metal inference failed; see report.json for the safe failure stage')
     if any(item['failed'] and not item['rejected'] for item in records+supplemental):raise ValueError('Correction runtime failed; see report.json for safe failure stages')
     if any(item['silence_false_positives'] for item in summaries.values()):raise ValueError('Silence invariant failed')
 
