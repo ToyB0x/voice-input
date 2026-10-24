@@ -223,7 +223,7 @@ struct Repair {
 }
 fn explicit_repair(text: &str) -> Option<Repair> {
     let (prefix, tail) = text.rsplit_once("いや")?;
-    if prefix.trim().is_empty() || prefix.contains("いや") {
+    if prefix.trim().is_empty() {
         return None;
     }
     let separated = prefix.ends_with(['、', ',', ' ']);
@@ -246,7 +246,14 @@ fn explicit_repair(text: &str) -> Option<Repair> {
     if !(2..=40).contains(&final_text.chars().count()) {
         return None;
     }
-    let retired = subject_term(prefix);
+    // Preserve the final correction even when earlier repairs make extracting
+    // a single retired phrase ambiguous. Only the new retired-name check
+    // declines those inputs; the existing final-target check still applies.
+    let retired = if prefix.contains("いや") {
+        String::new()
+    } else {
+        subject_term(prefix)
+    };
     Some(Repair {
         final_text,
         retired,
@@ -351,6 +358,24 @@ fn numbers(text: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn multiple_repairs_still_require_the_last_final_target() {
+        let original = "宛先は山田さんいや鈴木さんです。場所は東口いや西口です";
+        let good = serde_json::to_vec(&Answer {
+            text: "宛先は鈴木さんです。場所は西口です。".into(),
+        })
+        .unwrap();
+        assert!(parse_answer(&good, original).is_ok());
+        let bad = serde_json::to_vec(&Answer {
+            text: "宛先は鈴木さんです。場所は東口です。".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            parse_answer(&bad, original),
+            Err("correction omitted the explicit final repair")
+        );
+    }
+
     #[test]
     fn fixed_preservation_and_false_rejection_cases() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
