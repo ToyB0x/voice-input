@@ -1,7 +1,7 @@
 import "./styles.css";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean };
+type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; recognitionContext: boolean };
 type InsertionStatus = { enabled: boolean; trusted: boolean; state: string; message: string };
 type DesktopStatus = { preferences: Preferences; shortcutRegistered: boolean; error: string | null };
 
@@ -60,6 +60,9 @@ const preferencesMessage = document.querySelector<HTMLParagraphElement>("#prefer
 const autoInsert = document.querySelector<HTMLInputElement>("#auto-insert")!;
 const insertionStatus = document.querySelector<HTMLParagraphElement>("#insertion-status")!;
 const insertionMessage = document.querySelector<HTMLParagraphElement>("#insertion-message")!;
+const recognitionContext = document.querySelector<HTMLInputElement>("#recognition-context")!;
+const contextStatus = document.querySelector<HTMLParagraphElement>("#context-status")!;
+let context: { enabled: boolean; message: string } | undefined;
 const accessibility = document.querySelector<HTMLButtonElement>("#accessibility")!;
 let insertion: InsertionStatus | undefined;
 let preferencesInitialized = false;
@@ -79,7 +82,8 @@ function render() {
   if (!snapshot) return;
   setText(permission, `マイクの許可: ${permissions[snapshot.permission]}`);
   savePreferences.disabled = busy;
-  shortcut.disabled = autoInsert.disabled = accessibility.disabled = busy;
+  shortcut.disabled = autoInsert.disabled = recognitionContext.disabled = accessibility.disabled = busy;
+  setText(contextStatus, context?.message ?? "認識補助: 無効");
   setText(insertionStatus, !insertion?.enabled ? "直接入力: 無効" :
     `直接入力: 有効 / アクセシビリティ${insertion.trusted ? "許可済み" : "未許可"}`);
   setText(insertionMessage, insertion?.message ?? "");
@@ -137,19 +141,22 @@ async function refresh() {
   refreshing = true;
   const version = ++refreshVersion;
   try {
-    const [next, nextDesktop, nextInsertion] = await Promise.all([
+    const [next, nextDesktop, nextInsertion, nextContext] = await Promise.all([
       invoke<Snapshot>("recording_status"), invoke<DesktopStatus>("desktop_status"),
       invoke<InsertionStatus>("insertion_status"),
+      invoke<{ enabled: boolean; message: string }>("context_status"),
     ]);
     if (!busy && version === refreshVersion) {
       snapshot = next;
       desktop = nextDesktop;
       insertion = nextInsertion;
+      context = nextContext;
       if (!preferencesInitialized) {
         modelPath.value = desktop.preferences.modelPath;
         backend.value = desktop.preferences.backend;
         shortcut.value = desktop.preferences.shortcut;
         autoInsert.checked = desktop.preferences.autoInsert;
+        recognitionContext.checked = desktop.preferences.recognitionContext;
         preferencesInitialized = true;
       }
       render();
@@ -184,12 +191,12 @@ async function action(operation: () => Promise<unknown>) {
 
 savePreferences.addEventListener("click", () => void action(async () => {
   desktop = await invoke<DesktopStatus>("save_preferences", { preferences: {
-    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked,
+    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, recognitionContext: recognitionContext.checked,
   } });
   preferencesMessage.textContent = "設定を保存しました。ショートカットは反映済みです。";
 }));
 accessibility.addEventListener("click", () => void action(() => invoke("request_accessibility")));
-for (const field of [modelPath, backend, shortcut, autoInsert]) {
+for (const field of [modelPath, backend, shortcut, autoInsert, recognitionContext]) {
   field.addEventListener("input", () => { preferencesMessage.textContent = "未保存の設定があります。"; });
 }
 modelPath.addEventListener("input", render);

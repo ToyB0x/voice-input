@@ -56,6 +56,9 @@
         <label for="shortcut">録音開始 / 停止（空欄で無効）</label>
         <input id="shortcut" aria-label="Recording shortcut" type="text" value="Command+Shift+Space" spellcheck="false" autocomplete="off" />
         <label class="check"><input id="auto-insert" aria-label="Automatic text insertion" type="checkbox" />認識結果を録音開始時の入力欄へ直接入力する（初期状態は無効）</label>
+        <label class="check"><input id="recognition-context" aria-label="Local recognition context" type="checkbox" />入力欄の周辺テキストで認識を補助する（実験的・初期状態は無効）</label>
+        <p id="context-status" role="status">認識補助: 無効</p>
+        <p class="hint">録音開始時に、別アプリの編集可能な入力欄からカーソル周辺だけを取得し、このMac内の認識ヒントに使います。保存・送信はしません。誤認識が増える場合は無効にしてください。再試行はヒントなしです。</p>
         <p id="insertion-status" role="status">直接入力: 無効</p>
         <p id="insertion-message" role="status"></p>
         <button id="accessibility" aria-label="Request accessibility permission">アクセシビリティの許可を確認・設定</button>
@@ -63,7 +66,7 @@
         <button id="save-preferences" aria-label="Save preferences" disabled>設定を保存</button>
         <p id="desktop-status" role="status"></p>
         <p id="preferences-message" role="status"></p>
-        <p class="hint">モデルのパス・実行方式・ショートカット・直接入力の有効／無効だけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
+        <p class="hint">モデルのパス・実行方式・ショートカット・直接入力・認識補助の有効／無効だけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
         <p class="hint">ウィンドウを閉じても常駐します。メニューバーの VI から設定・結果を表示、終了できます。</p>
       </section>
     </main>

@@ -88,6 +88,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
 
+    if scenario.hasPrefix("context") { try contextInteraction(pid: pid, scenario: scenario, output: output); return }
+
     if scenario.hasPrefix("insertion") { try insertionInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output); return }
 
     if scenario == "desktop" { try desktopInteraction(pid: pid, windowID: windowID, output: output); return }
@@ -214,20 +216,20 @@ func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
 }
 
 func typeField(_ root: AXUIElement, label: String, value path: String) throws {
-    guard CGPreflightPostEventAccess(), let field = textField(root, label: label),
-          AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
-        throw SmokeFailure(description: "Could not focus model path for native keyboard input")
+    guard CGPreflightPostEventAccess(), let field = textField(root, label: label) else {
+        throw SmokeFailure(description: "Could not find native input field")
+    }
+    // Otherwise the value predicate can pass before already-correct replacement
+    // events drain, letting later checkbox clicks redirect pending keystrokes.
+    if axValue(field, kAXValueAttribute) as? String == path { return }
+    guard AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
+        throw SmokeFailure(description: "Could not focus native input field")
     }
     // WebKit can acknowledge AXValue writes without updating the DOM input.
     // Exercise the same keyboard route as the user instead of injecting JS.
+    // Use a complete modifier chord and drain it before posting replacement text.
+    try key(0, flags: .maskCommand)
     let source = CGEventSource(stateID: .hidSystemState)
-    for down in [true, false] {
-        guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else {
-            throw SmokeFailure(description: "Could not create Select All keyboard event")
-        }
-        event.flags = .maskCommand
-        event.post(tap: .cghidEventTap)
-    }
     // Selecting all alone does not clear the field when the replacement is empty.
     if path.isEmpty { try key(51) } // Backspace
     let units = Array(path.utf16)
@@ -446,17 +448,13 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     let settingsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/dev.toyb0x.voiceinput/settings.json")
     let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as! [String: Any]
-    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert"]),
+    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert", "recognitionContext"]),
           stored["modelPath"] as? String == model, stored["backend"] as? String == "cpu",
-          stored["shortcut"] as? String == "Control+Alt+KeyV", stored["autoInsert"] as? Bool == false else {
+          stored["shortcut"] as? String == "Control+Alt+KeyV", stored["autoInsert"] as? Bool == false, stored["recognitionContext"] as? Bool == false else {
         throw SmokeFailure(description: "Persisted preferences mismatch or unexpected private data")
     }
     // Close the actual native window, leaving only the resident process/tray.
-    guard let window = (axValue(root, kAXWindowsAttribute) as? [AXUIElement])?.first,
-          let closeRef = axValue(window, kAXCloseButtonAttribute) else {
-        throw SmokeFailure(description: "Window close control missing")
-    }
-    try press(unsafeBitCast(closeRef, to: AXUIElement.self))
+    try hideInsertionWindow(root)
     try waitForUI("closed window keeps resident process") { visibleWindows(for: pid).isEmpty && !app.isTerminated }
     try trayElements(root).map(axText).joined(separator: "\n").write(to: output.appendingPathComponent("tray-before.txt"), atomically: true, encoding: .utf8)
 

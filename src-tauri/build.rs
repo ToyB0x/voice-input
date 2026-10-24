@@ -12,6 +12,7 @@ fn main() {
         "desktop_status",
         "save_preferences",
         "insertion_status",
+        "context_status",
         "request_accessibility",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))

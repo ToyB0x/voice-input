@@ -6,6 +6,40 @@ pub use resample::prepare_audio;
 use std::path::Path;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+// Never pass native log text to a sink: debug builds can include prompt tokens.
+// Preserve only a fixed, exact backend marker needed by our Metal verification.
+const METAL_MARKER: &[u8] = b"whisper_backend_init_gpu: using Metal backend\n";
+fn safe_diagnostic(message: &[u8]) -> Option<&'static [u8]> {
+    (message == METAL_MARKER).then_some(METAL_MARKER)
+}
+unsafe extern "C" fn native_diagnostic(
+    _: std::ffi::c_uint,
+    text: *const std::ffi::c_char,
+    _: *mut std::ffi::c_void,
+) {
+    if text.is_null() {
+        return;
+    }
+    // SAFETY: whisper.cpp's logging contract supplies a NUL-terminated C string.
+    let message = unsafe { std::ffi::CStr::from_ptr(text) }.to_bytes();
+    if let Some(marker) = safe_diagnostic(message) {
+        use std::io::Write;
+        // Ignore sink failures: no panic/unwind may cross this C callback.
+        let _ = std::io::stderr().lock().write_all(marker);
+    }
+}
+fn configure_native_logging() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        // No Rust logging backend features enabled: silence GGML initialization.
+        whisper_rs::install_logging_hooks();
+        // SAFETY: static callback, no user data, no panics or stored references.
+        unsafe {
+            whisper_rs::set_log_callback(Some(native_diagnostic), std::ptr::null_mut());
+        }
+    });
+}
+
 pub const SAMPLE_RATE: u32 = 16_000;
 pub const MAX_SAMPLES: usize = SAMPLE_RATE as usize * 60;
 
@@ -46,6 +80,7 @@ impl Transcriber {
         if !path.is_file() || std::fs::File::open(path).is_err() {
             return Err(Error::ModelUnavailable);
         }
+        configure_native_logging();
         let mut options = WhisperContextParameters::default();
         options.use_gpu(!matches!(backend, Backend::Cpu));
         let context =
@@ -68,6 +103,11 @@ impl Transcriber {
     /// Input is normalized mono PCM. Empty/short/oversized/NaN input is rejected.
     /// Digital silence bypasses decoding to avoid silence hallucinations.
     pub fn transcribe(&self, audio: &[f32]) -> Result<String, Error> {
+        self.transcribe_with_hint(audio, None)
+    }
+
+    /// A bounded, per-call local hint. It never becomes cross-recording context.
+    pub fn transcribe_with_hint(&self, audio: &[f32], hint: Option<&str>) -> Result<String, Error> {
         validate_audio(audio)?;
         let energy = audio.iter().map(|&s| f64::from(s).powi(2)).sum::<f64>() / audio.len() as f64;
         if energy.sqrt() < 0.00001 {
@@ -81,6 +121,10 @@ impl Transcriber {
         params.set_language(Some("ja"));
         params.set_translate(false);
         params.set_no_context(true);
+        let hint = recognition_hint(hint.unwrap_or_default());
+        if !hint.is_empty() {
+            params.set_initial_prompt(&hint);
+        }
         params.set_no_timestamps(true);
         params.set_print_special(false);
         params.set_print_progress(false);
@@ -101,6 +145,19 @@ impl Transcriber {
         }
         Ok(text.trim().to_owned())
     }
+}
+
+/// Remove control characters (including NUL) before the C API; bound UTF-8 size.
+/// Shared by AX capture and the evaluation harness so their prompt is identical.
+pub fn recognition_hint(text: &str) -> String {
+    let mut result = String::new();
+    for c in text.chars().filter(|c| !c.is_control()) {
+        if result.len() + c.len_utf8() > 768 {
+            break;
+        }
+        result.push(c);
+    }
+    result.trim().to_owned()
 }
 
 fn validate_audio(audio: &[f32]) -> Result<(), Error> {
@@ -137,6 +194,27 @@ pub fn read_wav(path: &Path) -> Result<Vec<f32>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_diagnostics_never_forward_prompt_or_paths() {
+        assert_eq!(safe_diagnostic(METAL_MARKER), Some(METAL_MARKER));
+        for message in [
+            b"prompt[0] = private text".as_slice(),
+            b"failed: /Users/private/model.bin",
+            b"whisper_backend_init_gpu: using Metal backend\nprivate text",
+        ] {
+            assert!(safe_diagnostic(message).is_none());
+        }
+    }
+
+    #[test]
+    fn hints_are_bounded_unicode_and_c_safe() {
+        assert_eq!(recognition_hint("  固有\0名詞\n "), "固有名詞");
+        let hint = recognition_hint(&"😀".repeat(300));
+        assert_eq!(hint.len(), 768);
+        assert_eq!(hint.chars().count(), 192);
+        assert!(recognition_hint("\0\n\t").is_empty());
+    }
 
     #[test]
     fn rejects_unbounded_and_invalid_pcm() {

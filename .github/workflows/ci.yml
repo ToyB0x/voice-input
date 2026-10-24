@@ -16,7 +16,7 @@ jobs:
   macos:
     name: macOS app
     runs-on: macos-14
-    timeout-minutes: 35
+    timeout-minutes: 45
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
@@ -67,12 +67,22 @@ jobs:
             ~/.cargo/registry
             src-tauri/target
           key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+      - name: Build observable native context fixture
+        run: |
+          fixture="$RUNNER_TEMP/Local Context Fixture.app"
+          mkdir -p "$fixture/Contents/MacOS"
+          xcrun swiftc scripts/macos-context-target.swift -o "$fixture/Contents/MacOS/context-fixture"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.contextfixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string context-fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local Context Fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
+          codesign --force --sign - "$fixture"
       - name: Verify native window and capture screenshot
         timeout-minutes: 3
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
           cp scripts/macos-window-smoke.swift "$RUNNER_TEMP/main.swift"
-          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift scripts/macos-insertion-interaction.swift \
+          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift scripts/macos-insertion-interaction.swift scripts/macos-context-interaction.swift \
             -o "$RUNNER_TEMP/voice-input-smoke-runner" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/swift-build.log"
           "$RUNNER_TEMP/voice-input-smoke-runner" \
@@ -159,6 +169,16 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Insertion Guard Fixture' "$fixture/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
           codesign --force --sign - "$fixture"
+      - name: Verify untrusted context falls back to audio only
+        timeout-minutes: 5
+        env:
+          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
+        run: |
+          tccutil reset Accessibility dev.toyb0x.voiceinput
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/context-denied" context-denied \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/context-denied.log"
       - name: Verify untrusted product refuses direct insertion
         timeout-minutes: 5
         env:
@@ -205,6 +225,30 @@ jobs:
                 2>&1 | tee -a "$evidence" || true
             fi
           done
+      - name: Verify bounded context, opt-out and protected field exclusions
+        timeout-minutes: 10
+        env:
+          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
+          VOICE_INPUT_CONTEXT_TARGET: ${{ runner.temp }}/Local Context Fixture.app
+        run: |
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/context" context \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/context.log"
+      - name: Verify context preference restores without retained text
+        timeout-minutes: 3
+        run: |
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/context-restore" context-restore \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/context-restore.log"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          settings = json.loads((Path.home() / 'Library/Application Support/dev.toyb0x.voiceinput/settings.json').read_text())
+          assert settings['recognitionContext'] is True
+          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'recognitionContext'}
+          PY
       - name: Verify trusted product insertion and cancellation guards
         timeout-minutes: 12
         env:

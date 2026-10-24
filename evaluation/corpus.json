@@ -17,7 +17,9 @@
         "audio_path": "10339149383603832153.wav",
         "gender_label": 0,
         "original_sha256": "88391f365cdecc51a56ef5f9322c441c0107ab8d0c6f7a3a09f2334ffe8c56ff"
-      }
+      },
+      "hint": "散策メモ: 村、30分。",
+      "unrelated_hint": "別件のメモ: ゼノヴァリンク、葛飾北斎。"
     },
     {
       "id": "fleurs-ja-059",
@@ -35,7 +37,9 @@
         "audio_path": "13740690804303709739.wav",
         "gender_label": 1,
         "original_sha256": "d73d118bff278e8d63a7c8c0c61f7a13c9c2b29622561fadf3e8e4704c66a46d"
-      }
+      },
+      "hint": "工作のメモ: Wi-Fi、ドアベル。",
+      "unrelated_hint": "別件のメモ: ゼノヴァリンク、葛飾北斎。"
     },
     {
       "id": "fleurs-ja-104",
@@ -53,7 +57,9 @@
         "audio_path": "16403082667127869081.wav",
         "gender_label": 0,
         "original_sha256": "0caae89b1e9a25a3e77e0eee50247ccfd885057cd23e8b516ed74e31ebc8726a"
-      }
+      },
+      "hint": "予約メモ: ホテル、旅行代理店。",
+      "unrelated_hint": "別件のメモ: ゼノヴァリンク、葛飾北斎。"
     },
     {
       "id": "fleurs-ja-234",
@@ -71,7 +77,9 @@
         "audio_path": "8234381902997806096.wav",
         "gender_label": 0,
         "original_sha256": "d21a9c705a3513b058ad39dbf40dd495a4a5457046c22e6c2b1cb9ae9fed1fb7"
-      }
+      },
+      "hint": "掲載メモ: プロット分析、公開サイト。",
+      "unrelated_hint": "別件のメモ: ゼノヴァリンク、葛飾北斎。"
     },
     {
       "id": "fleurs-ja-192",
@@ -89,7 +97,9 @@
         "audio_path": "5510872108388823452.wav",
         "gender_label": 1,
         "original_sha256": "34edd317cdb9d481d9c2bb56aa8f378e6a604b567217de68c6d6431857e541f2"
-      }
+      },
+      "hint": "通関メモ: 中米諸国、関税。",
+      "unrelated_hint": "別件のメモ: ゼノヴァリンク、葛飾北斎。"
     },
     {
       "id": "fleurs-ja-027",
@@ -107,7 +117,9 @@
         "audio_path": "11911462902173225489.wav",
         "gender_label": 0,
         "original_sha256": "f6903865339c0af19ec5efa7214860d222ab9cb038ac96743366f9c099e6dc7b"
-      }
+      },
+      "hint": "報道メモ: NHK、新潟県、柏崎刈羽原発。",
+      "unrelated_hint": "別件のメモ: ゼノヴァリンク、葛飾北斎。"
     },
     {
       "id": "fleurs-ja-243",
@@ -125,7 +137,9 @@
         "audio_path": "8830811854444754983.wav",
         "gender_label": 0,
         "original_sha256": "7f382a29a7ebf3fea18bba106c815bcc2d2c244ca5d553e0b6991d80a1cd8bed"
-      }
+      },
+      "hint": "会議メモ: 米国、ジョージ・W・ブッシュ大統領。",
+      "unrelated_hint": "別件のメモ: ゼノヴァリンク、葛飾北斎。"
     },
     {
       "id": "silence",
@@ -135,7 +149,9 @@
       "sha256": "20eaebffe1816e0ffa6f7f854f5ef4ea80d5349faaf0ce1fec1b713e7fde58fa",
       "source": {
         "generator": "2 seconds digital zero PCM"
-      }
+      },
+      "hint": "メモ: 柏崎刈羽原発、Wi-Fi。",
+      "unrelated_hint": "別件のメモ: ゼノヴァリンク、葛飾北斎。"
     }
   ]
 }

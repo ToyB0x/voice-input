@@ -71,6 +71,7 @@ pub(crate) struct Capture {
     error: Option<String>,
     pub(crate) recognition: Session,
     pub(crate) insertion_ticket: Option<u64>,
+    pub(crate) context_hint: Option<crate::context::Hint>,
 }
 
 impl Capture {
@@ -126,7 +127,7 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub fn new(inserter: crate::insertion::Inserter) -> Self {
+    pub fn new(inserter: crate::insertion::Inserter, context: crate::context::Reader) -> Self {
         let (tx, rx) = mpsc::channel::<Request>();
         let capture = Arc::new(Mutex::new(Capture::default()));
         let jobs = transcription::worker(capture.clone(), inserter.clone());
@@ -148,6 +149,9 @@ impl Recorder {
                         c.finish();
                         if c.phase == Some("recorded") && c.recognition.model_ready {
                             let _ = transcription::recognize(&mut c, &jobs);
+                        } else if c.phase == Some("error") {
+                            context.cancel();
+                            c.context_hint = None;
                         }
                     }
                 }
@@ -169,12 +173,15 @@ impl Recorder {
                             Action::Start => {
                                 inserter.cancel();
                                 let ticket = inserter.begin();
+                                context.cancel();
+                                let hint = context.capture();
                                 if let Ok(mut c) = shared.lock() {
                                     let mut recognition = std::mem::take(&mut c.recognition);
                                     recognition.clear_result();
                                     *c = Capture {
                                         recognition,
                                         insertion_ticket: ticket,
+                                        context_hint: hint,
                                         ..Capture::default()
                                     };
                                 }
@@ -185,8 +192,10 @@ impl Recorder {
                                     }
                                     Err(error) => {
                                         inserter.cancel();
+                                        context.cancel();
                                         if let Ok(mut c) = shared.lock() {
                                             c.insertion_ticket = None;
+                                            c.context_hint = None;
                                             c.fail(error.clone());
                                         }
                                         Err(error)
@@ -202,6 +211,9 @@ impl Recorder {
                                         if c.phase == Some("recorded") && c.recognition.model_ready
                                         {
                                             let _ = transcription::recognize(&mut c, &jobs);
+                                        } else if c.phase == Some("error") {
+                                            context.cancel();
+                                            c.context_hint = None;
                                         }
                                     }
                                 }
@@ -221,10 +233,12 @@ impl Recorder {
                                 .and_then(|mut c| transcription::recognize(&mut c, &jobs)),
                             Action::Clear => {
                                 inserter.cancel();
+                                context.cancel();
                                 drop(stream.take());
                                 if let Ok(mut c) = shared.lock() {
                                     c.audio = None;
                                     c.insertion_ticket = None;
+                                    c.context_hint = None;
                                     c.phase = None;
                                     c.error = None;
                                     c.recognition.clear_result();
@@ -416,6 +430,7 @@ mod tests {
             error: None,
             recognition: Session::default(),
             insertion_ticket: None,
+            context_hint: None,
         };
         capture.finish();
         let snapshot = capture.snapshot();

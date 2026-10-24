@@ -63,6 +63,7 @@ pub(crate) enum Job {
     },
     Recognize {
         audio: Vec<f32>,
+        hint: Option<crate::context::Hint>,
         rate: u32,
         generation: u64,
     },
@@ -120,11 +121,13 @@ pub(crate) fn recognize(capture: &mut Capture, tx: &mpsc::Sender<Job>) -> Result
         .ok_or("先に音声を録音してください。")?;
     let (audio, rate) = (audio.samples.clone(), audio.sample_rate);
     let generation = capture.recognition.begin("transcribing");
+    let hint = capture.context_hint.take();
     send(
         &mut capture.recognition,
         tx,
         Job::Recognize {
             audio,
+            hint,
             rate,
             generation,
         },
@@ -176,12 +179,15 @@ pub(crate) fn worker(
                             )),
                         }
                     }
-                    Job::Recognize { audio, rate, .. } => prepare_audio(&audio, rate)
+                    Job::Recognize {
+                        audio, rate, hint, ..
+                    } => prepare_audio(&audio, rate)
                         .and_then(|pcm| {
+                            let hint = hint.and_then(|hint| hint.take());
                             model
                                 .as_ref()
                                 .expect("model readiness is worker-owned")
-                                .transcribe(&pcm)
+                                .transcribe_with_hint(&pcm, hint.as_deref())
                         })
                         .map_err(|e| format!("文字起こしに失敗しました: {e}")),
                 }
