@@ -109,7 +109,9 @@ def main():
     rss = measure(command, args.output, args.timeout)
     raw = json.loads((args.output / 'raw.json').read_text())
     metal = 'whisper_backend_init_gpu: using Metal backend' in (args.output / 'diagnostics.log').read_text()
-    if metal != (args.backend == 'metal') or raw['backend'] != args.backend or raw['model_name'] != args.model_name:
+    # whisper.cpp reports the architecture family "large" for v3-turbo too.
+    # The verified SHA-256 above identifies the exact variant.
+    if metal != (args.backend == 'metal') or raw['backend'] != args.backend or raw['model_name'] != MODELS[args.model_name].get('engine_name', args.model_name):
         raise ValueError('Requested model/backend was not actually used')
     if [c['id'] for c in raw['cases']] != list(expected):
         raise ValueError('Missing, reordered or unexpected benchmark cases')
