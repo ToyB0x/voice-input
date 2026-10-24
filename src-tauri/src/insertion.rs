@@ -95,7 +95,8 @@ fn selected_range(element: &CFType) -> Result<Range, String> {
     // AXValue enum 4 is kAXValueCFRangeType. Check type before reading memory.
     if value.type_of() != unsafe { AXValueGetTypeID() }
         || unsafe { AXValueGetType(value.as_CFTypeRef()) } != 4
-        || !unsafe { AXValueGetValue(value.as_CFTypeRef(), 4, (&mut range as *mut Range).cast()) }
+        || unsafe { AXValueGetValue(value.as_CFTypeRef(), 4, (&mut range as *mut Range).cast()) }
+            == 0
         || range.location < 0
         || range.length < 0
     {
