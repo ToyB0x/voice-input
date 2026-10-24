@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "fleurs-ja-002",
+      "path": "fixtures/fleurs-ja-002.wav",
+      "category": "daily_walk",
+      "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+      "sha256": "0a70bb710ca5143a71be4c162f5978890517491137f8a842a304eb71ce96dd43",
+      "source": {
+        "dataset": "google/fleurs",
+        "revision": "168de341b3db6859a9bac1c50a2ef5e3b47647e0",
+        "config": "ja_jp",
+        "split": "validation",
+        "row": 2,
+        "sentence_id": 1607,
+        "audio_path": "10339149383603832153.wav",
+        "gender_label": 0,
+        "original_sha256": "88391f365cdecc51a56ef5f9322c441c0107ab8d0c6f7a3a09f2334ffe8c56ff"
+      }
+    },
+    {
+      "id": "fleurs-ja-059",
+      "path": "fixtures/fleurs-ja-059.wav",
+      "category": "daily_device",
+      "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+      "sha256": "c11e1be59c6d0a668191297857c06a8b63eb97412478ab50ab899083709d4af5",
+      "source": {
+        "dataset": "google/fleurs",
+        "revision": "168de341b3db6859a9bac1c50a2ef5e3b47647e0",
+        "config": "ja_jp",
+        "split": "validation",
+        "row": 59,
+        "sentence_id": 1554,
+        "audio_path": "13740690804303709739.wav",
+        "gender_label": 1,
+        "original_sha256": "d73d118bff278e8d63a7c8c0c61f7a13c9c2b29622561fadf3e8e4704c66a46d"
+      }
+    },
+    {
+      "id": "fleurs-ja-104",
+      "path": "fixtures/fleurs-ja-104.wav",
+      "category": "request",
+      "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+      "sha256": "b5c62eefd6ce3473fe02aba976a7531047434171b8521d68af812456301bc322",
+      "source": {
+        "dataset": "google/fleurs",
+        "revision": "168de341b3db6859a9bac1c50a2ef5e3b47647e0",
+        "config": "ja_jp",
+        "split": "validation",
+        "row": 104,
+        "sentence_id": 1657,
+        "audio_path": "16403082667127869081.wav",
+        "gender_label": 0,
+        "original_sha256": "0caae89b1e9a25a3e77e0eee50247ccfd885057cd23e8b516ed74e31ebc8726a"
+      }
+    },
+    {
+      "id": "fleurs-ja-234",
+      "path": "fixtures/fleurs-ja-234.wav",
+      "category": "work_report",
+      "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+      "sha256": "1f570b5a584d8c3e3d3bcee5edee89b98f23ef08ece70cae2be479be6ed78f42",
+      "source": {
+        "dataset": "google/fleurs",
+        "revision": "168de341b3db6859a9bac1c50a2ef5e3b47647e0",
+        "config": "ja_jp",
+        "split": "validation",
+        "row": 234,
+        "sentence_id": 1552,
+        "audio_path": "8234381902997806096.wav",
+        "gender_label": 0,
+        "original_sha256": "d21a9c705a3513b058ad39dbf40dd495a4a5457046c22e6c2b1cb9ae9fed1fb7"
+      }
+    },
+    {
+      "id": "fleurs-ja-192",
+      "path": "fixtures/fleurs-ja-192.wav",
+      "category": "business",
+      "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+      "sha256": "34518e592509007d886b9c9522e19b2c1d4807f982f0dc51bef8dcc6d07051b7",
+      "source": {
+        "dataset": "google/fleurs",
+        "revision": "168de341b3db6859a9bac1c50a2ef5e3b47647e0",
+        "config": "ja_jp",
+        "split": "validation",
+        "row": 192,
+        "sentence_id": 1566,
+        "audio_path": "5510872108388823452.wav",
+        "gender_label": 1,
+        "original_sha256": "34edd317cdb9d481d9c2bb56aa8f378e6a604b567217de68c6d6431857e541f2"
+      }
+    },
+    {
+      "id": "fleurs-ja-027",
+      "path": "fixtures/fleurs-ja-027.wav",
+      "category": "proper_nouns_japan",
+      "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+      "sha256": "21a62205d833003593c3296580cc42873c910455111de3d8091c0605352977cf",
+      "source": {
+        "dataset": "google/fleurs",
+        "revision": "168de341b3db6859a9bac1c50a2ef5e3b47647e0",
+        "config": "ja_jp",
+        "split": "validation",
+        "row": 27,
+        "sentence_id": 1547,
+        "audio_path": "11911462902173225489.wav",
+        "gender_label": 0,
+        "original_sha256": "f6903865339c0af19ec5efa7214860d222ab9cb038ac96743366f9c099e6dc7b"
+      }
+    },
+    {
+      "id": "fleurs-ja-243",
+      "path": "fixtures/fleurs-ja-243.wav",
+      "category": "proper_nouns_person",
+      "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+      "sha256": "07e6f6d43afd38c72b513d8725f3f4a573c19b3d57cb573b0ff062e0b88246af",
+      "source": {
+        "dataset": "google/fleurs",
+        "revision": "168de341b3db6859a9bac1c50a2ef5e3b47647e0",
+        "config": "ja_jp",
+        "split": "validation",
+        "row": 243,
+        "sentence_id": 1622,
+        "audio_path": "8830811854444754983.wav",
+        "gender_label": 0,
+        "original_sha256": "7f382a29a7ebf3fea18bba106c815bcc2d2c244ca5d553e0b6991d80a1cd8bed"
+      }
+    },
+    {
+      "id": "silence",
+      "path": "fixtures/silence.wav",
+      "category": "silence",
+      "reference": "",
+      "sha256": "20eaebffe1816e0ffa6f7f854f5ef4ea80d5349faaf0ce1fec1b713e7fde58fa",
+      "source": {
+        "generator": "2 seconds digital zero PCM"
+      }
+    }
+  ]
+}

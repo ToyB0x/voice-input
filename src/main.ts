@@ -12,6 +12,8 @@ type Snapshot = {
   error: string | null;
   modelReady: boolean;
   modelPath: string;
+  modelName: string;
+  modelBytes: number;
   backend: string;
   working: boolean;
   recognitionPhase: string;
@@ -32,6 +34,7 @@ const duration = document.querySelector<HTMLOutputElement>("#duration")!;
 const modelPath = document.querySelector<HTMLInputElement>("#model-path")!;
 const backend = document.querySelector<HTMLSelectElement>("#backend")!;
 const loadModel = document.querySelector<HTMLButtonElement>("#load-model")!;
+const modelInfo = document.querySelector<HTMLParagraphElement>("#model-info")!;
 const modelStatus = document.querySelector<HTMLParagraphElement>("#model-status")!;
 const transcribe = document.querySelector<HTMLButtonElement>("#transcribe")!;
 const transcript = document.querySelector<HTMLTextAreaElement>("#transcript")!;
@@ -74,6 +77,8 @@ function render() {
     transcript.value = snapshot.transcript ?? "";
     copyStatus.textContent = "";
   }
+  modelInfo.hidden = !snapshot.modelReady;
+  setText(modelInfo, snapshot.modelReady ? `モデル: ${snapshot.modelName} / ${(snapshot.modelBytes / 1_000_000).toFixed(0)} MB（ファイル容量）` : "");
   const modelStates: Record<string, string> = {
     loading: "モデルを読み込み中…",
     transcribing: "文字起こし中…（この Mac 内で処理しています）",

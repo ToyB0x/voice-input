@@ -1,0 +1,98 @@
+name: Model evaluation
+
+on:
+  pull_request:
+    paths-ignore: ["docs/**", "README.md", "evaluation/baseline/**"]
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "README.md", "evaluation/baseline/**"]
+  workflow_dispatch:
+    inputs:
+      include_medium:
+        description: Also evaluate the larger medium model
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evaluation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    name: Evaluate ${{ matrix.model }} (macOS)
+    runs-on: macos-14
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.include_medium && '["base","small","medium"]' || '["base","small"]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-transcription/target
+          key: macos-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Check scorer and benchmark binary
+        run: |
+          python3 -m unittest discover -s scripts/tests -v
+          cargo fmt --manifest-path crates/local-transcription/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/local-transcription/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path crates/local-transcription/Cargo.toml --locked
+          cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked --bin evaluate
+      - name: Prepare fixed model (setup only)
+        run: python3 scripts/prepare-transcription-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/model.bin"
+      - name: Evaluate CPU and actual Metal with networking denied
+        timeout-minutes: 40
+        run: |
+          evidence="$RUNNER_TEMP/model-evaluation"
+          mkdir -p "$evidence"
+          cp evaluation/corpus.json evaluation/fixtures/README.md evaluation/fixtures/CC-BY-4.0.txt "$evidence/"
+          policy='(version 1) (allow default) (deny network*)'
+          for backend in cpu metal; do
+            sandbox-exec -p "$policy" python3 scripts/evaluate_models.py \
+              --binary crates/local-transcription/target/release/evaluate \
+              --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
+              --backend "$backend" --output "$evidence/$backend" \
+              --require-network-denied --timeout 1800 \
+              2>&1 | tee "$evidence/$backend.log"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-evaluation-${{ matrix.model }}
+          path: ${{ runner.temp }}/model-evaluation/
+          retention-days: 14
+          if-no-files-found: warn
+
+  summary:
+    name: Compare complete evaluation results
+    needs: evaluate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: model-evaluation-*
+          path: ${{ runner.temp }}/evaluation-reports
+      - name: Publish comparison and provisional CPU ranking
+        env:
+          EVALUATION_MODELS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_medium && '["base","small","medium"]' || '["base","small"]' }}
+        run: |
+          python3 scripts/summarize_evaluation.py "$RUNNER_TEMP/evaluation-reports" \
+            "$RUNNER_TEMP/evaluation-summary" --models "$EVALUATION_MODELS" --require-network-denied
+          cat "$RUNNER_TEMP/evaluation-summary/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-evaluation-summary
+          path: ${{ runner.temp }}/evaluation-summary/
+          retention-days: 14

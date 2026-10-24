@@ -1,0 +1,1650 @@
+[
+  {
+    "schema_version": 1,
+    "protocol_version": "ja-cer-v1",
+    "source_revision": "28dfbe23992404fc6152dd2767793957df60900b",
+    "source_dirty": false,
+    "cargo_lock_sha256": "1714898541846a9e20679280d2d00af87628489a704abf4aefa1f7cd8721eb84",
+    "binary_sha256": "03d6c259ff4bc19b9dcc87d37d3195bc0fed4aa7760ad56a2e9a038d3999ceb5",
+    "timestamp": "2026-10-23T23:58:16.897269+00:00",
+    "host": {
+      "system": "Darwin",
+      "release": "23.6.0",
+      "machine": "arm64",
+      "logical_cpus": 3,
+      "python": "3.14.7",
+      "machdep.cpu.brand_string": "Apple M1 (Virtual)",
+      "hw.memsize": "7516192768"
+    },
+    "model_name": "base",
+    "model_sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+    "model_revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "model_bytes": 147951465,
+    "backend": "cpu",
+    "metal_initialized": false,
+    "corpus_sha256": "3218f93ab95a9ba07952e29a15464d5f8371efad27ebda94f31db309b3ddfe75",
+    "network_denied_probe": true,
+    "peak_process_rss_bytes": 465207296,
+    "load_ms": 16885.412417,
+    "cold_first_inference": {
+      "text": "今日見を注いられるもらおう30分ほど参索するのは勝ちがあります",
+      "inference_ms": 1455.440167
+    },
+    "summary": {
+      "edits": 142,
+      "reference_chars": 406,
+      "cer": 0.3497536945812808,
+      "median_inference_ms": 1279.9586250000002,
+      "rtf": 0.14934588137880273,
+      "silence_false_positives": 0
+    },
+    "by_category": {
+      "business": {
+        "edits": 12,
+        "reference_chars": 60,
+        "cer": 0.2,
+        "median_inference_ms": 1241.1875,
+        "rtf": 0.12168504901960785,
+        "silence_false_positives": 0
+      },
+      "daily_device": {
+        "edits": 2,
+        "reference_chars": 42,
+        "cer": 0.047619047619047616,
+        "median_inference_ms": 1271.1830835,
+        "rtf": 0.16423554050387598,
+        "silence_false_positives": 0
+      },
+      "daily_walk": {
+        "edits": 26,
+        "reference_chars": 56,
+        "cer": 0.4642857142857143,
+        "median_inference_ms": 1323.6041455,
+        "rtf": 0.16586518114035087,
+        "silence_false_positives": 0
+      },
+      "proper_nouns_japan": {
+        "edits": 44,
+        "reference_chars": 70,
+        "cer": 0.6285714285714286,
+        "median_inference_ms": 1300.0160625,
+        "rtf": 0.12241205861581922,
+        "silence_false_positives": 0
+      },
+      "proper_nouns_person": {
+        "edits": 36,
+        "reference_chars": 54,
+        "cer": 0.6666666666666666,
+        "median_inference_ms": 1248.4779585,
+        "rtf": 0.1541330812962963,
+        "silence_false_positives": 0
+      },
+      "request": {
+        "edits": 18,
+        "reference_chars": 74,
+        "cer": 0.24324324324324326,
+        "median_inference_ms": 1478.368,
+        "rtf": 0.1687634703196347,
+        "silence_false_positives": 0
+      },
+      "silence": {
+        "edits": 0,
+        "reference_chars": 0,
+        "cer": null,
+        "median_inference_ms": null,
+        "rtf": null,
+        "silence_false_positives": 0
+      },
+      "work_report": {
+        "edits": 4,
+        "reference_chars": 50,
+        "cer": 0.08,
+        "median_inference_ms": 1268.1704375,
+        "rtf": 0.16384630975452197,
+        "silence_false_positives": 0
+      }
+    },
+    "cases": [
+      {
+        "id": "fleurs-ja-002",
+        "category": "daily_walk",
+        "repeat": 1,
+        "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+        "hypothesis": "今日見を注いられるもらおう30分ほど参索するのは勝ちがあります",
+        "raw": {
+          "edits": 14,
+          "reference_chars": 29,
+          "cer": 0.4827586206896552
+        },
+        "normalized": {
+          "edits": 13,
+          "reference_chars": 28,
+          "cer": 0.4642857142857143
+        },
+        "inference_ms": 1242.084208,
+        "audio_seconds": 7.98
+      },
+      {
+        "id": "fleurs-ja-002",
+        "category": "daily_walk",
+        "repeat": 2,
+        "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+        "hypothesis": "今日見を注いられるもらおう30分ほど参索するのは勝ちがあります",
+        "raw": {
+          "edits": 14,
+          "reference_chars": 29,
+          "cer": 0.4827586206896552
+        },
+        "normalized": {
+          "edits": 13,
+          "reference_chars": 28,
+          "cer": 0.4642857142857143
+        },
+        "inference_ms": 1405.124083,
+        "audio_seconds": 7.98
+      },
+      {
+        "id": "fleurs-ja-059",
+        "category": "daily_device",
+        "repeat": 1,
+        "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+        "hypothesis": "彼はWi-Fiでなるドアベルを作ったそうです",
+        "raw": {
+          "edits": 2,
+          "reference_chars": 23,
+          "cer": 0.08695652173913043
+        },
+        "normalized": {
+          "edits": 1,
+          "reference_chars": 21,
+          "cer": 0.047619047619047616
+        },
+        "inference_ms": 1329.165667,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-059",
+        "category": "daily_device",
+        "repeat": 2,
+        "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+        "hypothesis": "彼はWi-Fiでなるドアベルを作ったそうです",
+        "raw": {
+          "edits": 2,
+          "reference_chars": 23,
+          "cer": 0.08695652173913043
+        },
+        "normalized": {
+          "edits": 1,
+          "reference_chars": 21,
+          "cer": 0.047619047619047616
+        },
+        "inference_ms": 1213.2005,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-104",
+        "category": "request",
+        "repeat": 1,
+        "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "hypothesis": "しかし、変更ネガや要望は、ホテルに直説ではなく、まず旅行大点でなくしてください。",
+        "raw": {
+          "edits": 9,
+          "reference_chars": 41,
+          "cer": 0.21951219512195122
+        },
+        "normalized": {
+          "edits": 9,
+          "reference_chars": 37,
+          "cer": 0.24324324324324326
+        },
+        "inference_ms": 1681.443333,
+        "audio_seconds": 8.76
+      },
+      {
+        "id": "fleurs-ja-104",
+        "category": "request",
+        "repeat": 2,
+        "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "hypothesis": "しかし、変更ネガや要望は、ホテルに直説ではなく、まず旅行大点でなくしてください。",
+        "raw": {
+          "edits": 9,
+          "reference_chars": 41,
+          "cer": 0.21951219512195122
+        },
+        "normalized": {
+          "edits": 9,
+          "reference_chars": 37,
+          "cer": 0.24324324324324326
+        },
+        "inference_ms": 1275.292667,
+        "audio_seconds": 8.76
+      },
+      {
+        "id": "fleurs-ja-234",
+        "category": "work_report",
+        "repeat": 1,
+        "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "hypothesis": "プロット分析の結果は公開サイトに経済される予定です。",
+        "raw": {
+          "edits": 3,
+          "reference_chars": 27,
+          "cer": 0.1111111111111111
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 25,
+          "cer": 0.08
+        },
+        "inference_ms": 1307.661333,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-234",
+        "category": "work_report",
+        "repeat": 2,
+        "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "hypothesis": "プロット分析の結果は公開サイトに経済される予定です。",
+        "raw": {
+          "edits": 3,
+          "reference_chars": 27,
+          "cer": 0.1111111111111111
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 25,
+          "cer": 0.08
+        },
+        "inference_ms": 1228.679542,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-192",
+        "category": "business",
+        "repeat": 1,
+        "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+        "hypothesis": "しかしこちらの装備の80%は中米所隔で完全をかけられていました。",
+        "raw": {
+          "edits": 7,
+          "reference_chars": 33,
+          "cer": 0.21212121212121213
+        },
+        "normalized": {
+          "edits": 6,
+          "reference_chars": 30,
+          "cer": 0.2
+        },
+        "inference_ms": 1277.6246250000002,
+        "audio_seconds": 10.2
+      },
+      {
+        "id": "fleurs-ja-192",
+        "category": "business",
+        "repeat": 2,
+        "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+        "hypothesis": "しかしこちらの装備の80%は中米所隔で完全をかけられていました。",
+        "raw": {
+          "edits": 7,
+          "reference_chars": 33,
+          "cer": 0.21212121212121213
+        },
+        "normalized": {
+          "edits": 6,
+          "reference_chars": 30,
+          "cer": 0.2
+        },
+        "inference_ms": 1204.7503749999998,
+        "audio_seconds": 10.2
+      },
+      {
+        "id": "fleurs-ja-027",
+        "category": "proper_nouns_japan",
+        "repeat": 1,
+        "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+        "hypothesis": "またNHKはNigadakienの化粧化づきカリワ原発が成長に活動していると報道していました。",
+        "raw": {
+          "edits": 23,
+          "reference_chars": 37,
+          "cer": 0.6216216216216216
+        },
+        "normalized": {
+          "edits": 22,
+          "reference_chars": 35,
+          "cer": 0.6285714285714286
+        },
+        "inference_ms": 1317.7395000000001,
+        "audio_seconds": 10.62
+      },
+      {
+        "id": "fleurs-ja-027",
+        "category": "proper_nouns_japan",
+        "repeat": 2,
+        "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+        "hypothesis": "またNHKはNigadakienの化粧化づきカリワ原発が成長に活動していると報道していました。",
+        "raw": {
+          "edits": 23,
+          "reference_chars": 37,
+          "cer": 0.6216216216216216
+        },
+        "normalized": {
+          "edits": 22,
+          "reference_chars": 35,
+          "cer": 0.6285714285714286
+        },
+        "inference_ms": 1282.292625,
+        "audio_seconds": 10.62
+      },
+      {
+        "id": "fleurs-ja-243",
+        "category": "proper_nouns_person",
+        "repeat": 1,
+        "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+        "hypothesis": "米国の上次W主題投領は東海ハッピーを関係しました",
+        "raw": {
+          "edits": 21,
+          "reference_chars": 30,
+          "cer": 0.7
+        },
+        "normalized": {
+          "edits": 18,
+          "reference_chars": 27,
+          "cer": 0.6666666666666666
+        },
+        "inference_ms": 1153.196042,
+        "audio_seconds": 8.1
+      },
+      {
+        "id": "fleurs-ja-243",
+        "category": "proper_nouns_person",
+        "repeat": 2,
+        "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+        "hypothesis": "米国の上次W主題投領は東海ハッピーを関係しました",
+        "raw": {
+          "edits": 21,
+          "reference_chars": 30,
+          "cer": 0.7
+        },
+        "normalized": {
+          "edits": 18,
+          "reference_chars": 27,
+          "cer": 0.6666666666666666
+        },
+        "inference_ms": 1343.759875,
+        "audio_seconds": 8.1
+      },
+      {
+        "id": "silence",
+        "category": "silence",
+        "repeat": 1,
+        "reference": "",
+        "hypothesis": "",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "inference_ms": 0.049917,
+        "audio_seconds": 2.0
+      },
+      {
+        "id": "silence",
+        "category": "silence",
+        "repeat": 2,
+        "reference": "",
+        "hypothesis": "",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "inference_ms": 0.049499999999999995,
+        "audio_seconds": 2.0
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "protocol_version": "ja-cer-v1",
+    "source_revision": "28dfbe23992404fc6152dd2767793957df60900b",
+    "source_dirty": false,
+    "cargo_lock_sha256": "1714898541846a9e20679280d2d00af87628489a704abf4aefa1f7cd8721eb84",
+    "binary_sha256": "03d6c259ff4bc19b9dcc87d37d3195bc0fed4aa7760ad56a2e9a038d3999ceb5",
+    "timestamp": "2026-10-23T23:59:18.665834+00:00",
+    "host": {
+      "system": "Darwin",
+      "release": "23.6.0",
+      "machine": "arm64",
+      "logical_cpus": 3,
+      "python": "3.14.7",
+      "machdep.cpu.brand_string": "Apple M1 (Virtual)",
+      "hw.memsize": "7516192768"
+    },
+    "model_name": "base",
+    "model_sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+    "model_revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "model_bytes": 147951465,
+    "backend": "metal",
+    "metal_initialized": true,
+    "corpus_sha256": "3218f93ab95a9ba07952e29a15464d5f8371efad27ebda94f31db309b3ddfe75",
+    "network_denied_probe": true,
+    "peak_process_rss_bytes": 575750144,
+    "load_ms": 171.996,
+    "cold_first_inference": {
+      "text": "今日見を注いられるもらおう30分ほど参索するのは勝ちがあります",
+      "inference_ms": 3589.8974580000004
+    },
+    "summary": {
+      "edits": 142,
+      "reference_chars": 406,
+      "cer": 0.3497536945812808,
+      "median_inference_ms": 3903.710271,
+      "rtf": 0.4696629992067386,
+      "silence_false_positives": 0
+    },
+    "by_category": {
+      "business": {
+        "edits": 12,
+        "reference_chars": 60,
+        "cer": 0.2,
+        "median_inference_ms": 3811.4132499999996,
+        "rtf": 0.3736679656862745,
+        "silence_false_positives": 0
+      },
+      "daily_device": {
+        "edits": 2,
+        "reference_chars": 42,
+        "cer": 0.047619047619047616,
+        "median_inference_ms": 2999.6565,
+        "rtf": 0.387552519379845,
+        "silence_false_positives": 0
+      },
+      "daily_walk": {
+        "edits": 26,
+        "reference_chars": 56,
+        "cer": 0.4642857142857143,
+        "median_inference_ms": 3483.8296245,
+        "rtf": 0.43657012838345866,
+        "silence_false_positives": 0
+      },
+      "proper_nouns_japan": {
+        "edits": 44,
+        "reference_chars": 70,
+        "cer": 0.6285714285714286,
+        "median_inference_ms": 5693.0476045,
+        "rtf": 0.5360685126647834,
+        "silence_false_positives": 0
+      },
+      "proper_nouns_person": {
+        "edits": 36,
+        "reference_chars": 54,
+        "cer": 0.6666666666666666,
+        "median_inference_ms": 4297.319792,
+        "rtf": 0.530533307654321,
+        "silence_false_positives": 0
+      },
+      "request": {
+        "edits": 18,
+        "reference_chars": 74,
+        "cer": 0.24324324324324326,
+        "median_inference_ms": 4807.6317085,
+        "rtf": 0.5488164050799087,
+        "silence_false_positives": 0
+      },
+      "silence": {
+        "edits": 0,
+        "reference_chars": 0,
+        "cer": null,
+        "median_inference_ms": null,
+        "rtf": null,
+        "silence_false_positives": 0
+      },
+      "work_report": {
+        "edits": 4,
+        "reference_chars": 50,
+        "cer": 0.08,
+        "median_inference_ms": 3622.297292,
+        "rtf": 0.4679970661498708,
+        "silence_false_positives": 0
+      }
+    },
+    "cases": [
+      {
+        "id": "fleurs-ja-002",
+        "category": "daily_walk",
+        "repeat": 1,
+        "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+        "hypothesis": "今日見を注いられるもらおう30分ほど参索するのは勝ちがあります",
+        "raw": {
+          "edits": 14,
+          "reference_chars": 29,
+          "cer": 0.4827586206896552
+        },
+        "normalized": {
+          "edits": 13,
+          "reference_chars": 28,
+          "cer": 0.4642857142857143
+        },
+        "inference_ms": 3508.534708,
+        "audio_seconds": 7.98
+      },
+      {
+        "id": "fleurs-ja-002",
+        "category": "daily_walk",
+        "repeat": 2,
+        "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+        "hypothesis": "今日見を注いられるもらおう30分ほど参索するのは勝ちがあります",
+        "raw": {
+          "edits": 14,
+          "reference_chars": 29,
+          "cer": 0.4827586206896552
+        },
+        "normalized": {
+          "edits": 13,
+          "reference_chars": 28,
+          "cer": 0.4642857142857143
+        },
+        "inference_ms": 3459.124541,
+        "audio_seconds": 7.98
+      },
+      {
+        "id": "fleurs-ja-059",
+        "category": "daily_device",
+        "repeat": 1,
+        "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+        "hypothesis": "彼はWi-Fiでなるドアベルを作ったそうです",
+        "raw": {
+          "edits": 2,
+          "reference_chars": 23,
+          "cer": 0.08695652173913043
+        },
+        "normalized": {
+          "edits": 1,
+          "reference_chars": 21,
+          "cer": 0.047619047619047616
+        },
+        "inference_ms": 2807.624209,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-059",
+        "category": "daily_device",
+        "repeat": 2,
+        "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+        "hypothesis": "彼はWi-Fiでなるドアベルを作ったそうです",
+        "raw": {
+          "edits": 2,
+          "reference_chars": 23,
+          "cer": 0.08695652173913043
+        },
+        "normalized": {
+          "edits": 1,
+          "reference_chars": 21,
+          "cer": 0.047619047619047616
+        },
+        "inference_ms": 3191.6887909999996,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-104",
+        "category": "request",
+        "repeat": 1,
+        "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "hypothesis": "しかし、変更ネガや要望は、ホテルに直説ではなく、まず旅行大点でなくしてください。",
+        "raw": {
+          "edits": 9,
+          "reference_chars": 41,
+          "cer": 0.21951219512195122
+        },
+        "normalized": {
+          "edits": 9,
+          "reference_chars": 37,
+          "cer": 0.24324324324324326
+        },
+        "inference_ms": 4878.612167,
+        "audio_seconds": 8.76
+      },
+      {
+        "id": "fleurs-ja-104",
+        "category": "request",
+        "repeat": 2,
+        "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "hypothesis": "しかし、変更ネガや要望は、ホテルに直説ではなく、まず旅行大点でなくしてください。",
+        "raw": {
+          "edits": 9,
+          "reference_chars": 41,
+          "cer": 0.21951219512195122
+        },
+        "normalized": {
+          "edits": 9,
+          "reference_chars": 37,
+          "cer": 0.24324324324324326
+        },
+        "inference_ms": 4736.65125,
+        "audio_seconds": 8.76
+      },
+      {
+        "id": "fleurs-ja-234",
+        "category": "work_report",
+        "repeat": 1,
+        "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "hypothesis": "プロット分析の結果は公開サイトに経済される予定です。",
+        "raw": {
+          "edits": 3,
+          "reference_chars": 27,
+          "cer": 0.1111111111111111
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 25,
+          "cer": 0.08
+        },
+        "inference_ms": 3448.6121669999998,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-234",
+        "category": "work_report",
+        "repeat": 2,
+        "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "hypothesis": "プロット分析の結果は公開サイトに経済される予定です。",
+        "raw": {
+          "edits": 3,
+          "reference_chars": 27,
+          "cer": 0.1111111111111111
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 25,
+          "cer": 0.08
+        },
+        "inference_ms": 3795.982417,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-192",
+        "category": "business",
+        "repeat": 1,
+        "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+        "hypothesis": "しかしこちらの装備の80%は中米所隔で完全をかけられていました。",
+        "raw": {
+          "edits": 7,
+          "reference_chars": 33,
+          "cer": 0.21212121212121213
+        },
+        "normalized": {
+          "edits": 6,
+          "reference_chars": 30,
+          "cer": 0.2
+        },
+        "inference_ms": 3611.3883749999995,
+        "audio_seconds": 10.2
+      },
+      {
+        "id": "fleurs-ja-192",
+        "category": "business",
+        "repeat": 2,
+        "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+        "hypothesis": "しかしこちらの装備の80%は中米所隔で完全をかけられていました。",
+        "raw": {
+          "edits": 7,
+          "reference_chars": 33,
+          "cer": 0.21212121212121213
+        },
+        "normalized": {
+          "edits": 6,
+          "reference_chars": 30,
+          "cer": 0.2
+        },
+        "inference_ms": 4011.4381249999997,
+        "audio_seconds": 10.2
+      },
+      {
+        "id": "fleurs-ja-027",
+        "category": "proper_nouns_japan",
+        "repeat": 1,
+        "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+        "hypothesis": "またNHKはNigadakienの化粧化づきカリワ原発が成長に活動していると報道していました。",
+        "raw": {
+          "edits": 23,
+          "reference_chars": 37,
+          "cer": 0.6216216216216216
+        },
+        "normalized": {
+          "edits": 22,
+          "reference_chars": 35,
+          "cer": 0.6285714285714286
+        },
+        "inference_ms": 6000.209167,
+        "audio_seconds": 10.62
+      },
+      {
+        "id": "fleurs-ja-027",
+        "category": "proper_nouns_japan",
+        "repeat": 2,
+        "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+        "hypothesis": "またNHKはNigadakienの化粧化づきカリワ原発が成長に活動していると報道していました。",
+        "raw": {
+          "edits": 23,
+          "reference_chars": 37,
+          "cer": 0.6216216216216216
+        },
+        "normalized": {
+          "edits": 22,
+          "reference_chars": 35,
+          "cer": 0.6285714285714286
+        },
+        "inference_ms": 5385.886042,
+        "audio_seconds": 10.62
+      },
+      {
+        "id": "fleurs-ja-243",
+        "category": "proper_nouns_person",
+        "repeat": 1,
+        "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+        "hypothesis": "米国の上次W主題投領は東海ハッピーを関係しました",
+        "raw": {
+          "edits": 21,
+          "reference_chars": 30,
+          "cer": 0.7
+        },
+        "normalized": {
+          "edits": 18,
+          "reference_chars": 27,
+          "cer": 0.6666666666666666
+        },
+        "inference_ms": 4482.514417,
+        "audio_seconds": 8.1
+      },
+      {
+        "id": "fleurs-ja-243",
+        "category": "proper_nouns_person",
+        "repeat": 2,
+        "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+        "hypothesis": "米国の上次W主題投領は東海ハッピーを関係しました",
+        "raw": {
+          "edits": 21,
+          "reference_chars": 30,
+          "cer": 0.7
+        },
+        "normalized": {
+          "edits": 18,
+          "reference_chars": 27,
+          "cer": 0.6666666666666666
+        },
+        "inference_ms": 4112.125167,
+        "audio_seconds": 8.1
+      },
+      {
+        "id": "silence",
+        "category": "silence",
+        "repeat": 1,
+        "reference": "",
+        "hypothesis": "",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "inference_ms": 0.093583,
+        "audio_seconds": 2.0
+      },
+      {
+        "id": "silence",
+        "category": "silence",
+        "repeat": 2,
+        "reference": "",
+        "hypothesis": "",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "inference_ms": 0.093084,
+        "audio_seconds": 2.0
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "protocol_version": "ja-cer-v1",
+    "source_revision": "28dfbe23992404fc6152dd2767793957df60900b",
+    "source_dirty": false,
+    "cargo_lock_sha256": "1714898541846a9e20679280d2d00af87628489a704abf4aefa1f7cd8721eb84",
+    "binary_sha256": "03d6c259ff4bc19b9dcc87d37d3195bc0fed4aa7760ad56a2e9a038d3999ceb5",
+    "timestamp": "2026-10-23T23:58:38.600161+00:00",
+    "host": {
+      "system": "Darwin",
+      "release": "23.6.0",
+      "machine": "arm64",
+      "logical_cpus": 3,
+      "python": "3.14.7",
+      "machdep.cpu.brand_string": "Apple M1 (Virtual)",
+      "hw.memsize": "7516192768"
+    },
+    "model_name": "small",
+    "model_sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+    "model_revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "model_bytes": 487601967,
+    "backend": "cpu",
+    "metal_initialized": false,
+    "corpus_sha256": "3218f93ab95a9ba07952e29a15464d5f8371efad27ebda94f31db309b3ddfe75",
+    "network_denied_probe": true,
+    "peak_process_rss_bytes": 920600576,
+    "load_ms": 15322.241957999999,
+    "cold_first_inference": {
+      "text": "興味を誘われる村を30分ほど散策するのは賢があります",
+      "inference_ms": 4575.688999999999
+    },
+    "summary": {
+      "edits": 62,
+      "reference_chars": 406,
+      "cer": 0.15270935960591134,
+      "median_inference_ms": 3962.324021,
+      "rtf": 0.453193448119071,
+      "silence_false_positives": 0
+    },
+    "by_category": {
+      "business": {
+        "edits": 4,
+        "reference_chars": 60,
+        "cer": 0.06666666666666667,
+        "median_inference_ms": 3946.212396,
+        "rtf": 0.38688356823529413,
+        "silence_false_positives": 0
+      },
+      "daily_device": {
+        "edits": 2,
+        "reference_chars": 42,
+        "cer": 0.047619047619047616,
+        "median_inference_ms": 3602.7373955000003,
+        "rtf": 0.4654699477390181,
+        "silence_false_positives": 0
+      },
+      "daily_walk": {
+        "edits": 10,
+        "reference_chars": 56,
+        "cer": 0.17857142857142858,
+        "median_inference_ms": 3861.70325,
+        "rtf": 0.48392271303258144,
+        "silence_false_positives": 0
+      },
+      "proper_nouns_japan": {
+        "edits": 30,
+        "reference_chars": 70,
+        "cer": 0.42857142857142855,
+        "median_inference_ms": 4000.6173959999996,
+        "rtf": 0.3767059694915254,
+        "silence_false_positives": 0
+      },
+      "proper_nouns_person": {
+        "edits": 12,
+        "reference_chars": 54,
+        "cer": 0.2222222222222222,
+        "median_inference_ms": 4197.3908755,
+        "rtf": 0.5181964043827161,
+        "silence_false_positives": 0
+      },
+      "request": {
+        "edits": 4,
+        "reference_chars": 74,
+        "cer": 0.05405405405405406,
+        "median_inference_ms": 3973.2573545000005,
+        "rtf": 0.4535681911529681,
+        "silence_false_positives": 0
+      },
+      "silence": {
+        "edits": 0,
+        "reference_chars": 0,
+        "cer": null,
+        "median_inference_ms": null,
+        "rtf": null,
+        "silence_false_positives": 0
+      },
+      "work_report": {
+        "edits": 0,
+        "reference_chars": 50,
+        "cer": 0.0,
+        "median_inference_ms": 4126.3287505,
+        "rtf": 0.533117409625323,
+        "silence_false_positives": 0
+      }
+    },
+    "cases": [
+      {
+        "id": "fleurs-ja-002",
+        "category": "daily_walk",
+        "repeat": 1,
+        "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+        "hypothesis": "興味を誘われる村を30分ほど散策するのは賢があります",
+        "raw": {
+          "edits": 6,
+          "reference_chars": 29,
+          "cer": 0.20689655172413793
+        },
+        "normalized": {
+          "edits": 5,
+          "reference_chars": 28,
+          "cer": 0.17857142857142858
+        },
+        "inference_ms": 3780.754375,
+        "audio_seconds": 7.98
+      },
+      {
+        "id": "fleurs-ja-002",
+        "category": "daily_walk",
+        "repeat": 2,
+        "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+        "hypothesis": "興味を誘われる村を30分ほど散策するのは賢があります",
+        "raw": {
+          "edits": 6,
+          "reference_chars": 29,
+          "cer": 0.20689655172413793
+        },
+        "normalized": {
+          "edits": 5,
+          "reference_chars": 28,
+          "cer": 0.17857142857142858
+        },
+        "inference_ms": 3942.652125,
+        "audio_seconds": 7.98
+      },
+      {
+        "id": "fleurs-ja-059",
+        "category": "daily_device",
+        "repeat": 1,
+        "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+        "hypothesis": "彼はwifiでなるドアベルを作ったそうです",
+        "raw": {
+          "edits": 5,
+          "reference_chars": 23,
+          "cer": 0.21739130434782608
+        },
+        "normalized": {
+          "edits": 1,
+          "reference_chars": 21,
+          "cer": 0.047619047619047616
+        },
+        "inference_ms": 3700.095291,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-059",
+        "category": "daily_device",
+        "repeat": 2,
+        "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+        "hypothesis": "彼はwifiでなるドアベルを作ったそうです",
+        "raw": {
+          "edits": 5,
+          "reference_chars": 23,
+          "cer": 0.21739130434782608
+        },
+        "normalized": {
+          "edits": 1,
+          "reference_chars": 21,
+          "cer": 0.047619047619047616
+        },
+        "inference_ms": 3505.3795,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-104",
+        "category": "request",
+        "repeat": 1,
+        "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "hypothesis": "しかし、変更ネガや要望はホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "raw": {
+          "edits": 3,
+          "reference_chars": 41,
+          "cer": 0.07317073170731707
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 37,
+          "cer": 0.05405405405405406
+        },
+        "inference_ms": 4103.5647500000005,
+        "audio_seconds": 8.76
+      },
+      {
+        "id": "fleurs-ja-104",
+        "category": "request",
+        "repeat": 2,
+        "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "hypothesis": "しかし、変更ネガや要望はホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "raw": {
+          "edits": 3,
+          "reference_chars": 41,
+          "cer": 0.07317073170731707
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 37,
+          "cer": 0.05405405405405406
+        },
+        "inference_ms": 3842.949959,
+        "audio_seconds": 8.76
+      },
+      {
+        "id": "fleurs-ja-234",
+        "category": "work_report",
+        "repeat": 1,
+        "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "hypothesis": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 27,
+          "cer": 0.0
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 25,
+          "cer": 0.0
+        },
+        "inference_ms": 3879.289667,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-234",
+        "category": "work_report",
+        "repeat": 2,
+        "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "hypothesis": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 27,
+          "cer": 0.0
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 25,
+          "cer": 0.0
+        },
+        "inference_ms": 4373.367834,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-192",
+        "category": "business",
+        "repeat": 1,
+        "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+        "hypothesis": "しかしこちらの商品の80%は、 中米諸国で完全をかけられていました。",
+        "raw": {
+          "edits": 5,
+          "reference_chars": 33,
+          "cer": 0.15151515151515152
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 30,
+          "cer": 0.06666666666666667
+        },
+        "inference_ms": 3731.325334,
+        "audio_seconds": 10.2
+      },
+      {
+        "id": "fleurs-ja-192",
+        "category": "business",
+        "repeat": 2,
+        "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+        "hypothesis": "しかしこちらの商品の80%は、 中米諸国で完全をかけられていました。",
+        "raw": {
+          "edits": 5,
+          "reference_chars": 33,
+          "cer": 0.15151515151515152
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 30,
+          "cer": 0.06666666666666667
+        },
+        "inference_ms": 4161.099458,
+        "audio_seconds": 10.2
+      },
+      {
+        "id": "fleurs-ja-027",
+        "category": "proper_nouns_japan",
+        "repeat": 1,
+        "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+        "hypothesis": "またNHKは、ニーガタ県の歌手和月狩りは現場に活動していると報道していました。",
+        "raw": {
+          "edits": 17,
+          "reference_chars": 37,
+          "cer": 0.4594594594594595
+        },
+        "normalized": {
+          "edits": 15,
+          "reference_chars": 35,
+          "cer": 0.42857142857142855
+        },
+        "inference_ms": 4019.238875,
+        "audio_seconds": 10.62
+      },
+      {
+        "id": "fleurs-ja-027",
+        "category": "proper_nouns_japan",
+        "repeat": 2,
+        "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+        "hypothesis": "またNHKは、ニーガタ県の歌手和月狩りは現場に活動していると報道していました。",
+        "raw": {
+          "edits": 17,
+          "reference_chars": 37,
+          "cer": 0.4594594594594595
+        },
+        "normalized": {
+          "edits": 15,
+          "reference_chars": 35,
+          "cer": 0.42857142857142855
+        },
+        "inference_ms": 3981.9959169999997,
+        "audio_seconds": 10.62
+      },
+      {
+        "id": "fleurs-ja-243",
+        "category": "proper_nouns_person",
+        "repeat": 1,
+        "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+        "hypothesis": "米国のジョージ・ダブリューブッシュ大統領は、当該発火を歓迎しました。",
+        "raw": {
+          "edits": 7,
+          "reference_chars": 30,
+          "cer": 0.23333333333333334
+        },
+        "normalized": {
+          "edits": 6,
+          "reference_chars": 27,
+          "cer": 0.2222222222222222
+        },
+        "inference_ms": 4237.913417,
+        "audio_seconds": 8.1
+      },
+      {
+        "id": "fleurs-ja-243",
+        "category": "proper_nouns_person",
+        "repeat": 2,
+        "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+        "hypothesis": "米国のジョージ・ダブリューブッシュ大統領は、当該発火を歓迎しました。",
+        "raw": {
+          "edits": 7,
+          "reference_chars": 30,
+          "cer": 0.23333333333333334
+        },
+        "normalized": {
+          "edits": 6,
+          "reference_chars": 27,
+          "cer": 0.2222222222222222
+        },
+        "inference_ms": 4156.868334000001,
+        "audio_seconds": 8.1
+      },
+      {
+        "id": "silence",
+        "category": "silence",
+        "repeat": 1,
+        "reference": "",
+        "hypothesis": "",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "inference_ms": 0.049249999999999995,
+        "audio_seconds": 2.0
+      },
+      {
+        "id": "silence",
+        "category": "silence",
+        "repeat": 2,
+        "reference": "",
+        "hypothesis": "",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "inference_ms": 0.049332999999999995,
+        "audio_seconds": 2.0
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "protocol_version": "ja-cer-v1",
+    "source_revision": "28dfbe23992404fc6152dd2767793957df60900b",
+    "source_dirty": false,
+    "cargo_lock_sha256": "1714898541846a9e20679280d2d00af87628489a704abf4aefa1f7cd8721eb84",
+    "binary_sha256": "03d6c259ff4bc19b9dcc87d37d3195bc0fed4aa7760ad56a2e9a038d3999ceb5",
+    "timestamp": "2026-10-24T00:01:08.061559+00:00",
+    "host": {
+      "system": "Darwin",
+      "release": "23.6.0",
+      "machine": "arm64",
+      "logical_cpus": 3,
+      "python": "3.14.7",
+      "machdep.cpu.brand_string": "Apple M1 (Virtual)",
+      "hw.memsize": "7516192768"
+    },
+    "model_name": "small",
+    "model_sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+    "model_revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "model_bytes": 487601967,
+    "backend": "metal",
+    "metal_initialized": true,
+    "corpus_sha256": "3218f93ab95a9ba07952e29a15464d5f8371efad27ebda94f31db309b3ddfe75",
+    "network_denied_probe": true,
+    "peak_process_rss_bytes": 1087111168,
+    "load_ms": 634.94125,
+    "cold_first_inference": {
+      "text": "興味を誘われる村を30分ほど散策するのは賢があります",
+      "inference_ms": 9198.528792
+    },
+    "summary": {
+      "edits": 62,
+      "reference_chars": 406,
+      "cer": 0.15270935960591134,
+      "median_inference_ms": 10480.702812,
+      "rtf": 1.1336290020772,
+      "silence_false_positives": 0
+    },
+    "by_category": {
+      "business": {
+        "edits": 4,
+        "reference_chars": 60,
+        "cer": 0.06666666666666667,
+        "median_inference_ms": 10812.382375000001,
+        "rtf": 1.0600374877450982,
+        "silence_false_positives": 0
+      },
+      "daily_device": {
+        "edits": 2,
+        "reference_chars": 42,
+        "cer": 0.047619047619047616,
+        "median_inference_ms": 7793.290354,
+        "rtf": 1.0068850586563307,
+        "silence_false_positives": 0
+      },
+      "daily_walk": {
+        "edits": 10,
+        "reference_chars": 56,
+        "cer": 0.17857142857142858,
+        "median_inference_ms": 8038.8825209999995,
+        "rtf": 1.0073787620300751,
+        "silence_false_positives": 0
+      },
+      "proper_nouns_japan": {
+        "edits": 30,
+        "reference_chars": 70,
+        "cer": 0.42857142857142855,
+        "median_inference_ms": 11081.755312500001,
+        "rtf": 1.0434797846045198,
+        "silence_false_positives": 0
+      },
+      "proper_nouns_person": {
+        "edits": 12,
+        "reference_chars": 54,
+        "cer": 0.2222222222222222,
+        "median_inference_ms": 10457.058146,
+        "rtf": 1.290994832839506,
+        "silence_false_positives": 0
+      },
+      "request": {
+        "edits": 4,
+        "reference_chars": 74,
+        "cer": 0.05405405405405406,
+        "median_inference_ms": 10563.2281455,
+        "rtf": 1.2058479618150684,
+        "silence_false_positives": 0
+      },
+      "silence": {
+        "edits": 0,
+        "reference_chars": 0,
+        "cer": null,
+        "median_inference_ms": null,
+        "rtf": null,
+        "silence_false_positives": 0
+      },
+      "work_report": {
+        "edits": 0,
+        "reference_chars": 50,
+        "cer": 0.0,
+        "median_inference_ms": 10563.480333,
+        "rtf": 1.3647907406976743,
+        "silence_false_positives": 0
+      }
+    },
+    "cases": [
+      {
+        "id": "fleurs-ja-002",
+        "category": "daily_walk",
+        "repeat": 1,
+        "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+        "hypothesis": "興味を誘われる村を30分ほど散策するのは賢があります",
+        "raw": {
+          "edits": 6,
+          "reference_chars": 29,
+          "cer": 0.20689655172413793
+        },
+        "normalized": {
+          "edits": 5,
+          "reference_chars": 28,
+          "cer": 0.17857142857142858
+        },
+        "inference_ms": 8189.380083,
+        "audio_seconds": 7.98
+      },
+      {
+        "id": "fleurs-ja-002",
+        "category": "daily_walk",
+        "repeat": 2,
+        "reference": "興味をそそられる村を30分ほど散策するのは価値があります。",
+        "hypothesis": "興味を誘われる村を30分ほど散策するのは賢があります",
+        "raw": {
+          "edits": 6,
+          "reference_chars": 29,
+          "cer": 0.20689655172413793
+        },
+        "normalized": {
+          "edits": 5,
+          "reference_chars": 28,
+          "cer": 0.17857142857142858
+        },
+        "inference_ms": 7888.384959,
+        "audio_seconds": 7.98
+      },
+      {
+        "id": "fleurs-ja-059",
+        "category": "daily_device",
+        "repeat": 1,
+        "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+        "hypothesis": "彼はwifiでなるドアベルを作ったそうです",
+        "raw": {
+          "edits": 5,
+          "reference_chars": 23,
+          "cer": 0.21739130434782608
+        },
+        "normalized": {
+          "edits": 1,
+          "reference_chars": 21,
+          "cer": 0.047619047619047616
+        },
+        "inference_ms": 7824.605833,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-059",
+        "category": "daily_device",
+        "repeat": 2,
+        "reference": "彼はWi-Fiで鳴るドアベルを作ったそうです。",
+        "hypothesis": "彼はwifiでなるドアベルを作ったそうです",
+        "raw": {
+          "edits": 5,
+          "reference_chars": 23,
+          "cer": 0.21739130434782608
+        },
+        "normalized": {
+          "edits": 1,
+          "reference_chars": 21,
+          "cer": 0.047619047619047616
+        },
+        "inference_ms": 7761.974875,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-104",
+        "category": "request",
+        "repeat": 1,
+        "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "hypothesis": "しかし変更ネガや要望はホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "raw": {
+          "edits": 4,
+          "reference_chars": 41,
+          "cer": 0.0975609756097561
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 37,
+          "cer": 0.05405405405405406
+        },
+        "inference_ms": 10483.646791,
+        "audio_seconds": 8.76
+      },
+      {
+        "id": "fleurs-ja-104",
+        "category": "request",
+        "repeat": 2,
+        "reference": "しかし、変更願いや要望は、ホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "hypothesis": "しかし変更ネガや要望はホテルに直接ではなく、まず旅行代理店に連絡してください。",
+        "raw": {
+          "edits": 4,
+          "reference_chars": 41,
+          "cer": 0.0975609756097561
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 37,
+          "cer": 0.05405405405405406
+        },
+        "inference_ms": 10642.8095,
+        "audio_seconds": 8.76
+      },
+      {
+        "id": "fleurs-ja-234",
+        "category": "work_report",
+        "repeat": 1,
+        "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "hypothesis": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 27,
+          "cer": 0.0
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 25,
+          "cer": 0.0
+        },
+        "inference_ms": 9832.144832999998,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-234",
+        "category": "work_report",
+        "repeat": 2,
+        "reference": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "hypothesis": "プロット分析の結果は、公開サイトに掲載される予定です。",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 27,
+          "cer": 0.0
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 25,
+          "cer": 0.0
+        },
+        "inference_ms": 11294.815832999999,
+        "audio_seconds": 7.74
+      },
+      {
+        "id": "fleurs-ja-192",
+        "category": "business",
+        "repeat": 1,
+        "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+        "hypothesis": "しかしこちらの商品の80%は、 中米諸国で完全をかけられていました。",
+        "raw": {
+          "edits": 5,
+          "reference_chars": 33,
+          "cer": 0.15151515151515152
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 30,
+          "cer": 0.06666666666666667
+        },
+        "inference_ms": 11147.005917,
+        "audio_seconds": 10.2
+      },
+      {
+        "id": "fleurs-ja-192",
+        "category": "business",
+        "repeat": 2,
+        "reference": "しかし、こちらの商品の80%は中米諸国で関税をかけられていました。",
+        "hypothesis": "しかしこちらの商品の80%は、 中米諸国で完全をかけられていました。",
+        "raw": {
+          "edits": 5,
+          "reference_chars": 33,
+          "cer": 0.15151515151515152
+        },
+        "normalized": {
+          "edits": 2,
+          "reference_chars": 30,
+          "cer": 0.06666666666666667
+        },
+        "inference_ms": 10477.758833,
+        "audio_seconds": 10.2
+      },
+      {
+        "id": "fleurs-ja-027",
+        "category": "proper_nouns_japan",
+        "repeat": 1,
+        "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+        "hypothesis": "またNHKは、ニーガタ県の歌手和月狩りは現場に活動していると報道していました。",
+        "raw": {
+          "edits": 17,
+          "reference_chars": 37,
+          "cer": 0.4594594594594595
+        },
+        "normalized": {
+          "edits": 15,
+          "reference_chars": 35,
+          "cer": 0.42857142857142855
+        },
+        "inference_ms": 11633.188083000001,
+        "audio_seconds": 10.62
+      },
+      {
+        "id": "fleurs-ja-027",
+        "category": "proper_nouns_japan",
+        "repeat": 2,
+        "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+        "hypothesis": "またNHKは、ニーガタ県の歌手和月狩りは現場に活動していると報道していました。",
+        "raw": {
+          "edits": 17,
+          "reference_chars": 37,
+          "cer": 0.4594594594594595
+        },
+        "normalized": {
+          "edits": 15,
+          "reference_chars": 35,
+          "cer": 0.42857142857142855
+        },
+        "inference_ms": 10530.322542,
+        "audio_seconds": 10.62
+      },
+      {
+        "id": "fleurs-ja-243",
+        "category": "proper_nouns_person",
+        "repeat": 1,
+        "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+        "hypothesis": "米国のジョージ・ダブリューブッシュ大統領は、当該発火を歓迎しました。",
+        "raw": {
+          "edits": 7,
+          "reference_chars": 30,
+          "cer": 0.23333333333333334
+        },
+        "normalized": {
+          "edits": 6,
+          "reference_chars": 27,
+          "cer": 0.2222222222222222
+        },
+        "inference_ms": 10120.958333,
+        "audio_seconds": 8.1
+      },
+      {
+        "id": "fleurs-ja-243",
+        "category": "proper_nouns_person",
+        "repeat": 2,
+        "reference": "米国のジョージ・W・ブッシュ大統領は当該発表を歓迎しました。",
+        "hypothesis": "米国のジョージ・ダブリューブッシュ大統領は、当該発火を歓迎しました。",
+        "raw": {
+          "edits": 7,
+          "reference_chars": 30,
+          "cer": 0.23333333333333334
+        },
+        "normalized": {
+          "edits": 6,
+          "reference_chars": 27,
+          "cer": 0.2222222222222222
+        },
+        "inference_ms": 10793.157959,
+        "audio_seconds": 8.1
+      },
+      {
+        "id": "silence",
+        "category": "silence",
+        "repeat": 1,
+        "reference": "",
+        "hypothesis": "",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "inference_ms": 0.050374999999999996,
+        "audio_seconds": 2.0
+      },
+      {
+        "id": "silence",
+        "category": "silence",
+        "repeat": 2,
+        "reference": "",
+        "hypothesis": "",
+        "raw": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "normalized": {
+          "edits": 0,
+          "reference_chars": 0,
+          "cer": null
+        },
+        "inference_ms": 0.049209,
+        "audio_seconds": 2.0
+      }
+    ]
+  }
+]

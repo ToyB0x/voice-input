@@ -12,6 +12,8 @@ use std::{
 pub(crate) struct Session {
     pub model_ready: bool,
     pub model_path: String,
+    pub model_name: String,
+    pub model_bytes: u64,
     pub backend: String,
     pub working: bool,
     pub recognition_phase: String,
@@ -44,7 +46,10 @@ impl Session {
         }
         match result {
             Ok(text) if !loading => self.transcript = Some(text),
-            Ok(_) => self.model_ready = true,
+            Ok(name) => {
+                self.model_ready = true;
+                self.model_name = name;
+            }
             Err(error) => self.recognition_error = Some(error),
         }
     }
@@ -85,6 +90,8 @@ pub(crate) fn load(
         return Err("モデルの絶対パスを指定してください。".into());
     }
     session.model_ready = false;
+    session.model_name.clear();
+    session.model_bytes = std::fs::metadata(&path).map_or(0, |file| file.len());
     session.model_path = path.clone();
     session.backend = backend.into();
     let generation = session.begin("loading");
@@ -157,8 +164,9 @@ pub(crate) fn worker(shared: Arc<Mutex<Capture>>) -> mpsc::Sender<Job> {
                         model = None;
                         match Transcriber::load(Path::new(&path), backend) {
                             Ok(engine) => {
+                                let name = engine.model_name();
                                 model = Some(engine);
-                                Ok(String::new())
+                                Ok(name)
                             }
                             Err(e) => Err(format!(
                                 "モデルを読み込めません。配置と形式を確認してください: {e}"

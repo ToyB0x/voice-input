@@ -1,0 +1,6 @@
+{
+  "scope": "fixed read-speech subset; CPU ranking only",
+  "speed_model": "base",
+  "accuracy_model": "small",
+  "corpus_sha256": "3218f93ab95a9ba07952e29a15464d5f8371efad27ebda94f31db309b3ddfe75"
+}
