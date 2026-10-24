@@ -15,7 +15,7 @@ class CorrectionTests(unittest.TestCase):
     def test_runtime_failure_is_distinct_from_protocol_rejection(self):
         for kind,rejected in [('runtime',False),('rejected',True)]:
             result=CompletedProcess([],1,json.dumps(dict(error=kind,stage='validation' if rejected else 'model')),'')
-            with patch('evaluate_correction.subprocess.run',return_value=result):
+            with patch('evaluate_correction.run_inference',return_value=result):
                 item=infer(Path('/binary'),Path('/model'),'cpu','original','')
             self.assertTrue(item['failed'])
             self.assertEqual(item['rejected'],rejected)

@@ -17,10 +17,11 @@ def measured_infer(binary, model, backend, raw, context):
                     diagnostic_stderr='Inference exceeded the subprocess time limit.')
 
 
-def run_probes(binary, model, cases, output, model_name, identity):
+def run_probes(binary, model, cases, output, model_name, identity, cpu_only=False):
     records = []
     report = dict(model=model_name, identity=identity, os=platform.platform(),
                   network_denied=True, cases=records, metal=None, metal_unavailable=False,
+                  metal_skipped=cpu_only,
                   limitation='Nine fixed synthetic cases only. Not a speech/OCR quality comparison. Rejections retain raw text.')
 
     def persist():
@@ -32,7 +33,9 @@ def run_probes(binary, model, cases, output, model_name, identity):
         for r in records:
             rss = f"{r['peak_rss_bytes']/1048576:.1f}" if r['peak_rss_bytes'] is not None else 'unknown'
             lines.append(f"| {r['id']} | {r['rejected']} | {r['failed'] and not r['rejected']} | {r['constraints']} | {r['wall_ms']/1000:.1f} | {rss} |")
-        if report['metal'] is None:
+        if report['metal_skipped']:
+            status = 'Metal: NOT TESTED (explicit CPU-only probe).'
+        elif report['metal'] is None:
             status = 'Metal: not tested yet.'
         elif report['metal_unavailable']:
             status = 'Metal: UNAVAILABLE; inference NOT verified.'
@@ -51,10 +54,11 @@ def run_probes(binary, model, cases, output, model_name, identity):
         records.append(dict(id=case['id'], **result, constraints=constraints(result['text'], case)))
         persist()
         print(case['id'], 'runtime-failed' if result['failed'] and not result['rejected'] else 'completed', flush=True)
-    gpu = measured_infer(binary, model, 'metal', cases[0]['transcript'], cases[0]['context'])
-    report.update(metal=gpu, metal_unavailable=gpu['failed'] and metal_unavailable(gpu.get('failure', {})))
+    if not cpu_only:
+        gpu = measured_infer(binary, model, 'metal', cases[0]['transcript'], cases[0]['context'])
+        report.update(metal=gpu, metal_unavailable=gpu['failed'] and metal_unavailable(gpu.get('failure', {})))
     persist()
-    if any(r['failed'] and not r['rejected'] for r in records) or (gpu['failed'] and not report['metal_unavailable']):
+    if any(r['failed'] and not r['rejected'] for r in records) or (report['metal'] is not None and report['metal']['failed'] and not report['metal_unavailable']):
         raise RuntimeError('Model execution failed; see report.json')
 
 
@@ -64,6 +68,7 @@ def main():
     parser.add_argument('--model', type=Path, required=True)
     parser.add_argument('--model-name', choices=MODELS, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--cpu-only', action='store_true', help='Explicitly skip Metal; never report it as verified')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     try:
@@ -75,7 +80,7 @@ def main():
     if checksum(args.model) != MODELS[args.model_name]['sha256']:
         raise ValueError('Model checksum mismatch')
     cases = json.loads((ROOT/'evaluation/correction-cases.json').read_text())['cases']
-    run_probes(args.binary, args.model, cases, args.output, args.model_name, MODELS[args.model_name])
+    run_probes(args.binary, args.model, cases, args.output, args.model_name, MODELS[args.model_name], args.cpu_only)
 
 
 if __name__ == '__main__':

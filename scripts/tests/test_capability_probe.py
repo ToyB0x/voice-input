@@ -14,6 +14,21 @@ spec.loader.exec_module(probe)
 
 
 class CapabilityEvidenceTests(unittest.TestCase):
+    def test_cpu_only_never_claims_or_attempts_metal(self):
+        case = dict(id='synthetic', transcript='会議', context='')
+        ok = dict(wall_ms=1, peak_rss_bytes=100, failed=False, rejected=False,
+                  text='会議', model_report={})
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(probe, 'infer', return_value=ok) as inference:
+                probe.run_probes(Path('binary'), Path('model'), [case], Path(directory),
+                                 'synthetic', {}, cpu_only=True)
+            self.assertEqual(inference.call_count, 1)
+            report = json.loads((Path(directory)/'report.json').read_text())
+            self.assertIsNone(report['metal'])
+            self.assertTrue(report['metal_skipped'])
+            self.assertFalse(report['metal_unavailable'])
+            self.assertIn('NOT TESTED', (Path(directory)/'summary.md').read_text())
+
     def test_timeout_preserves_prior_results_continues_and_records_metal(self):
         case = dict(transcript='会議は金曜日です', context='', required=['金曜'])
         ok = dict(wall_ms=1, peak_rss_bytes=100, failed=False, rejected=False,
