@@ -44,6 +44,13 @@
         <button id="settings" aria-label="Open microphone settings" hidden>マイクのシステム設定を開く</button>
         <p class="hint">最大 60 秒。新しい録音・破棄・アプリ終了で音声を消去します。</p>
       </section>
+      <section aria-labelledby="result-title">
+        <h2 id="result-title">認識結果</h2>
+        <textarea id="transcript" aria-label="Transcription result" rows="3" readonly placeholder="モデル読み込み後、録音を停止すると文字起こしします。"></textarea>
+        <button id="copy" aria-label="Copy transcript" disabled>結果をコピー</button>
+        <span id="copy-status" role="status" aria-live="polite"></span>
+        <p class="hint">コピーした結果はクリップボードに残ります。新しい録音・破棄・終了でアプリ内の結果を消去します。</p>
+      </section>
       <section aria-labelledby="desktop-title">
         <h2 id="desktop-title">常駐・ショートカット設定</h2>
         <label for="shortcut">録音開始 / 停止（空欄で無効）</label>
@@ -53,13 +60,6 @@
         <p id="preferences-message" role="status"></p>
         <p class="hint">モデルのパス・実行方式・ショートカットだけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
         <p class="hint">ウィンドウを閉じても常駐します。メニューバーの VI から設定・結果を表示、終了できます。</p>
-      </section>
-      <section aria-labelledby="result-title">
-        <h2 id="result-title">認識結果</h2>
-        <textarea id="transcript" aria-label="Transcription result" rows="3" readonly placeholder="モデル読み込み後、録音を停止すると文字起こしします。"></textarea>
-        <button id="copy" aria-label="Copy transcript" disabled>結果をコピー</button>
-        <span id="copy-status" role="status" aria-live="polite"></span>
-        <p class="hint">コピーした結果はクリップボードに残ります。新しい録音・破棄・終了でアプリ内の結果を消去します。</p>
       </section>
     </main>
     <script type="module" src="/src/main.ts"></script>

@@ -41,6 +41,7 @@ func uiButton(_ root: AXUIElement, _ names: [String]) -> AXUIElement? {
 }
 
 func press(_ button: AXUIElement) throws {
+    _ = AXUIElementPerformAction(button, "AXScrollToVisible" as CFString)
     let result = AXUIElementPerformAction(button, kAXPressAction as CFString)
     guard result == .success else { throw SmokeFailure(description: "AXPress failed: \(result.rawValue)") }
 }
@@ -271,10 +272,15 @@ func resultText(_ root: AXUIElement) -> String {
     return axValue(field, kAXValueAttribute) as? String ?? ""
 }
 
+func fixtureRecognized(_ text: String) -> Bool {
+    // This checks the real audio path, not CER. Kana is a valid spelling of 旅.
+    text.contains("船") && (text.contains("旅") || text.contains("たび"))
+}
+
 func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) throws {
     try waitForUI("Japanese recognition result", seconds: 120) {
         let text = resultText(root)
-        return text.contains("船") && text.contains("旅") && uiButton(root, ["Copy transcript"]) != nil
+        return fixtureRecognized(text) && uiButton(root, ["Copy transcript"]) != nil
     }
     let text = resultText(root)
     try text.write(to: output.appendingPathComponent("transcript.txt"), atomically: true, encoding: .utf8)
@@ -299,7 +305,7 @@ func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) thr
     }
     try interactionScreenshot(output, name: "discarded.png", windowID: windowID)
     try writeJSON(["status": "passed", "scenario": "transcribe", "realPermissionDialog": true,
-                   "missingModelError": true, "japaneseWords": ["船", "旅"], "clipboardMatches": true,
+                   "missingModelError": true, "japaneseWords": ["船", text.contains("旅") ? "旅" : "たび"], "clipboardMatches": true,
                    "discardedDuringInference": true, "modelRetained": true],
                   to: output.appendingPathComponent("interaction.json"))
 }
@@ -421,7 +427,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
         throw SmokeFailure(description: "Background processing changed focus, clipboard or window visibility")
     }
     try trayAction(root, title: "設定・認識結果を表示")
-    try waitForUI("tray opens recognized result") { resultText(root).contains("船") && resultText(root).contains("旅") }
+    try waitForUI("tray opens recognized result") { fixtureRecognized(resultText(root)) }
     try interactionScreenshot(output, name: "tray-result.png")
     try trayAction(root, title: "Voice Inputを終了")
     try waitForUI("explicit tray quit") { app.isTerminated }
