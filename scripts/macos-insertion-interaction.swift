@@ -251,7 +251,9 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
             // Restore the exact original target while retrying. Even with the
             // same identity/value/range, a consumed delivery must not repeat.
             try press(uiButton(voice, ["Transcribe recording"])!)
-            try waitForUI("retry in progress") { uiText(voice).contains("文字起こし中") }
+            try waitForUI("retry in progress in UI and tray") {
+                uiText(voice).contains("文字起こし中") && trayItem(voice).map(axText)?.contains("処理中") == true
+            }
             NSRunningApplication(processIdentifier: targetPID)?.activate(options: [.activateAllWindows])
             let current = axValue(field, kAXValueAttribute) as? String ?? ""
             try setRange(field, 0, current.utf16.count)
