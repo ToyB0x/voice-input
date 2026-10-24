@@ -225,16 +225,6 @@ jobs:
                 2>&1 | tee -a "$evidence" || true
             fi
           done
-      - name: Verify trusted product insertion and cancellation guards
-        timeout-minutes: 12
-        env:
-          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
-          VOICE_INPUT_INSERTION_TARGET: ${{ runner.temp }}/Insertion Guard Fixture.app
-        run: |
-          "$RUNNER_TEMP/voice-input-smoke-runner" \
-            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
-            "$RUNNER_TEMP/voice-input-smoke/insertion" insertion \
-            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion.log"
       - name: Verify bounded context, opt-out and protected field exclusions
         timeout-minutes: 10
         env:
@@ -259,6 +249,16 @@ jobs:
           assert settings['recognitionContext'] is True
           assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'recognitionContext'}
           PY
+      - name: Verify trusted product insertion and cancellation guards
+        timeout-minutes: 12
+        env:
+          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
+          VOICE_INPUT_INSERTION_TARGET: ${{ runner.temp }}/Insertion Guard Fixture.app
+        run: |
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/insertion" insertion \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion.log"
       - name: Remove disposable CI authorization account
         if: always()
         run: |

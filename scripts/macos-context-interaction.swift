@@ -65,7 +65,14 @@ func contextInteraction(pid: pid_t, scenario: String, output: URL) throws {
     }
     var passed = [String]()
     for mode in ["bounded", "disabled", "secure", "readonly", "unsupported", "discard", "disable-during-recording"] {
-        try trayAction(voice, title: "設定・認識結果を表示")
+        // A redundant tray Show can enqueue a late activation after we hide the
+        // window, stealing focus back from the fixture in the next case.
+        if visibleWindows(for: pid).isEmpty {
+            try trayAction(voice, title: "設定・認識結果を表示")
+            try waitForUI("context settings foreground") {
+                !visibleWindows(for: pid).isEmpty && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+            }
+        }
         try configureContext(voice, enabled: mode != "disabled")
         try hideInsertionWindow(voice)
         let label = mode == "secure" ? "Protected context" : mode == "readonly" ? "Read only context" : mode == "unsupported" ? "Unsupported context" : "Context input"

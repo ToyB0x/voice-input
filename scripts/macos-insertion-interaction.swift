@@ -8,6 +8,9 @@ func insertionCheckbox(_ root: AXUIElement) -> AXUIElement? {
 func configureInsertion(_ root: AXUIElement) throws {
     try waitForUI("restored model", seconds: 120) { uiText(root).contains("モデル準備完了") }
     try typeField(root, label: "Recording shortcut", value: "Control+Alt+KeyV")
+    if let context = contextCheckbox(root), (axValue(context, kAXValueAttribute) as? NSNumber)?.intValue == 1 {
+        try press(context)
+    }
     guard let checkbox = insertionCheckbox(root) else { throw SmokeFailure(description: "Direct insertion checkbox missing") }
     if (axValue(checkbox, kAXValueAttribute) as? NSNumber)?.intValue != 1 { try press(checkbox) }
     try press(uiButton(root, ["Save preferences"])!)
@@ -32,11 +35,16 @@ func hideInsertionWindow(_ root: AXUIElement) throws {
     try waitForUI("Voice Input window fully hidden") { visibleWindows(for: pid).isEmpty }
 }
 func focusElement(_ root: AXUIElement, _ element: AXUIElement, pid: pid_t) throws {
-    NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateAllWindows])
+    // Activation is asynchronous and can lose to an earlier queued request.
+    // Reassert foreground ownership before focusing a particular native field.
+    try waitForUI("target focus") {
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return true }
+        NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateAllWindows])
+        return false
+    }
     guard AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
         throw SmokeFailure(description: "Could not focus native target")
     }
-    try waitForUI("target focus") { NSWorkspace.shared.frontmostApplication?.processIdentifier == pid }
 }
 func setRange(_ field: AXUIElement, _ location: Int, _ length: Int) throws {
     var range = CFRange(location: location, length: length)
