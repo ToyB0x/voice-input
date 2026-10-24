@@ -73,6 +73,9 @@ impl Corrector {
             let _ = handle.join();
         }
     }
+    fn generation(&self) -> u64 {
+        self.epoch.load(Ordering::Acquire)
+    }
     fn status(&self) -> Status {
         self.state
             .lock()
@@ -86,6 +89,7 @@ impl Corrector {
         backend: String,
         raw: String,
         hint: Option<crate::context::Hint>,
+        generation: u64,
     ) -> Result<Status, String> {
         if model.is_empty()
             || model.len() > 4096
@@ -116,7 +120,10 @@ impl Corrector {
             if state.status.working {
                 return Err("補正処理の終了をお待ちください。".into());
             }
-            let epoch = self.epoch.fetch_add(1, Ordering::AcqRel) + 1;
+            let epoch = generation.wrapping_add(1);
+            self.epoch
+                .compare_exchange(generation, epoch, Ordering::AcqRel, Ordering::Acquire)
+                .map_err(|_| "録音または設定が変わったため補正を取り消しました。")?;
             state.epoch = epoch;
             state.status = Status {
                 working: true,
@@ -248,6 +255,9 @@ pub fn correct_transcript(
     recorder: tauri::State<'_, crate::recorder::Recorder>,
     corrector: tauri::State<'_, Corrector>,
 ) -> Result<Status, String> {
+    // Snapshot before taking preferences or the transcript. Every invalidation
+    // must still be current when start atomically publishes its generation.
+    let generation = corrector.generation();
     let preferences = crate::desktop::preferences(&app)?;
     // Validate configuration before consuming the one-shot context lease.
     if !Path::new(&preferences.correction_model_path).is_absolute()
@@ -267,6 +277,7 @@ pub fn correct_transcript(
         preferences.correction_backend,
         raw,
         hint,
+        generation,
     )
 }
 #[tauri::command]
@@ -287,4 +298,33 @@ pub fn copy_correction(corrector: tauri::State<'_, Corrector>) -> Result<(), Str
     arboard::Clipboard::new()
         .and_then(|mut clipboard| clipboard.set_text(text.clone()))
         .map_err(|_| "補正結果をコピーできません。".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn stale_preview_request_cannot_reverse_recording_invalidation() {
+        let corrector = Corrector::new();
+        let generation = corrector.generation();
+        // Represents a request paused after reading an old transcript, before
+        // worker publication, while a recording/clear/retry invalidates it.
+        corrector.cancel();
+        let executable = std::env::current_exe().unwrap();
+        assert!(
+            corrector
+                .start(
+                    executable.clone(),
+                    executable.to_string_lossy().into_owned(),
+                    "cpu".into(),
+                    "old transcript".into(),
+                    None,
+                    generation,
+                )
+                .is_err()
+        );
+        assert!(!corrector.status().working);
+        assert!(corrector.status().text.is_none());
+        assert!(corrector.worker.lock().unwrap().is_none());
+    }
 }

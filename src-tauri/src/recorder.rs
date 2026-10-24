@@ -177,7 +177,17 @@ impl Recorder {
                             }
                             Action::Start if stream.is_some() => Err("すでに録音中です。".into()),
                             Action::Start => {
-                                corrector.cancel();
+                                // Invalidate and hide the old transcript under the same
+                                // lock used to acquire correction input, before slow AX/OCR.
+                                {
+                                    let mut c =
+                                        shared.lock().unwrap_or_else(|error| error.into_inner());
+                                    corrector.cancel();
+                                    c.recognition.clear_result();
+                                    c.phase = Some("preparing");
+                                    c.context_hint = None;
+                                    c.correction_hint = None;
+                                }
                                 inserter.cancel();
                                 let ticket = inserter.begin();
                                 context.cancel();
@@ -238,24 +248,23 @@ impl Recorder {
                                 Err("録音を停止してから操作してください。".into())
                             }
                             Action::LoadModel(path, backend) => {
-                                corrector.cancel();
                                 shared.lock().map_err(|e| e.to_string()).and_then(|mut c| {
+                                    corrector.cancel();
                                     transcription::load(&mut c.recognition, path, &backend, &jobs)
                                 })
                             }
                             Action::Transcribe => {
-                                corrector.cancel();
-                                shared
-                                    .lock()
-                                    .map_err(|e| e.to_string())
-                                    .and_then(|mut c| transcription::recognize(&mut c, &jobs))
+                                shared.lock().map_err(|e| e.to_string()).and_then(|mut c| {
+                                    corrector.cancel();
+                                    transcription::recognize(&mut c, &jobs)
+                                })
                             }
                             Action::Clear => {
-                                corrector.cancel();
                                 inserter.cancel();
                                 context.cancel();
                                 drop(stream.take());
                                 if let Ok(mut c) = shared.lock() {
+                                    corrector.cancel();
                                     c.audio = None;
                                     c.insertion_ticket = None;
                                     c.context_hint = None;
@@ -293,7 +302,7 @@ impl Recorder {
             .capture
             .lock()
             .map_err(|_| "録音状態を確認できません。")?;
-        if capture.recognition.working || capture.phase == Some("recording") {
+        if capture.recognition.working || matches!(capture.phase, Some("recording" | "preparing")) {
             return Err("録音と文字起こしの終了をお待ちください。".into());
         }
         let text = capture
