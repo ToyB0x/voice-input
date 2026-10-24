@@ -162,7 +162,7 @@ fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'st
 fn subject_term(text: &str) -> String {
     let prefix = text.trim_end_matches(['、', ',', ' ', '\n']);
     let clause = prefix
-        .rsplit(['。', '！', '？', '\n', '、', ',', '：', ':'])
+        .rsplit(|c: char| c.is_whitespace() || "。！？、,：:".contains(c))
         .next()
         .unwrap_or("");
     let value = if let Some((topic, rest)) = clause.split_once('は') {
@@ -460,6 +460,8 @@ mod tests {
             ("えー、ないです", "ないです。"),
             ("えっと、ないです", "ないです。"),
             ("えー ないです", "ないです。"),
+            ("えー 東京ではなく大阪です", "東京ではなく大阪です。"),
+            ("えっと　東京じゃなく大阪です", "東京じゃなく大阪です。"),
             ("えー，ないです", "ないです。"),
             ("（えー）ないです", "ないです。"),
             ("えー、ありません", "ありません。"),
