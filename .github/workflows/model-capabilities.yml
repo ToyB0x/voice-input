@@ -60,23 +60,33 @@ jobs:
             crates/local-transcription/target
           key: macos-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Build existing production benchmark
+        id: build
         run: cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked --bin evaluate
       - name: Prepare pinned model (setup only)
+        id: model
         run: |
           mkdir -p "$RUNNER_TEMP/stronger-whisper"
           sysctl hw.memsize hw.ncpu > "$RUNNER_TEMP/stronger-whisper/hardware.txt"
           python3 scripts/prepare-transcription-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/model.bin"
-      - name: Score fixed corpus on CPU and actual Metal offline
-        timeout-minutes: 50
+      - name: Score fixed corpus on CPU offline
+        timeout-minutes: 25
         run: |
-          for backend in cpu metal; do
-            sandbox-exec -p '(version 1) (allow default) (deny network*)' \
-              python3 scripts/evaluate_models.py \
-              --binary crates/local-transcription/target/release/evaluate \
-              --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
-              --backend "$backend" --output "$RUNNER_TEMP/stronger-whisper/$backend" \
-              --require-network-denied --timeout 1400
-          done
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/evaluate_models.py \
+            --binary crates/local-transcription/target/release/evaluate \
+            --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
+            --backend cpu --output "$RUNNER_TEMP/stronger-whisper/cpu" \
+            --require-network-denied --timeout 1400
+      - name: Score fixed corpus on actual Metal offline even after CPU failure
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.model.outcome == 'success' }}
+        timeout-minutes: 25
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/evaluate_models.py \
+            --binary crates/local-transcription/target/release/evaluate \
+            --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
+            --backend metal --output "$RUNNER_TEMP/stronger-whisper/metal" \
+            --require-network-denied --timeout 1400
       - uses: actions/upload-artifact@v4
         if: always()
         with:
