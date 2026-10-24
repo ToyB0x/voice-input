@@ -17,7 +17,7 @@ def infer(binary,model,backend,raw,context):
     command=[str(binary.resolve()),str(model.resolve()),backend]
     if platform.system()=='Darwin':command=['/usr/bin/time','-l',*command]
     started=time.monotonic()
-    result=subprocess.run(command,input=json.dumps(dict(transcript=raw,context=context),ensure_ascii=False),capture_output=True,text=True,timeout=90)
+    result=subprocess.run(command,input=json.dumps(dict(transcript=raw,context=context),ensure_ascii=False),capture_output=True,text=True,timeout=180)
     memory=re.search(r'(\d+)\s+maximum resident set size',result.stderr)
     item=dict(wall_ms=(time.monotonic()-started)*1000,peak_rss_bytes=int(memory[1]) if memory else None,rejected=False,failed=result.returncode!=0)
     if result.returncode:
@@ -25,7 +25,10 @@ def infer(binary,model,backend,raw,context):
         # rejection count and fallback text; never present fallback as a correction.
         try:failure=json.loads(result.stdout)
         except (ValueError,TypeError):failure={"error":"runtime","stage":"unknown"}
-        item.update(text=raw,model_report=None,rejected=failure.get('error')=='rejected',failure=failure)
+        # This evaluator accepts only the fixed public corpus/synthetic cases.
+        # Keep fatal signal diagnostics here; the product discards native stderr.
+        item.update(text=raw,model_report=None,rejected=failure.get('error')=='rejected',failure=failure,
+                    exit_status=result.returncode,diagnostic_stderr=result.stderr)
     else:
         report=json.loads(result.stdout)
         if report['backend']!=backend or (backend=='metal' and raw and report['offloaded_layers']<1) or (backend=='cpu' and report['offloaded_layers']!=0):

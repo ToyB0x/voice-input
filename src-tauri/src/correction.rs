@@ -211,7 +211,8 @@ fn run(
     });
     let started = Instant::now();
     let status = loop {
-        if epoch.load(Ordering::Acquire) != current || started.elapsed() > Duration::from_secs(75) {
+        if epoch.load(Ordering::Acquire) != current || started.elapsed() > Duration::from_secs(150)
+        {
             let _ = child.kill();
             let _ = child.wait();
             let _ = writer.join();
@@ -236,6 +237,10 @@ fn run(
         return Err(failed());
     }
     if !status.success() {
+        use std::os::unix::process::ExitStatusExt;
+        if status.signal() == Some(9) {
+            return Err("ローカル補正に失敗しました（OSがプロセスを停止）。空きメモリ・モデルサイズ・実行方式を確認してください。元の認識結果は保持しています。".into());
+        }
         let failure: serde_json::Value = serde_json::from_slice(&output).unwrap_or_default();
         if failure["error"] == "rejected" {
             return Err("補正結果が原文保持のチェックを満たさず棄却されました。元の認識結果を確認してください。".into());

@@ -13,6 +13,7 @@ use std::{
     sync::atomic::{AtomicU8, AtomicU32, Ordering},
     time::Instant,
 };
+static REQUESTED: AtomicU8 = AtomicU8::new(0);
 static PHASE: AtomicU8 = AtomicU8::new(0);
 const PHASES: [&str; 8] = [
     "input",
@@ -32,6 +33,14 @@ impl std::fmt::Display for Rejection {
     }
 }
 impl std::error::Error for Rejection {}
+#[derive(Debug)]
+struct SafeRuntimeError(&'static str);
+impl std::fmt::Display for SafeRuntimeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
+impl std::error::Error for SafeRuntimeError {}
 static OFFLOADED: AtomicU32 = AtomicU32::new(0);
 unsafe extern "C" fn native_log(
     _: llama_cpp_sys_2::ggml_log_level,
@@ -59,6 +68,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "usage: local-correction /absolute/model.gguf cpu|metal (JSON on stdin)".into(),
         );
     }
+    REQUESTED.store(if args[1] == "metal" { 2 } else { 1 }, Ordering::Relaxed);
     if !std::path::Path::new(&args[0]).is_absolute() {
         return Err("absolute model path required".into());
     }
@@ -94,7 +104,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let backend = LlamaBackend::init()?;
     let metal = args[1] == "metal";
     if metal && !backend.supports_gpu_offload() {
-        return Err("Metal is unavailable; choose CPU explicitly".into());
+        return Err(SafeRuntimeError("metal-unavailable").into());
     }
     PHASE.store(2, Ordering::Relaxed);
     let model = LlamaModel::load_from_file(
@@ -108,7 +118,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let name = model.meta_val_str("general.name")?;
     let layers = OFFLOADED.load(Ordering::Relaxed);
     if (metal && layers == 0) || (!metal && layers != 0) {
-        return Err("requested GPU offload did not occur".into());
+        return Err(SafeRuntimeError("gpu-offload-mismatch").into());
     }
     PHASE.store(3, Ordering::Relaxed);
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4)) as i32;
@@ -116,8 +126,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .with_offload_kqv(metal)
         .with_op_offload(metal)
         .with_n_ctx(NonZeroU32::new(4096))
-        .with_n_batch(2048)
-        .with_n_ubatch(256)
+        .with_n_batch(512)
+        .with_n_ubatch(if metal { 64 } else { 128 })
         .with_n_threads(threads)
         .with_n_threads_batch(threads);
     let mut context = model.new_context(&backend, params)?;
@@ -127,17 +137,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("correction prompt exceeds context budget".into());
     }
     PHASE.store(4, Ordering::Relaxed);
-    let mut batch = LlamaBatch::new(2048, 1);
+    let mut batch = LlamaBatch::new(512, 1);
     // Decode in bounded chunks, preserving token positions across chunks.
-    for (chunk_index, chunk) in tokens.chunks(2048).enumerate() {
+    for (chunk_index, chunk) in tokens.chunks(512).enumerate() {
         batch.clear();
         for (index, token) in chunk.iter().enumerate() {
-            let position = chunk_index * 2048 + index;
+            let position = chunk_index * 512 + index;
             batch.add(*token, position as i32, &[0], position + 1 == tokens.len())?;
         }
         context.decode(&mut batch)?;
     }
     PHASE.store(5, Ordering::Relaxed);
+    let generation_started = Instant::now();
     const GRAMMAR: &str = "root ::= \"{\" ws \"\\\"text\\\"\" ws \":\" ws string ws \"}\"\nws ::= [ \\t\\n\\r]*\nstring ::= \"\\\"\" char* \"\\\"\"\nchar ::= [^\"\\\\\\x00-\\x1F] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])";
     let mut sampler = LlamaSampler::chain_simple([
         LlamaSampler::grammar(&model, GRAMMAR, "root")?,
@@ -146,8 +157,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut generated = Vec::new();
     let mut ended = false;
     for position in tokens.len()..tokens.len() + 512 {
-        if started.elapsed().as_secs() > 60 {
-            return Err("correction deadline exceeded".into());
+        if started.elapsed().as_secs() > 120 {
+            return Err(SafeRuntimeError("total-time-budget").into());
+        }
+        if generation_started.elapsed().as_secs() > 60 {
+            return Err(SafeRuntimeError("generation-time-budget").into());
         }
         let token = sampler.sample(&context, -1);
         if vocab.is_eog(token) {
@@ -169,7 +183,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         context.decode(&mut batch)?;
     }
     if !ended {
-        return Err("correction output was truncated".into());
+        return Err(SafeRuntimeError("output-token-budget").into());
     }
     PHASE.store(6, Ordering::Relaxed);
     let text = parse_answer(
@@ -200,13 +214,21 @@ fn main() {
             Ok(Err(error)) => error.downcast_ref::<Rejection>(),
             _ => None,
         };
+        let reason = rejection.map(|error| error.0).or_else(|| match &result {
+            Ok(Err(error)) => error
+                .downcast_ref::<SafeRuntimeError>()
+                .map(|error| error.0),
+            _ => None,
+        });
         let mut output = std::io::stdout().lock();
         let _ = serde_json::to_writer(
             &mut output,
             &serde_json::json!({
                 "error": if rejection.is_some() { "rejected" } else { "runtime" },
                 "stage": PHASES[usize::from(PHASE.load(Ordering::Relaxed))],
-                "reason": rejection.map(|error| error.0),
+                "reason": reason,
+                "requested_backend": (["unknown", "cpu", "metal"][usize::from(REQUESTED.load(Ordering::Relaxed))]),
+                "offloaded_layers": OFFLOADED.load(Ordering::Relaxed),
             }),
         );
         let _ = output.write_all(b"\n");

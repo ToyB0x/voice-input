@@ -117,7 +117,7 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Local OCR Fixture' "$fixture/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
           codesign --force --sign - "$fixture"
-      - name: Verify actual bundled CPU correction with networking denied
+      - name: Verify actual bundled CPU and Metal correction with networking denied
         run: |
           sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 - <<'PYCODE'
           import json, os, subprocess
@@ -125,15 +125,17 @@ jobs:
           root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
           binary = Path('src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/local-correction').resolve()
           model = Path(os.environ['RUNNER_TEMP']) / 'correction-model.gguf'
-          result = subprocess.run([str(binary), str(model), 'cpu'],
-              input=json.dumps(dict(transcript='会議は金曜日です', context='会議、金曜日。'), ensure_ascii=False),
-              text=True, capture_output=True, timeout=90)
-          (root / 'correction-cpu-probe.json').write_text(result.stdout)
-          # This CI probe uses only the fixed synthetic sentence and public model.
-          (root / 'correction-cpu-probe.stderr.log').write_text(result.stderr)
-          if result.returncode: raise SystemExit('Bundled correction CPU probe failed; inspect the fixed stage in correction-cpu-probe.json')
-          report = json.loads(result.stdout)
-          assert report['backend'] == 'cpu' and report['offloaded_layers'] == 0 and report['text']
+          for backend in ['cpu', 'metal']:
+              result = subprocess.run([str(binary), str(model), backend],
+                  input=json.dumps(dict(transcript='会議は金曜日です', context='会議、金曜日。'), ensure_ascii=False),
+                  text=True, capture_output=True, timeout=180)
+              (root / f'correction-{backend}-probe.json').write_text(result.stdout)
+              # This CI probe uses only the fixed synthetic sentence and public model.
+              (root / f'correction-{backend}-probe.stderr.log').write_text(result.stderr)
+              if result.returncode: raise SystemExit(f'Bundled correction {backend} probe failed; inspect the fixed stage in correction-{backend}-probe.json')
+              report = json.loads(result.stdout)
+              assert report['backend'] == backend and report['text']
+              assert (report['offloaded_layers'] == 0) if backend == 'cpu' else (report['offloaded_layers'] > 0)
           PYCODE
       - name: Verify bundled correction runtime starts without a model or network
         run: |
@@ -175,6 +177,8 @@ jobs:
           SwitchAudioSource -s 'BlackHole 2ch' -t input
           SwitchAudioSource -s 'BlackHole 2ch' -t output
           SwitchAudioSource -c -t input | tee "$RUNNER_TEMP/voice-input-smoke/input-device.txt"
+          xcrun swift scripts/macos-ci-audio-buffer.swift \
+            | tee "$RUNNER_TEMP/voice-input-smoke/virtual-audio-buffer.json"
       - name: Verify real microphone permission and recording controls
         timeout-minutes: 5
         run: |

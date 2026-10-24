@@ -174,7 +174,7 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     try waitForUI("correction CPU selected") {axText(backend).contains("CPU")}
     try pressContextButton(voice,"Save preferences")
     try pressContextButton(voice,"Preview local correction")
-    try waitForUI("native correction preview",seconds:120) {
+    try waitForUI("native correction preview",seconds:180) {
         let text=uiText(voice)
         if text.contains("ローカル補正に失敗しました") || text.contains("補正結果が原文保持のチェックを満たさず") {throw SmokeFailure(description:"Native correction failed; inspect failure-app-state.txt for the fixed failure stage")}
         let fields=axElements(voice)
