@@ -16,7 +16,7 @@ jobs:
   macos:
     name: macOS app
     runs-on: macos-14
-    timeout-minutes: 25
+    timeout-minutes: 35
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
@@ -39,6 +39,7 @@ jobs:
             ~/.cargo/registry
             src-tauri/target
           key: macos-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos-${{ runner.arch }}-app-rust-v1-
       - name: Inspect macOS permission automation support
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
@@ -71,7 +72,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
           cp scripts/macos-window-smoke.swift "$RUNNER_TEMP/main.swift"
-          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift \
+          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift scripts/macos-insertion-interaction.swift \
             -o "$RUNNER_TEMP/voice-input-smoke-runner" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/swift-build.log"
           "$RUNNER_TEMP/voice-input-smoke-runner" \
@@ -148,6 +149,47 @@ jobs:
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/desktop" desktop \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/desktop.log"
+      - name: Build synthetic native guard fields
+        run: |
+          fixture="$RUNNER_TEMP/Insertion Guard Fixture.app"
+          mkdir -p "$fixture/Contents/MacOS"
+          xcrun swiftc scripts/macos-insertion-target.swift -o "$fixture/Contents/MacOS/guard-fixture"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.insertionfixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string guard-fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Insertion Guard Fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
+          codesign --force --sign - "$fixture"
+      - name: Verify untrusted product refuses direct insertion
+        timeout-minutes: 5
+        env:
+          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
+        run: |
+          tccutil reset Accessibility dev.toyb0x.voiceinput
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/insertion-denied" insertion-denied \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion-denied.log"
+      - name: Allow product Accessibility through System Settings in disposable CI
+        timeout-minutes: 4
+        run: |
+          # CI-only authorization policy: no password material and no product bypass.
+          # These rights disappear with this disposable runner; never install in the app.
+          sudo security authorizationdb write system.preferences.security allow
+          sudo security authorizationdb write system.preferences.accessibility allow
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/insertion-grant" insertion-grant \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion-grant.log"
+      - name: Verify trusted product insertion and cancellation guards
+        timeout-minutes: 12
+        env:
+          VOICE_INPUT_TEST_AUDIO: ${{ github.workspace }}/crates/local-transcription/tests/fixtures/ja-oku.wav
+          VOICE_INPUT_INSERTION_TARGET: ${{ runner.temp }}/Insertion Guard Fixture.app
+        run: |
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/insertion" insertion \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion.log"
       - name: Check compiler and smoke failure exit statuses
         run: |
           negative="$RUNNER_TEMP/voice-input-smoke/expected-failures"

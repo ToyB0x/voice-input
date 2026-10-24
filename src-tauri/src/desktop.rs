@@ -76,8 +76,6 @@ pub fn shortcut_event(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState
         return;
     }
     if state == ShortcutState::Released {
-        app.state::<crate::insertion::Inserter>()
-            .configure(inner.preferences.auto_insert);
         desktop.pressed.store(false, Ordering::Release);
     } else if !desktop.pressed.swap(true, Ordering::AcqRel) {
         toggle(app);
@@ -173,6 +171,8 @@ pub fn save_preferences(
     inner.preferences = preferences;
     inner.registered = new;
     inner.error = None;
+    app.state::<crate::insertion::Inserter>()
+        .configure(inner.preferences.auto_insert);
     desktop.pressed.store(false, Ordering::Release);
     Ok(Status {
         preferences: inner.preferences.clone(),

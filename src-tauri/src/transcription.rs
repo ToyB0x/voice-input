@@ -190,16 +190,14 @@ pub(crate) fn worker(
                 if loading && capture.recognition.generation != generation {
                     model = None;
                 }
-                if !loading {
-                    if let Some(ticket) = capture.insertion_ticket.take() {
-                        if capture.recognition.generation == generation
-                            && let Ok(text) = &result
-                        {
-                            // Serialize with discard: no detached or retried AX write.
-                            inserter.apply(ticket, text);
-                        } else {
-                            inserter.cancel();
-                        }
+                if !loading && let Some(ticket) = capture.insertion_ticket.take() {
+                    if capture.recognition.generation == generation
+                        && let Ok(text) = &result
+                    {
+                        // Serialize with discard: no detached or retried AX write.
+                        inserter.apply(ticket, text);
+                    } else {
+                        inserter.cancel();
                     }
                 }
                 capture.recognition.finish(generation, result, loading);

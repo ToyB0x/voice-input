@@ -272,10 +272,15 @@ impl Inserter {
                         sequence += 1;
                         if worker.enabled.load(Ordering::Acquire) {
                             match Target::capture(sequence, worker.epoch.load(Ordering::Acquire)) {
-                                Ok(captured) => {
+                                Ok(captured)
+                                    if worker.enabled.load(Ordering::Acquire)
+                                        && captured.epoch
+                                            == worker.epoch.load(Ordering::Acquire) =>
+                                {
                                     target = Some(captured);
                                     worker.report("armed", "録音開始時の入力先を記録しました。認識完了時に再確認します。");
                                 }
+                                Ok(_) => {}
                                 Err(error) => worker.report("blocked", &error),
                             }
                         }
@@ -334,7 +339,17 @@ impl Inserter {
         }
     }
     pub fn cancel(&self) {
+        self.shared.epoch.fetch_add(1, Ordering::AcqRel);
         let _ = self.tx.send(Command::Cancel);
+        let enabled = self.shared.enabled.load(Ordering::Acquire);
+        self.shared.report(
+            if enabled { "idle" } else { "disabled" },
+            if enabled {
+                "自動入力を取り消しました。次の録音で入力先を記録します。"
+            } else {
+                "自動入力は無効です。"
+            },
+        );
     }
     pub fn status(&self) -> Status {
         let (state, message) = self

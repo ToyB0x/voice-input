@@ -86,6 +86,8 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
         throw SmokeFailure(description: "Native permission UI automation requires Accessibility access for the CI driver")
     }
 
+    if scenario.hasPrefix("insertion") { try insertionInteraction(pid: pid, windowID: windowID, scenario: scenario, output: output); return }
+
     if scenario == "desktop" { try desktopInteraction(pid: pid, windowID: windowID, output: output); return }
 
     if scenario == "transcribe" { try configureModel(root: root, windowID: windowID, output: output) }
