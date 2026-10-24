@@ -142,23 +142,31 @@ fn focused() -> Result<(i32, CFType), String> {
         AXUIElementSetMessagingTimeout(system.as_CFTypeRef(), 0.2);
     }
     let app = attribute(&system, "AXFocusedApplication")?;
-    let element = attribute(&app, "AXFocusedUIElement")?;
-    if app.type_of() != unsafe { AXUIElementGetTypeID() }
-        || element.type_of() != unsafe { AXUIElementGetTypeID() }
-    {
+    if app.type_of() != unsafe { AXUIElementGetTypeID() } {
         return Err("入力先を識別できません。".into());
     }
-    unsafe {
-        AXUIElementSetMessagingTimeout(app.as_CFTypeRef(), 0.2);
-        AXUIElementSetMessagingTimeout(element.as_CFTypeRef(), 0.2);
-    }
-    let (mut pid, mut field_pid) = (0, 0);
+    let mut pid = 0;
     if unsafe { AXUIElementGetPid(app.as_CFTypeRef(), &mut pid) } != 0
-        || unsafe { AXUIElementGetPid(element.as_CFTypeRef(), &mut field_pid) } != 0
-        || pid != field_pid
         || pid == std::process::id() as i32
     {
         return Err("別アプリの入力欄で録音を開始してください。".into());
+    }
+    // Reject our own app before querying its UI; never wait for the main
+    // thread while it may be polling the capture mutex held by the ASR worker.
+    unsafe {
+        AXUIElementSetMessagingTimeout(app.as_CFTypeRef(), 0.2);
+    }
+    let element = attribute(&app, "AXFocusedUIElement")?;
+    if element.type_of() != unsafe { AXUIElementGetTypeID() } {
+        return Err("入力先を識別できません。".into());
+    }
+    unsafe {
+        AXUIElementSetMessagingTimeout(element.as_CFTypeRef(), 0.2);
+    }
+    let mut field_pid = 0;
+    if unsafe { AXUIElementGetPid(element.as_CFTypeRef(), &mut field_pid) } != 0 || pid != field_pid
+    {
+        return Err("入力先を識別できません。".into());
     }
     editable(&element)?;
     Ok((pid, element))
