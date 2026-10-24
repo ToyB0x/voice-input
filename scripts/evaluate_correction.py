@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Offline four-way correction comparison. Public/fixed contexts, not live OCR accuracy."""
-import argparse,json,os,platform,re,socket,subprocess,time
+import argparse,json,os,platform,re,signal,socket,subprocess,time
 from pathlib import Path
 from correction_models import MODELS
 from transcription_models import checksum
@@ -18,13 +18,29 @@ def metal_unavailable(failure):
         and failure.get('reason') in {'metal-device-unavailable','metal-simd-unavailable'}
         and failure.get('requested_backend')=='metal' and failure.get('offloaded_layers')==0)
 
+def run_inference(command, payload, timeout=180):
+    # /usr/bin/time is a wrapper: kill its whole group on timeout, including
+    # the native model process, before measuring the next case.
+    process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,text=True,start_new_session=True)
+    try:
+        stdout,stderr=process.communicate(payload,timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:os.killpg(process.pid,signal.SIGKILL)
+        except ProcessLookupError:pass
+        process.communicate()
+        raise
+    return subprocess.CompletedProcess(command,process.returncode,stdout,stderr)
+
 def infer(binary,model,backend,raw,context):
     command=[str(binary.resolve()),str(model.resolve()),backend]
     if platform.system()=='Darwin':command=['/usr/bin/time','-l',*command]
+    elif platform.system()=='Linux':command=['/usr/bin/time','-f','%M maximum resident set size',*command]
     started=time.monotonic()
-    result=subprocess.run(command,input=json.dumps(dict(transcript=raw,context=context),ensure_ascii=False),capture_output=True,text=True,timeout=180)
+    result=run_inference(command,json.dumps(dict(transcript=raw,context=context),ensure_ascii=False))
     memory=re.search(r'(\d+)\s+maximum resident set size',result.stderr)
-    item=dict(wall_ms=(time.monotonic()-started)*1000,peak_rss_bytes=int(memory[1]) if memory else None,rejected=False,failed=result.returncode!=0)
+    rss=int(memory[1])*(1024 if platform.system()=='Linux' else 1) if memory else None
+    item=dict(wall_ms=(time.monotonic()-started)*1000,peak_rss_bytes=rss,rejected=False,failed=result.returncode!=0)
     if result.returncode:
         # A rejected preview preserves raw ASR in the actual app. Include both
         # rejection count and fallback text; never present fallback as a correction.

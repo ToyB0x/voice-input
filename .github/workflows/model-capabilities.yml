@@ -1,0 +1,156 @@
+name: Stronger local model capabilities
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_experimental_metal:
+        description: Retry larger Whisper Metal on the hosted virtual GPU (known UTF-8 failures)
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/model-capabilities.yml
+      - scripts/macos-foundation-model-probe.swift
+      - scripts/probe-correction-model.py
+      - scripts/run-offline-linux.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: model-capabilities-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  foundation:
+    name: Apple Foundation Models availability
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile against runner SDK and probe under network denial
+        run: |
+          mkdir -p "$RUNNER_TEMP/foundation-probe"
+          sw_vers > "$RUNNER_TEMP/foundation-probe/os.txt"
+          xcodebuild -version > "$RUNNER_TEMP/foundation-probe/xcode.txt"
+          xcrun --sdk macosx --show-sdk-version > "$RUNNER_TEMP/foundation-probe/sdk.txt"
+          xcrun swiftc -parse-as-library scripts/macos-foundation-model-probe.swift -o "$RUNNER_TEMP/foundation-probe/probe"
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            "$RUNNER_TEMP/foundation-probe/probe" | tee "$RUNNER_TEMP/foundation-probe/report.json"
+          cat "$RUNNER_TEMP/foundation-probe/report.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apple-foundation-models-availability
+          path: ${{ runner.temp }}/foundation-probe/
+          retention-days: 14
+
+  whisper:
+    name: Stronger Whisper ${{ matrix.model }}
+    runs-on: macos-14
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [medium, large-v3-turbo, large-v3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-transcription/target
+          key: macos-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Build existing production benchmark
+        id: build
+        run: cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked --bin evaluate
+      - name: Prepare pinned model (setup only)
+        id: model
+        run: |
+          mkdir -p "$RUNNER_TEMP/stronger-whisper"
+          sysctl hw.memsize hw.ncpu > "$RUNNER_TEMP/stronger-whisper/hardware.txt"
+          python3 scripts/prepare-transcription-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/model.bin"
+      - name: Score fixed corpus on CPU offline
+        timeout-minutes: 25
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/evaluate_models.py \
+            --binary crates/local-transcription/target/release/evaluate \
+            --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
+            --backend cpu --output "$RUNNER_TEMP/stronger-whisper/cpu" \
+            --require-network-denied --timeout 1400
+      - name: Score fixed corpus on actual Metal offline even after CPU failure
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.include_experimental_metal && steps.build.outcome == 'success' && steps.model.outcome == 'success' }}
+        timeout-minutes: 25
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/evaluate_models.py \
+            --binary crates/local-transcription/target/release/evaluate \
+            --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
+            --backend metal --output "$RUNNER_TEMP/stronger-whisper/metal" \
+            --require-network-denied --timeout 1400
+      - name: Record Metal coverage when not requested
+        if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.include_experimental_metal) }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/stronger-whisper"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = dict(status='not-tested', inferenceTested=False,
+                        reason='Hosted virtual GPU failed larger Whisper with invalid UTF-8; manual diagnostic opt-in only.')
+          Path(os.environ['RUNNER_TEMP'], 'stronger-whisper', 'metal-coverage.json').write_text(json.dumps(report, indent=2)+'\n')
+          PY
+          echo 'Metal NOT TESTED: larger-model GPU diagnostics require explicit manual opt-in.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stronger-whisper-${{ matrix.model }}
+          path: ${{ runner.temp }}/stronger-whisper/
+          retention-days: 14
+
+  correction:
+    name: Stronger correction Qwen3 8B (Linux CPU)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: linux-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: linux-${{ runner.arch }}-correction-runtime-v1-
+      - name: Prepare native CPU build tools and verify evaluation helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libclang-dev libseccomp2 time
+          rustup show
+          python3 -m unittest discover -s scripts/tests -v
+      - name: Build existing production correction engine
+        run: cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked
+      - name: Prepare checksum-verified official weights (setup only)
+        run: |
+          mkdir -p "$RUNNER_TEMP/stronger-correction"
+          free -b > "$RUNNER_TEMP/stronger-correction/hardware.txt"
+          lscpu >> "$RUNNER_TEMP/stronger-correction/hardware.txt"
+          python3 scripts/prepare-correction-model.py --model qwen3-8b "$RUNNER_TEMP/correction-model.gguf"
+      - name: Probe synthetic cases on CPU with inherited network denial
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/probe-correction-model.py \
+            --binary crates/local-correction/target/release/local-correction \
+            --model "$RUNNER_TEMP/correction-model.gguf" --model-name qwen3-8b \
+            --output "$RUNNER_TEMP/stronger-correction" --cpu-only
+          cat "$RUNNER_TEMP/stronger-correction/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stronger-correction-qwen3-8b-linux-cpu
+          path: ${{ runner.temp }}/stronger-correction/
+          retention-days: 14

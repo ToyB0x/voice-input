@@ -91,8 +91,12 @@ func recordForInsertion(_ voice: AXUIElement, afterStop: () throws -> Void = {})
     defer { if playback.isRunning { playback.terminate() } }
     try waitForUI("insertion audio playback", seconds: 30) { !playback.isRunning }
     guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Playback failed") }
-    try key(9, flags: [.maskControl, .maskAlternate])
-    try waitForUI("insertion inference") { trayItem(voice).map(axText)?.contains("処理中") == true }
+    // The hosted virtual HID can lose a second shortcut chord after playback.
+    // Stop through the real tray menu without activating the app's window.
+    // Background shortcut start/stop is covered by desktopInteraction.
+    try trayAction(voice, title: "録音を開始 / 停止")
+    // Apply guard mutations immediately after requesting stop. A fast decode
+    // can finish between AX polls, so do not require observing transient text.
     try afterStop()
     try waitForUI("insertion inference completed", seconds: 120) {
         guard let text = trayItem(voice).map(axText) else { return false }
@@ -312,6 +316,7 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
         return element
     }
     for mode in ["field-change", "selection-change", "content-change", "app-change", "secure", "readonly", "nontext", "discard"] {
+        print("Insertion guard: \(mode)")
         let label = mode == "secure" ? "Protected input" : mode == "readonly" ? "Read only input" : mode == "nontext" ? "Non text target" : "First input"
         let element = try field(label)
         try focusElement(target, element, pid: fixture!.processIdentifier)
