@@ -129,6 +129,10 @@ func grantInsertionPermission(_ voice: AXUIElement, output: URL) throws {
         }
         if (axValue(toggle!, kAXValueAttribute) as? NSNumber)?.intValue != 1 { try press(toggle!) }
         try waitForUI("accessibility switch enabled", seconds: 30) { (axValue(toggle!, kAXValueAttribute) as? NSNumber)?.intValue == 1 }
+        // The switch changes before TCC necessarily commits/invalidates its cache.
+        RunLoop.current.run(until: Date().addingTimeInterval(3))
+        try uiText(settings!).write(to: output.appendingPathComponent("system-settings.txt"), atomically: true, encoding: .utf8)
+        try uiText(voice).write(to: output.appendingPathComponent("product-after-grant.txt"), atomically: true, encoding: .utf8)
         try interactionScreenshot(output, name: "accessibility-granted.png")
         try writeJSON(["status": "passed", "method": "System Settings UI", "productSwitchEnabled": true], to: output.appendingPathComponent("permission.json"))
     } catch {

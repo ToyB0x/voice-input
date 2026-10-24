@@ -180,6 +180,18 @@ jobs:
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/insertion-grant" insertion-grant \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/insertion-grant.log"
+      - name: Inspect only this product's OS authorization metadata
+        if: always()
+        run: |
+          evidence="$RUNNER_TEMP/voice-input-smoke/authorization-metadata.log"
+          app="$PWD/src-tauri/target/release/bundle/macos/Voice Input.app"
+          codesign -d -r- "$app" 2>&1 | tee "$evidence"
+          for database in "/Library/Application Support/com.apple.TCC/TCC.db" "$HOME/Library/Application Support/com.apple.TCC/TCC.db"; do
+            if sudo test -f "$database"; then
+              sudo /usr/bin/sqlite3 "$database" "SELECT client,client_type,auth_value,auth_reason,length(csreq) FROM access WHERE service='kTCCServiceAccessibility' AND (client='dev.toyb0x.voiceinput' OR client LIKE '%Voice Input%');" \
+                2>&1 | tee -a "$evidence" || true
+            fi
+          done
       - name: Verify trusted product insertion and cancellation guards
         timeout-minutes: 12
         env:

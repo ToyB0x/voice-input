@@ -26,8 +26,8 @@ struct Range {
 }
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
-    fn AXIsProcessTrusted() -> bool;
-    fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
+    fn AXIsProcessTrusted() -> u8;
+    fn AXIsProcessTrustedWithOptions(options: *const c_void) -> u8;
     fn AXUIElementCreateSystemWide() -> Element;
     fn AXUIElementGetTypeID() -> usize;
     fn AXUIElementGetPid(element: Element, pid: *mut i32) -> i32;
@@ -45,7 +45,7 @@ unsafe extern "C" {
 }
 
 pub fn trusted() -> bool {
-    unsafe { AXIsProcessTrusted() }
+    unsafe { AXIsProcessTrusted() != 0 }
 }
 #[tauri::command]
 pub fn request_accessibility() -> Result<bool, String> {
@@ -53,7 +53,7 @@ pub fn request_accessibility() -> Result<bool, String> {
         CFString::new("AXTrustedCheckOptionPrompt").as_CFType(),
         CFBoolean::true_value().as_CFType(),
     )]);
-    let granted = unsafe { AXIsProcessTrustedWithOptions(options.as_CFTypeRef()) };
+    let granted = unsafe { AXIsProcessTrustedWithOptions(options.as_CFTypeRef()) != 0 };
     if !granted {
         std::process::Command::new("/usr/bin/open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
