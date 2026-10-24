@@ -114,7 +114,20 @@ impl Hint {
                 "認識補助: 今回の認識にローカルヒントを使用しました。再試行はヒントなしです。"
                     .into();
         }
+        drop(state);
         text
+    }
+}
+impl Drop for Hint {
+    fn drop(&mut self) {
+        // A rejected/dropped job (e.g. sub-second PCM rejected before inference)
+        // must not strand text in the vault after its sole token is gone.
+        if let Ok(mut state) = self.reader.0.lock()
+            && state.epoch == self.epoch
+            && state.hint.take().is_some()
+        {
+            state.message = "認識補助: ヒントを破棄しました。再試行はヒントなしです。".into();
+        }
     }
 }
 #[derive(Serialize)]
@@ -213,6 +226,20 @@ mod tests {
             reader: reader.clone(),
         }
     }
+    #[test]
+    fn unused_jobs_release_text_without_erasing_a_newer_recording() {
+        let reader = Reader::new();
+        reader.configure(true);
+        drop(seed(&reader)); // preprocessing or channel failure drops the job
+        assert!(reader.0.lock().unwrap().hint.is_none());
+        let stale = seed(&reader);
+        reader.cancel();
+        let current = seed(&reader);
+        drop(stale);
+        assert_eq!(current.take().as_deref(), Some("private vocabulary"));
+        assert!(reader.0.lock().unwrap().hint.is_none());
+    }
+
     #[test]
     fn cancellation_and_setting_changes_destroy_pending_text() {
         let reader = Reader::new();
