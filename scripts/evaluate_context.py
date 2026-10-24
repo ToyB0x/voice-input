@@ -2,6 +2,7 @@
 """Compare opt-in local hints and unrelated-hint contamination on public fixtures."""
 import argparse
 import json
+import socket
 from pathlib import Path
 import subprocess
 from evaluate_models import ROOT, normalize, score, summarize
@@ -41,7 +42,15 @@ def main():
     parser.add_argument('--model', type=Path, required=True)
     parser.add_argument('--model-name', choices=MODELS, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--require-network-denied', action='store_true')
     args = parser.parse_args()
+    if args.require_network_denied:
+        try:
+            socket.create_connection(('127.0.0.1', 9), timeout=1)
+        except PermissionError:
+            pass
+        else:
+            raise ValueError('Network sandbox was not enforced')
     if checksum(args.model) != MODELS[args.model_name]['sha256']:
         raise ValueError('Model checksum mismatch')
     corpus_path = ROOT / 'evaluation/corpus.json'
@@ -57,7 +66,12 @@ def main():
                            stdout=stdout, stderr=stderr, check=True, timeout=600)
         reports[mode] = json.loads((args.output / f'{mode}.json').read_text())
     report = compare(corpus, reports)
-    report.update(model=args.model_name, model_sha256=checksum(args.model), backend='cpu')
+    report.update(protocol_version='context-evaluation-v2', model=args.model_name,
+                  model_sha256=checksum(args.model), backend='cpu',
+                  corpus_sha256=checksum(corpus_path), binary_sha256=checksum(args.binary),
+                  source_revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+                  network_denied=args.require_network_denied,
+                  asr_sha256={mode: checksum(args.output/f'{mode}.json') for mode in reports})
     (args.output / 'comparison.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     lines = ['| Hint | CER | Silence false positives |', '|---|---:|---:|']
     for mode, metric in report['metrics'].items():

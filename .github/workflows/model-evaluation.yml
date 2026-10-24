@@ -73,7 +73,7 @@ jobs:
             python3 scripts/evaluate_context.py \
               --binary crates/local-transcription/target/release/evaluate \
               --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
-              --output "$RUNNER_TEMP/model-evaluation/context"
+              --output "$RUNNER_TEMP/model-evaluation/context" --require-network-denied
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -106,31 +106,34 @@ jobs:
           retention-days: 14
 
   correction:
-    name: Local correction ${{ matrix.model }} (macOS)
+    name: Local correction ${{ matrix.model }} (Linux CPU)
     needs: evaluate
-    runs-on: macos-14
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      MACOSX_DEPLOYMENT_TARGET: "14.0"
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
     strategy:
       fail-fast: false
       matrix:
-        model: [qwen3-1.7b, qwen3-4b]
+        model: [qwen3-1.7b, qwen3-4b, qwen3-8b]
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Install pinned Rust toolchain
-        run: rustup show
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libclang-dev libseccomp2 time
+          rustup show
       - uses: actions/cache/restore@v4
         id: correction-cache
         with:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
-          key: macos-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos-${{ runner.arch }}-correction-runtime-v2-
+          key: linux-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: linux-${{ runner.arch }}-correction-runtime-v1-
       - uses: actions/download-artifact@v4
         with:
           name: model-evaluation-small
@@ -141,6 +144,7 @@ jobs:
           cargo clippy --manifest-path crates/local-correction/Cargo.toml --locked --all-targets -- -D warnings
           cargo test --manifest-path crates/local-correction/Cargo.toml --locked
           cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked
+          python3 -m unittest discover -s scripts/tests -v
       - uses: actions/cache/save@v4
         if: steps.correction-cache.outputs.cache-hit != 'true'
         with:
@@ -153,12 +157,17 @@ jobs:
       - name: Compare all four context routes with networking denied
         run: |
           mkdir -p "$RUNNER_TEMP/correction-evaluation"
-          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
-            python3 scripts/evaluate_correction.py \
+          baseline=()
+          if [[ '${{ matrix.model }}' == qwen3-8b ]]; then
+            baseline=(--baseline evaluation/correction-baseline/qwen3-8b.json)
+          fi
+          free -b > "$RUNNER_TEMP/correction-evaluation/hardware.txt"
+          lscpu >> "$RUNNER_TEMP/correction-evaluation/hardware.txt"
+          python3 scripts/run-offline-linux.py python3 scripts/evaluate_correction.py \
               --binary crates/local-correction/target/release/local-correction \
               --model "$RUNNER_TEMP/correction-model.gguf" --model-name '${{ matrix.model }}' \
               --asr "$RUNNER_TEMP/small-asr/context" --output "$RUNNER_TEMP/correction-evaluation" \
-              --require-network-denied \
+              --require-network-denied --cpu-only "${baseline[@]}" \
               2>&1 | tee "$RUNNER_TEMP/correction-evaluation/run.log"
           cat "$RUNNER_TEMP/correction-evaluation/summary.md" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
@@ -168,3 +177,23 @@ jobs:
           path: ${{ runner.temp }}/correction-evaluation/
           retention-days: 14
           if-no-files-found: warn
+
+  correction-summary:
+    name: Compare correction quality and routing
+    needs: correction
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: correction-evaluation-*
+          path: ${{ runner.temp }}/correction-reports
+      - name: Validate complete comparable reports and publish differences
+        run: |
+          python3 scripts/summarize_correction.py "$RUNNER_TEMP/correction-reports" "$RUNNER_TEMP/correction-summary"
+          cat "$RUNNER_TEMP/correction-summary/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: correction-quality-summary
+          path: ${{ runner.temp }}/correction-summary/
+          retention-days: 14

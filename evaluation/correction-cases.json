@@ -50,7 +50,13 @@
         "会場予約"
       ],
       "forbidden": [],
-      "line_break": true
+      "line_break": true,
+      "bullets": 2,
+      "forbidden_format": [
+        "箇条書きで",
+        "一つ目は",
+        "二つ目は"
+      ]
     },
     {
       "id": "rephrase",
@@ -62,6 +68,11 @@
       ],
       "forbidden": [
         "水曜"
+      ],
+      "forbidden_format": [
+        "いや",
+        "または",
+        "もしくは"
       ]
     },
     {
@@ -110,6 +121,176 @@
       "forbidden": [
         "画面"
       ]
+    },
+    {
+      "id": "filler",
+      "transcript": "えー、明日の会議は10時です。えっと、資料を準備してください",
+      "context": "会議は10時。",
+      "reference": "明日の会議は10時です。資料を準備してください。",
+      "required": [
+        "10時",
+        "資料"
+      ],
+      "forbidden": [],
+      "forbidden_format": [
+        "えー",
+        "えっと"
+      ],
+      "punctuation": true
+    },
+    {
+      "id": "demonstrative",
+      "transcript": "あの資料は削除しないでください",
+      "context": "古いメモ：資料を削除する。",
+      "reference": "あの資料は削除しないでください。",
+      "required": [
+        "あの資料",
+        "削除しない"
+      ],
+      "forbidden": [
+        "削除してください"
+      ],
+      "punctuation": true
+    },
+    {
+      "id": "repair-name",
+      "transcript": "宛先は山田さんいや鈴木さんです",
+      "context": "古い送付先：山田さん。",
+      "reference": "宛先は鈴木さんです。",
+      "required": [
+        "鈴木"
+      ],
+      "forbidden": [
+        "山田"
+      ],
+      "forbidden_format": [
+        "いや",
+        "または",
+        "もしくは"
+      ],
+      "punctuation": true
+    },
+    {
+      "id": "repair-place",
+      "transcript": "集合場所は東口、いや西口です",
+      "context": "集合場所：東口。",
+      "reference": "集合場所は西口です。",
+      "required": [
+        "西口"
+      ],
+      "forbidden": [
+        "東口"
+      ],
+      "forbidden_format": [
+        "いや",
+        "または",
+        "もしくは"
+      ],
+      "punctuation": true
+    },
+    {
+      "id": "negated-contrast",
+      "transcript": "会議は水曜日ではなく木曜日です",
+      "context": "古い予定：水曜日。",
+      "reference": "会議は水曜日ではなく木曜日です。",
+      "required": [
+        "水曜日ではなく",
+        "木曜日"
+      ],
+      "forbidden": [],
+      "punctuation": true
+    },
+    {
+      "id": "signed-facts",
+      "transcript": "気温はマイナス3.5度です0度にはなりません",
+      "context": "別の日の気温：プラス3.5度。",
+      "reference": "気温はマイナス3.5度です。0度にはなりません。",
+      "required": [
+        "マイナス3.5",
+        "0度",
+        "なりません"
+      ],
+      "forbidden": [
+        "プラス"
+      ],
+      "punctuation": true
+    },
+    {
+      "id": "multiple-facts",
+      "transcript": "締め切りは6月12日で人数は15人です",
+      "context": "別案件：6月20日、50人。",
+      "reference": "締め切りは6月12日で、人数は15人です。",
+      "required": [
+        "6月12日",
+        "15人"
+      ],
+      "forbidden": [
+        "20日",
+        "50人"
+      ],
+      "punctuation": true
+    },
+    {
+      "id": "paragraphs",
+      "transcript": "二段落で結論です次に理由です",
+      "context": "",
+      "reference": "結論です。\n\n理由です。",
+      "required": [
+        "結論",
+        "理由"
+      ],
+      "forbidden": [],
+      "forbidden_format": [
+        "二段落で"
+      ],
+      "paragraphs": 2,
+      "punctuation": true
+    },
+    {
+      "id": "proper-name-ocr",
+      "transcript": "資料は神楽坂データ研究所へ送ってください",
+      "context": "OCRの誤り：神楽板データ研究所。",
+      "reference": "資料は神楽坂データ研究所へ送ってください。",
+      "required": [
+        "神楽坂データ研究所"
+      ],
+      "forbidden": [
+        "神楽板"
+      ],
+      "punctuation": true
+    },
+    {
+      "id": "scoped-negation",
+      "transcript": "明日は休みません会議には参加します",
+      "context": "古いメモ：明日は休みます。会議には参加しません。",
+      "reference": "明日は休みません。会議には参加します。",
+      "required": [
+        "休みません",
+        "参加します"
+      ],
+      "forbidden": [
+        "休みます",
+        "参加しません"
+      ],
+      "punctuation": true
+    },
+    {
+      "id": "multi-sentence-preservation",
+      "transcript": "月日は、百代の過客にして、生きかうとしもまた旅人なり。船の上にしょうがようかべ、うまの口とらえておよむかうるものは、日々旅にして旅を済みかとす。",
+      "context": "月日、百代、過客、旅人。",
+      "reference": "月日は、百代の過客にして、生きかうとしもまた旅人なり。船の上にしょうがようかべ、うまの口とらえておよむかうるものは、日々旅にして旅を済みかとす。",
+      "required": [
+        "百代",
+        "旅人",
+        "日々"
+      ],
+      "forbidden": [
+        "昼食",
+        "うどん",
+        "見積もり"
+      ],
+      "punctuation": true,
+      "source": "ASR of public-domain Oku no Hosomichi app fixture; CI run 40100448970"
     }
   ]
 }

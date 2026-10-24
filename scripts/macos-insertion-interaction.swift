@@ -95,8 +95,15 @@ func recordForInsertion(_ voice: AXUIElement, afterStop: () throws -> Void = {})
     // Stop through the real tray menu without activating the app's window.
     // Background shortcut start/stop is covered by desktopInteraction.
     try trayAction(voice, title: "録音を開始 / 停止")
-    // Apply guard mutations immediately after requesting stop. A fast decode
-    // can finish between AX polls, so do not require observing transient text.
+    // AXPress queues the menu action. Moving focus immediately can dismiss
+    // the menu before that action is delivered on the hosted desktop. Require
+    // the real recording transition before changing the target; do not toggle
+    // again or accept a previous recording's result. Guard assertions below
+    // still require the intended target-change reason, even for fast decodes.
+    try waitForUI("tray stop acknowledged") {
+        guard let text = trayItem(voice).map(axText) else { return false }
+        return !text.contains("録音中") && (text.contains("処理中") || text.contains("待機") || text.contains("要確認"))
+    }
     try afterStop()
     try waitForUI("insertion inference completed", seconds: 120) {
         guard let text = trayItem(voice).map(axText) else { return false }
