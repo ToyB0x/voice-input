@@ -14,9 +14,19 @@ func configureInsertion(_ root: AXUIElement) throws {
     try waitForUI("insertion explicitly enabled") { uiText(root).contains("直接入力: 有効") }
 }
 func hideInsertionWindow(_ root: AXUIElement) throws {
-    guard let window = (axValue(root, kAXWindowsAttribute) as? [AXUIElement])?.first,
-          let close = axValue(window, kAXCloseButtonAttribute) else { throw SmokeFailure(description: "No window close control") }
-    try press(unsafeBitCast(close, to: AXUIElement.self))
+    // AXWindows can put a tray tooltip before the real window. Wait for an
+    // actual close control, rather than assuming the first entry is closable.
+    var close: AXUIElement?
+    try waitForUI("native window close control") {
+        for window in axValue(root, kAXWindowsAttribute) as? [AXUIElement] ?? [] {
+            if let value = axValue(window, kAXCloseButtonAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() {
+                close = unsafeBitCast(value, to: AXUIElement.self)
+                return true
+            }
+        }
+        return false
+    }
+    try press(close!)
     var pid: pid_t = 0
     guard AXUIElementGetPid(root, &pid) == .success else { throw SmokeFailure(description: "Could not identify closing app") }
     try waitForUI("Voice Input window fully hidden") { visibleWindows(for: pid).isEmpty }

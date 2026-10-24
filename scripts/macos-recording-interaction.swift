@@ -454,11 +454,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
         throw SmokeFailure(description: "Persisted preferences mismatch or unexpected private data")
     }
     // Close the actual native window, leaving only the resident process/tray.
-    guard let window = (axValue(root, kAXWindowsAttribute) as? [AXUIElement])?.first,
-          let closeRef = axValue(window, kAXCloseButtonAttribute) else {
-        throw SmokeFailure(description: "Window close control missing")
-    }
-    try press(unsafeBitCast(closeRef, to: AXUIElement.self))
+    try hideInsertionWindow(root)
     try waitForUI("closed window keeps resident process") { visibleWindows(for: pid).isEmpty && !app.isTerminated }
     try trayElements(root).map(axText).joined(separator: "\n").write(to: output.appendingPathComponent("tray-before.txt"), atomically: true, encoding: .utf8)
 
