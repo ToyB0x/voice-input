@@ -28,7 +28,6 @@ pub struct Desktop {
     path: PathBuf,
     inner: Mutex<Inner>,
     toggling: AtomicBool,
-    pressed: AtomicBool,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,9 +74,9 @@ pub fn shortcut_event(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState
     if !active {
         return;
     }
+    // Release fires once per chord. Ignoring repeated presses avoids both
+    // autorepeat toggles and a persistent latch when a release is missed.
     if state == ShortcutState::Released {
-        desktop.pressed.store(false, Ordering::Release);
-    } else if !desktop.pressed.swap(true, Ordering::AcqRel) {
         toggle(app);
     }
 }
@@ -173,7 +172,6 @@ pub fn save_preferences(
     inner.error = None;
     app.state::<crate::insertion::Inserter>()
         .configure(inner.preferences.auto_insert);
-    desktop.pressed.store(false, Ordering::Release);
     Ok(Status {
         preferences: inner.preferences.clone(),
         shortcut_registered: new.is_some(),
@@ -209,7 +207,6 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             error,
         }),
         toggling: AtomicBool::new(false),
-        pressed: AtomicBool::new(false),
     });
     app.state::<crate::insertion::Inserter>()
         .configure(preferences.auto_insert);

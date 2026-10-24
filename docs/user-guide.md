@@ -55,7 +55,7 @@ python3 -c 'from pathlib import Path; print(Path("models/ggml-small.bin").resolv
 
 ## 別アプリで作業しながら録音する
 
-初期ショートカットは **Command + Shift + Space**。1回押すと録音開始、もう1回で停止し、
+初期ショートカットは **Command + Shift + Space**。押して離すと録音開始、もう1回押して離すと停止し、
 モデルが準備済みならローカル文字起こしする。最大60秒で自動停止する。
 初回の録音時だけOSのマイク許可を確認する。拒否済みなら画面からシステム設定を開ける。
 録音中・認識中はメニューバーの `VI 録音中` / `VI 処理中` で確認できる。
