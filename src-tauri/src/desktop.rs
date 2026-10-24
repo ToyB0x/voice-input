@@ -88,14 +88,20 @@ fn toggle(app: &AppHandle) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        // First-use/denied permissions need a visible explanation. Successful
-        // background recording never activates the settings window.
-        if recorder::permission_status() != "authorized" {
-            show(&app);
-        }
         let result = async {
-            if recorder::request_microphone_permission().await? != "authorized" {
-                return Err("マイクの許可が必要です。設定画面を確認してください。".into());
+            let snapshot = app.state::<Recorder>().status()?;
+            if snapshot.recognition.working {
+                return Err("処理が終わるまでお待ちください。".into());
+            }
+            // Stopping must remain possible even if microphone permission was
+            // revoked during capture. Only starting requests permission.
+            if snapshot.phase != "recording" {
+                if recorder::permission_status() != "authorized" {
+                    show(&app);
+                }
+                if recorder::request_microphone_permission().await? != "authorized" {
+                    return Err("マイクの許可が必要です。設定画面を確認してください。".into());
+                }
             }
             app.state::<Recorder>().toggle().await.map(|_| ())
         }
