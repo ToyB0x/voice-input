@@ -258,6 +258,8 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/smoke.log"
       - name: Verify Apple engine selection and body-free diagnostics in the actual app
         timeout-minutes: 3
+        env:
+          VOICE_INPUT_FOUNDATION_VERIFICATION: ${{ runner.temp }}/voice-input-smoke/foundation-runtime.json
         run: |
           "$RUNNER_TEMP/voice-input-smoke-runner" \
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
