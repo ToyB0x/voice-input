@@ -416,7 +416,7 @@ func clickAtCenter(_ element: AXUIElement) throws {
     }
 }
 
-func trayAction(_ root: AXUIElement, title: String) throws {
+func trayAction(_ root: AXUIElement, title: String, nativeKeyboard: Bool = false) throws {
     guard let tray = trayItem(root) else {
         throw SmokeFailure(description: "Voice Input menu bar item missing: \(trayElements(root).map(axText))")
     }
@@ -446,8 +446,23 @@ func trayAction(_ root: AXUIElement, title: String) throws {
     }
     // The menu is now proven visible. Invoke its native accessibility action:
     // a virtual pointer click can dismiss the popup without selecting the item.
-    guard AXUIElementPerformAction(choice!, kAXPressAction as CFString) == .success else {
-        throw SmokeFailure(description: "Could not activate visible tray menu item: " + title)
+    if nativeKeyboard {
+        // AXPress can dismiss the hosted menu without delivering the toggle.
+        // Hover the proven visible item, then commit the native selection with
+        // Return. Callers still require the real recording state transition.
+        let point = try elementCenter(choice!)
+        guard let move = CGEvent(mouseEventSource: CGEventSource(stateID: .hidSystemState),
+                                 mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) else {
+            throw SmokeFailure(description: "Could not construct menu hover event")
+        }
+        move.flags = []
+        move.post(tap: .cghidEventTap)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        try key(36)
+    } else {
+        guard AXUIElementPerformAction(choice!, kAXPressAction as CFString) == .success else {
+            throw SmokeFailure(description: "Could not activate visible tray menu item: " + title)
+        }
     }
     try waitForUI("tray menu selection delivered") {
         !onScreenWindows().contains { ($0[kCGWindowNumber as String] as? NSNumber) == menuWindow }

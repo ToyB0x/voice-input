@@ -95,7 +95,7 @@ func recordForInsertion(_ voice: AXUIElement, beforeStop: () throws -> Void = {}
     // The hosted virtual HID can lose a second shortcut chord after playback.
     // Stop through the real tray menu without activating the app's window.
     // Background shortcut start/stop is covered by desktopInteraction.
-    try trayAction(voice, title: "録音を開始 / 停止")
+    try trayAction(voice, title: "録音を開始 / 停止", nativeKeyboard: true)
     // AXPress queues the menu action. Moving focus immediately can dismiss
     // the menu before that action is delivered on the hosted desktop. Require
     // the real recording transition before changing the target; do not toggle
