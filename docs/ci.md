@@ -49,3 +49,6 @@ gh workflow run model-capabilities.yml --ref YOUR_BRANCH
 成功したMacジョブは、検証したアプリも `voice-input-macos-ARM64-<試行番号>` ArtifactへZIPとSHA-256・ソースリビジョン付きで保存します。モデルと個人設定は含めず、Developer ID署名・公証は行いません。実機での利用は[個人利用ガイド](user-guide.md#ciで検証したアプリを使う)を参照してください。
 
 macOS 26のRust/CMakeビルドキャッシュはmacOS 14のものと分けます。OpenSSLやSDKの絶対パスを含む旧OSの生成物を新OSへ復元しません。OS更新直後の初回はキャッシュがないため、通常より長くかかることがあります。
+評価workflowのUbuntuランナーを変更するPRでは、`Ubuntu runner compatibility`も実行します。Ubuntu 26.04で実際に補正ランタイムをビルド・テストし、通信を禁止して製品の補正ガードを検証します。モデルを取得する全件評価は起動しません。ネイティブ生成物のキャッシュはUbuntu 24.04と分離します。
+
+通常Macジョブのタイムアウトは30分です。macOSメジャー更新や空キャッシュ時のC++・Rustの初回コンパイルを完了させるための上限であり、通常実行の10分未満という目標は維持します。完全テストの60分上限とは分けています。
