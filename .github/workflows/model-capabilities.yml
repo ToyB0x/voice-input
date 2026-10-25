@@ -64,6 +64,7 @@ jobs:
           provenance = json.loads((root / 'provenance.json').read_text())
           assert provenance['archive_sha256'] == hashlib.sha256((root / 'Voice-Input-macos.zip').read_bytes()).hexdigest()
           assert provenance['architecture'] == 'ARM64'
+          assert provenance['source_revision'] == '60078e71c231feaad5f9a6554ac6644fbf908fd2'
           PYCODE
           ditto -x -k "$RUNNER_TEMP/macos26-app/Voice-Input-macos.zip" "$RUNNER_TEMP/macos26-app/expanded"
           cp scripts/macos-window-smoke.swift "$RUNNER_TEMP/main.swift"

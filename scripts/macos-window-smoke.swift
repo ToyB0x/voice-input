@@ -98,7 +98,13 @@ func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
                 request.recognitionLevel = .accurate
                 request.recognitionLanguages = ["en-US", "ja-JP"]
                 request.usesLanguageCorrection = false
-                try VNImageRequestHandler(url: screenshot, options: [:]).perform([request])
+                do {
+                    try VNImageRequestHandler(url: screenshot, options: [:]).perform([request])
+                } catch {
+                    lastFailure = "Vision OCR request failed: \(error)"
+                    RunLoop.current.run(until: Date().addingTimeInterval(1))
+                    continue // Still require actual visible page text within the original deadline.
+                }
                 let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
                 try writeJSON(lines, to: output.appendingPathComponent("ocr.json"))
                 let normalized = lines.joined().lowercased().filter { !$0.isWhitespace }
