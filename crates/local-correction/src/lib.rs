@@ -134,16 +134,23 @@ fn literal_boundary(c: char) -> bool {
         || "。、，．！？「」『』（）・：；…“”‘’【】［］｛｝〈〉《》".contains(c)
 }
 fn is_kana(c: char) -> bool {
-    ('ぁ'..='ゖ').contains(&c) || ('ァ'..='ヺ').contains(&c) || ('ｦ'..='ﾟ').contains(&c) || c == 'ー'
+    ('\u{3040}'..='\u{309f}').contains(&c)
+        || ('\u{30a0}'..='\u{30ff}').contains(&c)
+        || ('\u{31f0}'..='\u{31ff}').contains(&c)
+        || ('ｦ'..='ﾟ').contains(&c)
 }
 
 fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'static str> {
     let source = normalized(original);
     let candidate = normalized(candidate);
     for marker in ["ない", "ません"] {
-        // Marker counts also protect repeated negatives when a phonetic
-        // stem is too ambiguous for literal target matching.
-        let mut fragments = std::collections::BTreeSet::from([marker.to_owned()]);
+        // Bare ない can be lexical (うらない, おこないません). Do not
+        // count it independently of an identifiable stem. Keep the existing
+        // global presence check and the count of the polite ending ません.
+        let mut fragments = std::collections::BTreeSet::new();
+        if marker == "ません" {
+            fragments.insert(marker.to_owned());
+        }
         for (index, _) in original.match_indices(marker) {
             // Keep clause boundaries until the stem is extracted. A filler
             // before a comma is not the target of a following bare negation.
@@ -199,20 +206,71 @@ fn canonical_contrast(text: &str) -> String {
         .replace("じゃなく", "ではなく")
         .replace("でなく", "ではなく")
 }
+fn contrast_targets(text: &str) -> Vec<String> {
+    ["ではなく", "じゃなく", "でなく"]
+        .into_iter()
+        .flat_map(|marker| {
+            text.match_indices(marker)
+                .map(|(index, _)| subject_term(&text[..index]))
+        })
+        .collect()
+}
+
+// Kana can become kanji without changing the intended name. Match only the
+// unchanged non-kana runs, retaining their order and any literal edge. This
+// preserves 東京 in 東京えき and 駅 in とうきょう駅, but does not verify readings.
+fn known_contrast_parts_match(source: &str, candidate: &str) -> bool {
+    let parts: Vec<_> = source
+        .split(is_kana)
+        .filter(|part| !part.is_empty())
+        .collect();
+    if parts.is_empty() {
+        return true;
+    }
+    if source.chars().next().is_some_and(|c| !is_kana(c)) && !candidate.starts_with(parts[0]) {
+        return false;
+    }
+    if source.chars().last().is_some_and(|c| !is_kana(c))
+        && !candidate.ends_with(parts[parts.len() - 1])
+    {
+        return false;
+    }
+    let mut remaining = candidate;
+    for part in parts {
+        let Some(index) = remaining.find(part) else {
+            return false;
+        };
+        remaining = &remaining[index + part.len()..];
+    }
+    true
+}
+
 fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static str> {
+    let source_targets = contrast_targets(original);
+    let candidate_targets = contrast_targets(candidate);
     let source = canonical_contrast(original);
     let candidate = canonical_contrast(candidate);
     if candidate.matches("ではなく").count() < source.matches("ではなく").count() {
         return Err("correction removed a contrast target");
     }
-    for marker in ["ではなく", "じゃなく", "でなく"] {
-        for (index, _) in original.match_indices(marker) {
-            let target = subject_term(&original[..index]);
-            if !target.is_empty() && !target.chars().all(is_kana) {
-                let fragment = format!("{target}ではなく");
-                if candidate.matches(&fragment).count() < source.matches(&fragment).count() {
-                    return Err("correction removed a contrast target");
-                }
+    for target in &source_targets {
+        if target.is_empty() || target.chars().all(is_kana) {
+            continue;
+        }
+        if target.chars().any(is_kana) {
+            let matches = |targets: &[String]| {
+                targets
+                    .iter()
+                    .filter(|other| known_contrast_parts_match(target, other))
+                    .count()
+            };
+            if matches(&candidate_targets) < matches(&source_targets) {
+                return Err("correction removed a contrast target");
+            }
+        } else {
+            let fragment = format!("{target}ではなく");
+            if candidate.matches(&fragment).count() < source.matches(&fragment).count() {
+                return Err("correction removed a contrast target");
             }
         }
     }
@@ -521,6 +579,90 @@ mod tests {
             .unwrap();
             assert!(
                 parse_answer(&json, original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+    }
+
+    #[test]
+    fn lexical_nai_conversion_keeps_actual_negations() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for (original, candidate) in [
+            ("うらないはしません", "占いはしません。"),
+            ("おこないません", "行いません。"),
+            ("かないません", "叶いません。"),
+            ("今日はうらないはしません", "今日は占いはしません。"),
+            ("うらないをおこないません", "占いを行いません。"),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+        for (original, candidate) in [
+            ("予約しない。変更しない", "予約します。変更しない。"),
+            ("予約しない。変更しない", "予約しない。変更します。"),
+            ("削除しない。削除しない", "削除しない。"),
+            ("しません。しません", "しません。"),
+            (
+                "うらないはしません確認もしません",
+                "占いはします。確認もしません。",
+            ),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_err(),
+                "{original} -> {candidate}"
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_script_contrast_keeps_literal_parts() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for (original, candidate) in [
+            (
+                "とうきょう駅ではなく大阪駅です",
+                "東京駅ではなく大阪駅です。",
+            ),
+            (
+                "トウキョウ駅じゃなく大阪駅です",
+                "東京駅ではなく大阪駅です。",
+            ),
+            ("東京えきではなく大阪駅です", "東京駅ではなく大阪駅です。"),
+            (
+                "カ\u{3099}ラス駅ではなく大阪駅です",
+                "ガラス駅ではなく大阪駅です。",
+            ),
+            (
+                "東京しぶや駅ではなく大阪駅です",
+                "東京渋谷駅ではなく大阪駅です。",
+            ),
+            (
+                "とうきょう駅ではなく大阪駅です。とうきょう駅ではなく京都駅です",
+                "東京駅ではなく大阪駅です。東京駅ではなく京都駅です。",
+            ),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+        for (original, candidate) in [
+            ("とうきょう駅ではなく大阪駅です", "東京ではなく大阪駅です。"),
+            ("東京えきではなく大阪駅です", "大阪駅ではなく東京駅です。"),
+            (
+                "東京しぶや駅ではなく大阪駅です",
+                "渋谷東京駅ではなく大阪駅です。",
+            ),
+            ("とうきょう駅ではなく大阪駅です", "東京駅です。"),
+            ("東京駅ではなく大阪駅です", "大阪駅ではなく東京駅です。"),
+            (
+                "とうきょう駅ではなく大阪駅です。とうきょう駅ではなく京都駅です",
+                "東京駅ではなく大阪駅です。東京ではなく京都駅です。",
+            ),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_err(),
                 "{original} -> {candidate}"
             );
         }
