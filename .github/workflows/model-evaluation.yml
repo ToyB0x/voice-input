@@ -1,11 +1,8 @@
 name: Model evaluation
 
 on:
-  pull_request:
-    paths-ignore: ["docs/**", "README.md", "evaluation/baseline/**"]
-  push:
-    branches: [main]
-    paths-ignore: ["docs/**", "README.md", "evaluation/baseline/**"]
+  schedule:
+    - cron: '17 18 * * 2'
   workflow_dispatch:
     inputs:
       include_medium:

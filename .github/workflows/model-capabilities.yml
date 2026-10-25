@@ -11,14 +11,6 @@ on:
     paths:
       - .github/workflows/model-capabilities.yml
       - scripts/macos-foundation-model-probe.swift
-      - scripts/probe-correction-model.py
-      - crates/local-correction/src/**
-      - evaluation/correction-cases.json
-      - evaluation/correction-guard-cases.json
-      - scripts/run-offline-linux.py
-      - crates/local-models/catalog.json
-      - scripts/transcription_models.py
-      - scripts/correction_models.py
 
 permissions:
   contents: read
@@ -57,6 +49,7 @@ jobs:
 
   whisper:
     name: Stronger Whisper ${{ matrix.model }}
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-14
     timeout-minutes: 60
     strategy:
@@ -120,6 +113,7 @@ jobs:
 
   correction:
     name: Stronger correction Qwen3 8B (Linux CPU)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
