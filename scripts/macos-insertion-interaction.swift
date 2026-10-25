@@ -78,7 +78,7 @@ func openTextTarget(_ output: URL, name: String, text: String) throws -> (pid_t,
     }
     return (pid, field!)
 }
-func recordForInsertion(_ voice: AXUIElement, afterStop: () throws -> Void = {}) throws {
+func recordForInsertion(_ voice: AXUIElement, beforeStop: () throws -> Void = {}, afterStop: () throws -> Void = {}) throws {
     guard let audio = ProcessInfo.processInfo.environment["VOICE_INPUT_TEST_AUDIO"] else { throw SmokeFailure(description: "Missing audio fixture") }
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString("insertion-clipboard-sentinel", forType: .string)
@@ -91,6 +91,7 @@ func recordForInsertion(_ voice: AXUIElement, afterStop: () throws -> Void = {})
     defer { if playback.isRunning { playback.terminate() } }
     try waitForUI("insertion audio playback", seconds: 30) { !playback.isRunning }
     guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Playback failed") }
+    try beforeStop()
     // The hosted virtual HID can lose a second shortcut chord after playback.
     // Stop through the real tray menu without activating the app's window.
     // Background shortcut start/stop is covered by desktopInteraction.
@@ -329,14 +330,19 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
         try focusElement(target, element, pid: fixture!.processIdentifier)
         if mode == "nontext" { try press(element) }
         if !["secure", "nontext"].contains(mode) { try setRange(element, 0, 0) }
-        try recordForInsertion(voice, afterStop: {
+        try recordForInsertion(voice, beforeStop: {
+            // Change applications while still recording: opening TextEdit after
+            // stop can lose the race to a valid insertion from a fast decode.
+            // The original target was captured before recording, so the same
+            // delivery-time identity guard must reject this app change.
+            if mode == "app-change" { _ = try openTextTarget(output, name: "changed-app", text: "other-app-sentinel") }
+        }, afterStop: {
             if mode == "field-change" { try focusElement(target, field("Second input"), pid: fixture!.processIdentifier) }
             if mode == "selection-change" { try setRange(element, 1, 0) }
             if mode == "content-change" {
                 guard AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, "edited-sentinel" as CFString) == .success else { throw SmokeFailure(description: "Could not edit synthetic field") }
                 try setRange(element, 0, 0)
             }
-            if mode == "app-change" { _ = try openTextTarget(output, name: "changed-app", text: "other-app-sentinel") }
             if mode == "discard" {
                 try trayAction(voice, title: "設定・認識結果を表示")
                 try waitForUI("discard enabled during inference") { uiText(voice).contains("文字起こし中") && uiButton(voice, ["Discard recording"]) != nil }

@@ -427,7 +427,11 @@ func trayAction(_ root: AXUIElement, title: String) throws {
         }?[kCGWindowNumber as String] as? NSNumber
         return menuWindow != nil
     }
-    try clickAtCenter(choice!)
+    // The menu is now proven visible. Invoke its native accessibility action:
+    // a virtual pointer click can dismiss the popup without selecting the item.
+    guard AXUIElementPerformAction(choice!, kAXPressAction as CFString) == .success else {
+        throw SmokeFailure(description: "Could not activate visible tray menu item: " + title)
+    }
     try waitForUI("tray menu selection delivered") {
         !onScreenWindows().contains { ($0[kCGWindowNumber as String] as? NSNumber) == menuWindow }
     }
