@@ -124,7 +124,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::to_writer(std::io::stdout(), &serde_json::json!({"text": text}))?;
         return Ok(());
     }
-    if args.len() != 2 || !["cpu", "metal"].contains(&args[1].as_str()) {
+    let comparison = args.len() == 3 && args[2] == "--compare";
+    if !(args.len() == 2 || comparison) || !["cpu", "metal"].contains(&args[1].as_str()) {
         return Err(
             "usage: local-correction /absolute/model.gguf cpu|metal (JSON on stdin)".into(),
         );
@@ -264,11 +265,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     performance.generated_tokens = generated.len() as u32;
     let phase_started = Instant::now();
     PHASE.store(6, Ordering::Relaxed);
-    let text = parse_answer(
-        &vocab.detokenize(&generated, false, false),
-        &request.transcript,
-    )
-    .map_err(Rejection)?;
+    let answer = vocab.detokenize(&generated, false, false);
+    let result = parse_answer(&answer, &request.transcript);
+    if comparison {
+        let candidate: local_correction::Answer =
+            serde_json::from_slice(&answer).map_err(|_| "invalid correction JSON")?;
+        let candidate = candidate.text.trim();
+        if candidate.len() > MAX_OUTPUT || candidate.contains('\0') {
+            return Err("invalid comparison candidate".into());
+        }
+        serde_json::to_writer(
+            std::io::stdout(),
+            &serde_json::json!({
+                "candidate": candidate, "accepted": result.is_ok(), "reason": result.err(),
+                "backend": args[1], "offloaded_layers": layers,
+                "elapsed_ms": started.elapsed().as_millis() as u64,
+            }),
+        )?;
+        return Ok(());
+    }
+    let text = result.map_err(Rejection)?;
     performance.validation_ms = phase_started.elapsed().as_millis() as u64;
     performance.peak_rss_bytes = peak_rss_bytes();
     PHASE.store(7, Ordering::Relaxed);

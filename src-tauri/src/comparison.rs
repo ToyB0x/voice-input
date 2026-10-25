@@ -1,0 +1,854 @@
+//! One recording, one frozen context, one child process at a time. No automatic insertion or files.
+use local_comparison::{Case, Score, Selection, plan, score};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
+use tauri::Manager;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Row {
+    pub index: usize,
+    pub case: Case,
+    pub status: String,
+    pub message: String,
+    pub raw: Option<String>,
+    pub candidate: Option<String>,
+    pub final_text: Option<String>,
+    pub accepted: Option<bool>,
+    pub asr_ms: Option<u64>,
+    pub asr_load_ms: Option<u64>,
+    pub correction_ms: Option<u64>,
+    pub total_ms: u64,
+    pub asr_score: Option<Score>,
+    pub candidate_score: Option<Score>,
+    pub final_score: Option<Score>,
+}
+impl Row {
+    fn new(index: usize, case: Case) -> Self {
+        Self {
+            index,
+            case,
+            status: "unavailable".into(),
+            message: String::new(),
+            raw: None,
+            candidate: None,
+            final_text: None,
+            accepted: None,
+            asr_ms: None,
+            asr_load_ms: None,
+            correction_ms: None,
+            total_ms: 0,
+            asr_score: None,
+            candidate_score: None,
+            final_score: None,
+        }
+    }
+}
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Status {
+    pub generation: u64,
+    pub working: bool,
+    pub armed: bool,
+    pub phase: String,
+    pub message: String,
+    pub total: usize,
+    pub completed: usize,
+    pub audio_ms: u64,
+    pub ax_characters: usize,
+    pub ocr_characters: usize,
+    pub has_reference: bool,
+    pub rows: Vec<Row>,
+    pub next: usize,
+    pub more: bool,
+}
+impl Default for Status {
+    fn default() -> Self {
+        Self {
+            generation: 0,
+            working: false,
+            armed: false,
+            phase: "idle".into(),
+            message: "録音済みの同じ音声を直列で比較します。".into(),
+            total: 0,
+            completed: 0,
+            audio_ms: 0,
+            ax_characters: 0,
+            ocr_characters: 0,
+            has_reference: false,
+            rows: Vec::new(),
+            next: 0,
+            more: false,
+        }
+    }
+}
+struct Inner {
+    status: Status,
+    active: Option<u64>,
+}
+#[derive(Clone)]
+pub struct Comparisons {
+    inner: Arc<Mutex<Inner>>,
+    epoch: Arc<AtomicU64>,
+    armed: Arc<AtomicBool>,
+    closing: Arc<AtomicBool>,
+    worker: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
+}
+impl Comparisons {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(Inner {
+                status: Status::default(),
+                active: None,
+            })),
+            epoch: Arc::new(AtomicU64::new(0)),
+            armed: Arc::new(AtomicBool::new(false)),
+            closing: Arc::new(AtomicBool::new(false)),
+            worker: Arc::new(Mutex::new(None)),
+        }
+    }
+    pub fn working(&self) -> bool {
+        self.inner.lock().map_or(true, |s| s.status.working)
+    }
+    pub fn has_results(&self) -> bool {
+        self.inner.lock().is_ok_and(|s| !s.status.rows.is_empty())
+    }
+    pub fn armed(&self) -> bool {
+        self.armed.load(Ordering::Acquire)
+    }
+    pub fn cancel(&self, clear: bool) {
+        self.epoch.fetch_add(1, Ordering::AcqRel);
+        if let Ok(mut state) = self.inner.lock() {
+            state.status.phase = if state.status.working {
+                "cancelling"
+            } else if clear {
+                "idle"
+            } else {
+                "cancelled"
+            }
+            .into();
+            if clear {
+                state.status.rows.clear();
+                state.status.completed = 0;
+                state.status.generation = self.epoch.load(Ordering::Acquire);
+            }
+        }
+    }
+    pub fn shutdown(&self) {
+        let mut worker = self.worker.lock().unwrap_or_else(|e| e.into_inner());
+        self.closing.store(true, Ordering::Release);
+        self.cancel(true);
+        if let Some(handle) = worker.take() {
+            let _ = handle.join();
+        }
+    }
+    fn status(&self, generation: u64, after: usize) -> Status {
+        let state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let original = &state.status;
+        let mut status = Status {
+            generation: original.generation,
+            working: original.working,
+            armed: self.armed(),
+            phase: original.phase.clone(),
+            message: original.message.clone(),
+            total: original.total,
+            completed: original.completed,
+            audio_ms: original.audio_ms,
+            ax_characters: original.ax_characters,
+            ocr_characters: original.ocr_characters,
+            has_reference: original.has_reference,
+            rows: Vec::new(),
+            next: 0,
+            more: false,
+        };
+        let start = if generation == status.generation {
+            after.min(original.rows.len())
+        } else {
+            0
+        };
+        let end = (start + 16).min(original.rows.len());
+        status.next = end;
+        status.more = end < original.rows.len();
+        status.rows = original.rows[start..end].to_vec();
+        status
+    }
+    // Called under the global startup gate, so no new recorder/corrector/model job can race reservation.
+    fn start(
+        &self,
+        app: tauri::AppHandle,
+        selection: Selection,
+        recorder: crate::recorder::Recorder,
+    ) -> Result<Status, String> {
+        let cases = plan(&selection).map_err(str::to_owned)?;
+        let mut handle = self
+            .worker
+            .lock()
+            .map_err(|_| "比較ワーカーを確認できません。")?;
+        if self.closing.load(Ordering::Acquire) || self.working() {
+            return Err("比較処理の終了をお待ちください。".into());
+        }
+        let epoch = self.epoch.fetch_add(1, Ordering::AcqRel) + 1;
+        {
+            let mut state = self
+                .inner
+                .lock()
+                .map_err(|_| "比較状態を確認できません。")?;
+            state.active = Some(epoch);
+            state.status = Status {
+                generation: epoch,
+                working: true,
+                phase: "preparing".into(),
+                total: cases.len(),
+                has_reference: selection.reference.is_some(),
+                ..Status::default()
+            };
+        }
+        let input = match recorder.comparison_input() {
+            Ok(input) => input,
+            Err(error) => {
+                self.finish(epoch, Some(error.clone()));
+                return Err(error);
+            }
+        };
+        if let Some(previous) = handle.take() {
+            let _ = previous.join();
+        }
+        let owner = self.clone();
+        *handle = Some(std::thread::spawn(move || {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                owner.run(&app, &recorder, &selection, &cases, input, epoch)
+            }))
+            .unwrap_or_else(|_| Err("比較ワーカーが終了しました。".into()));
+            owner.finish(epoch, result.err());
+        }));
+        Ok(self.status(0, 0))
+    }
+    fn finish(&self, epoch: u64, error: Option<String>) {
+        if let Ok(mut state) = self.inner.lock()
+            && state.active == Some(epoch)
+        {
+            state.status.working = false;
+            state.active = None;
+            let stale = self.epoch.load(Ordering::Acquire) != epoch;
+            state.status.phase = if stale {
+                "cancelled"
+            } else if error.is_some() {
+                "error"
+            } else {
+                "done"
+            }
+            .into();
+            state.status.message = if stale {
+                "比較を中止しました。".into()
+            } else {
+                error.unwrap_or_else(||"比較が完了しました。通常の音声入力を再開する場合は音声モデルを再読み込みしてください。".into())
+            };
+        }
+    }
+    fn current(&self, epoch: u64) -> bool {
+        self.epoch.load(Ordering::Acquire) == epoch && !self.closing.load(Ordering::Acquire)
+    }
+    fn run(
+        &self,
+        app: &tauri::AppHandle,
+        recorder: &crate::recorder::Recorder,
+        selection: &Selection,
+        cases: &[Case],
+        input: crate::recorder::ComparisonInput,
+        epoch: u64,
+    ) -> Result<(), String> {
+        // Drop the ordinary retained ASR model before loading any comparison model.
+        recorder.suspend_for_comparison()?;
+        if !self.current(epoch) {
+            return Ok(());
+        }
+        let audio = local_transcription::prepare_audio(&input.audio, input.rate)
+            .map_err(|_| "録音は1〜60秒の音声で比較してください。")?;
+        let sources = input
+            .hint
+            .map(|h| h.comparison_sources())
+            .unwrap_or_default();
+        {
+            let mut state = self
+                .inner
+                .lock()
+                .map_err(|_| "比較状態を確認できません。")?;
+            state.status.audio_ms = audio.len() as u64 * 1000 / 16000;
+            state.status.ax_characters = sources.ax.chars().count();
+            state.status.ocr_characters = sources.ocr.chars().count();
+        }
+        let resources = app
+            .path()
+            .resource_dir()
+            .map_err(|_| "比較ヘルパーを確認できません。")?
+            .join("bin");
+        let preferences = crate::desktop::preferences(app)?;
+        let models = app.state::<local_models::Manager>();
+        let mut paths: BTreeMap<String, Result<PathBuf, String>> = BTreeMap::new();
+        for id in selection.speech.iter().chain(selection.corrections.iter()) {
+            if !self.current(epoch) {
+                return Ok(());
+            }
+            if ["none", "apple-foundation"].contains(&id.as_str()) || paths.contains_key(id) {
+                continue;
+            }
+            self.message(
+                epoch,
+                "verifying-models",
+                "比較に使うモデルを検証しています（測定時間には含めません）。",
+            );
+            let path = match id.as_str() {
+                "current-speech" => custom_path(&preferences.model_path),
+                "current-correction" => custom_path(&preferences.correction_model_path),
+                _ => models
+                    .comparison_path(id, || !self.current(epoch))
+                    .map_err(str::to_owned),
+            };
+            paths.insert(id.clone(), path);
+        }
+        let apple = if selection
+            .corrections
+            .iter()
+            .any(|id| id == "apple-foundation")
+        {
+            match crate::correction::probe_foundation(
+                &resources.join("apple-foundation-correction"),
+                &self.epoch,
+                epoch,
+            ) {
+                Ok(status) if status.availability == "available" => Ok(()),
+                Ok(status) => Err(format!("Apple FM: {}", status.availability)),
+                Err(error) => Err(error),
+            }
+        } else {
+            Err("Apple FMを選択していません。".into())
+        };
+        for (index, case) in cases.iter().enumerate() {
+            if !self.current(epoch) {
+                break;
+            }
+            self.message(
+                epoch,
+                "running",
+                &format!(
+                    "{}/{} を直列実行中。録音・本文・文脈は送信しません。",
+                    index + 1,
+                    cases.len()
+                ),
+            );
+            let row = run_case(
+                &resources,
+                case,
+                index,
+                &audio,
+                &sources,
+                &paths,
+                &apple,
+                selection.reference.as_deref(),
+                &self.epoch,
+                epoch,
+            );
+            if self.current(epoch)
+                && let Ok(mut state) = self.inner.lock()
+                && state.active == Some(epoch)
+            {
+                state.status.rows.push(row);
+                state.status.completed = index + 1;
+            }
+        }
+        Ok(())
+    }
+    fn message(&self, epoch: u64, phase: &str, message: &str) {
+        if let Ok(mut state) = self.inner.lock()
+            && state.active == Some(epoch)
+            && self.current(epoch)
+        {
+            state.status.phase = phase.into();
+            state.status.message = message.into();
+        }
+    }
+}
+fn custom_path(value: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(value);
+    if !path.is_absolute() || !path.is_file() {
+        Err("モデルを設定・準備してください。".into())
+    } else {
+        Ok(path)
+    }
+}
+#[derive(Deserialize)]
+struct AsrReport {
+    text: String,
+    backend: String,
+    load_ms: u64,
+    elapsed_ms: u64,
+}
+#[derive(Deserialize)]
+struct Candidate {
+    candidate: String,
+    accepted: bool,
+    reason: Option<String>,
+    backend: String,
+    offloaded_layers: u32,
+}
+#[derive(Deserialize)]
+struct AppleCandidate {
+    text: String,
+    backend: String,
+    offloaded_layers: u32,
+}
+#[allow(clippy::too_many_arguments)] // Explicit immutable inputs shared by serial cases.
+fn run_case(
+    resources: &Path,
+    case: &Case,
+    index: usize,
+    audio: &[f32],
+    sources: &crate::context::Sources,
+    paths: &BTreeMap<String, Result<PathBuf, String>>,
+    apple: &Result<(), String>,
+    reference: Option<&str>,
+    epoch: &AtomicU64,
+    current: u64,
+) -> Row {
+    let mut row = Row::new(index, case.clone());
+    let Some(context) = sources.for_source(&case.source) else {
+        row.message="録音時の比較用文脈がありません。取得元の設定・権限と比較用文脈の保持を確認してください。".into();
+        return row;
+    };
+    let Some(Ok(asr_path)) = paths.get(&case.speech) else {
+        row.message = "音声モデルが未準備または検証に失敗しました。".into();
+        return row;
+    };
+    if case.correction == "apple-foundation"
+        && let Err(reason) = apple
+    {
+        row.message = reason.clone();
+        return row;
+    }
+    if !["none", "apple-foundation"].contains(&case.correction.as_str())
+        && !paths.get(&case.correction).is_some_and(Result::is_ok)
+    {
+        row.message = "補正モデルが未準備または検証に失敗しました。".into();
+        return row;
+    }
+    let started = Instant::now();
+    let outcome = (|| -> Result<(), String> {
+        let hint = local_transcription::recognition_hint(if case.whisper_context() {
+            context.as_str()
+        } else {
+            ""
+        });
+        let mut packet =
+            serde_json::to_vec(&serde_json::json!({"samples":audio.len(),"hint":hint}))
+                .map_err(|_| "input-failed")?;
+        packet.push(b'\n');
+        packet.reserve(audio.len() * 4);
+        for sample in audio {
+            packet.extend_from_slice(&sample.to_le_bytes());
+        }
+        let output = crate::correction::child_output(
+            Command::new(resources.join("compare-transcription"))
+                .arg(asr_path)
+                .arg(&case.speech_backend),
+            packet,
+            epoch,
+            current,
+            Duration::from_secs(600),
+        )?;
+        row.asr_ms = Some(started.elapsed().as_millis() as u64);
+        if !output.status.success() {
+            let failure: serde_json::Value =
+                serde_json::from_slice(&output.stdout).unwrap_or_default();
+            return Err(match failure["error"].as_str() {
+                Some("metal-unavailable" | "backend-unavailable") => "metal-unavailable",
+                Some("model-load-failed") => "asr-model-load-failed",
+                Some("invalid-pcm" | "input-limit") => "invalid-audio",
+                _ => "asr-runtime-failed",
+            }
+            .into());
+        }
+        let asr: AsrReport =
+            serde_json::from_slice(&output.stdout).map_err(|_| "invalid-asr-report")?;
+        if asr.backend != case.speech_backend
+            || asr.text.len() > 8192
+            || asr.text.contains('\0')
+            || asr.elapsed_ms < asr.load_ms
+        {
+            return Err("invalid-asr-report".into());
+        }
+        row.asr_load_ms = Some(asr.load_ms);
+        row.raw = Some(asr.text.clone());
+        row.final_text = Some(asr.text.clone());
+        if case.correction == "none" || asr.text.trim().is_empty() {
+            row.final_text = Some(asr.text);
+            row.status = "uncorrected".into();
+            row.accepted = None;
+            return Ok(());
+        }
+        let correction_started = Instant::now();
+        let payload=serde_json::to_vec(&serde_json::json!({"transcript":asr.text,"context":if case.correction_context(){context.as_str()}else{""}})).map_err(|_|"input-failed")?;
+        let candidate = if case.correction == "apple-foundation" {
+            let output = crate::correction::child_output(
+                Command::new(resources.join("apple-foundation-correction")).arg("--correct"),
+                payload,
+                epoch,
+                current,
+                Duration::from_secs(150),
+            )?;
+            if !output.status.success() {
+                let error = serde_json::from_slice(&output.stdout).unwrap_or_default();
+                return Err(crate::correction::foundation_failure(&error));
+            }
+            let apple: AppleCandidate =
+                serde_json::from_slice(&output.stdout).map_err(|_| "invalid-correction-report")?;
+            if apple.backend != "foundation"
+                || apple.offloaded_layers != 0
+                || apple.text.len() > 8192
+                || apple.text.contains('\0')
+            {
+                return Err("invalid-correction-report".into());
+            }
+            let validation = serde_json::to_vec(
+                &serde_json::json!({"transcript":asr.text,"candidate":apple.text}),
+            )
+            .map_err(|_| "input-failed")?;
+            let result = crate::correction::child_output(
+                Command::new(resources.join("local-correction")).arg("--validate"),
+                validation,
+                epoch,
+                current,
+                Duration::from_secs(10),
+            )?;
+            if !result.status.success() {
+                let failure: serde_json::Value =
+                    serde_json::from_slice(&result.stdout).unwrap_or_default();
+                if failure["error"] != "rejected" {
+                    return Err("guard-runtime-failed".into());
+                }
+                Candidate {
+                    candidate: apple.text,
+                    accepted: false,
+                    reason: Some(crate::correction::guard_code(failure["reason"].as_str()).into()),
+                    backend: "foundation".into(),
+                    offloaded_layers: 0,
+                }
+            } else {
+                let checked: serde_json::Value =
+                    serde_json::from_slice(&result.stdout).map_err(|_| "invalid-guard-report")?;
+                if checked["text"].as_str() != Some(apple.text.as_str()) {
+                    return Err("guard-output-mismatch".into());
+                }
+                Candidate {
+                    candidate: apple.text,
+                    accepted: true,
+                    reason: None,
+                    backend: "foundation".into(),
+                    offloaded_layers: 0,
+                }
+            }
+        } else {
+            let path = paths
+                .get(&case.correction)
+                .and_then(|p| p.as_ref().ok())
+                .ok_or("correction-model-missing")?;
+            let output = crate::correction::child_output(
+                Command::new(resources.join("local-correction"))
+                    .arg(path)
+                    .arg(&case.correction_backend)
+                    .arg("--compare"),
+                payload,
+                epoch,
+                current,
+                Duration::from_secs(150),
+            )?;
+            if !output.status.success() {
+                return Err("correction-runtime-failed".into());
+            }
+            let candidate: Candidate =
+                serde_json::from_slice(&output.stdout).map_err(|_| "invalid-correction-report")?;
+            if candidate.backend != case.correction_backend
+                || (case.correction_backend == "metal" && candidate.offloaded_layers == 0)
+                || (case.correction_backend == "cpu" && candidate.offloaded_layers != 0)
+            {
+                return Err("backend-mismatch".into());
+            }
+            candidate
+        };
+        row.correction_ms = Some(correction_started.elapsed().as_millis() as u64);
+        if candidate.candidate.len() > 8192 || candidate.candidate.contains('\0') {
+            return Err("invalid-correction-report".into());
+        }
+        row.accepted = Some(candidate.accepted);
+        row.final_text = Some(if candidate.accepted {
+            candidate.candidate.clone()
+        } else {
+            asr.text
+        });
+        row.status = if candidate.accepted {
+            "accepted"
+        } else {
+            "rejected"
+        }
+        .into();
+        if !candidate.accepted {
+            row.message = if case.correction == "apple-foundation" {
+                candidate.reason.unwrap_or_else(|| "guard-output".into())
+            } else {
+                crate::correction::guard_code(candidate.reason.as_deref()).into()
+            };
+        }
+        row.candidate = Some(candidate.candidate);
+        Ok(())
+    })();
+    row.total_ms = started.elapsed().as_millis() as u64;
+    if let Err(error) = outcome {
+        row.status = if error == "metal-unavailable" {
+            "unavailable"
+        } else {
+            "error"
+        }
+        .into();
+        row.message = error;
+    }
+    // The reference is used only here, never sent to either model.
+    row.asr_score = row.raw.as_deref().and_then(|text| score(reference, text));
+    row.candidate_score = row
+        .candidate
+        .as_deref()
+        .and_then(|text| score(reference, text));
+    row.final_score = row
+        .final_text
+        .as_deref()
+        .and_then(|text| score(reference, text));
+    row
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Choice {
+    id: String,
+    name: String,
+    kind: String,
+    available: bool,
+}
+#[tauri::command]
+pub fn comparison_models(app: tauri::AppHandle) -> Result<Vec<Choice>, String> {
+    let prefs = crate::desktop::preferences(&app)?;
+    let mut choices: Vec<_> = app
+        .state::<local_models::Manager>()
+        .models()
+        .into_iter()
+        .map(|m| Choice {
+            id: m.id,
+            name: m.name,
+            kind: m.kind,
+            available: m.cached,
+        })
+        .collect();
+    choices.extend([
+        Choice {
+            id: "current-speech".into(),
+            name: "設定中の音声モデル".into(),
+            kind: "transcription".into(),
+            available: Path::new(&prefs.model_path).is_file(),
+        },
+        Choice {
+            id: "current-correction".into(),
+            name: "設定中のQwenモデル".into(),
+            kind: "correction".into(),
+            available: Path::new(&prefs.correction_model_path).is_file(),
+        },
+        Choice {
+            id: "none".into(),
+            name: "補正なし".into(),
+            kind: "correction".into(),
+            available: true,
+        },
+        Choice {
+            id: "apple-foundation".into(),
+            name: "Apple Foundation Models（OS管理）".into(),
+            kind: "correction".into(),
+            available: true,
+        },
+    ]);
+    Ok(choices)
+}
+#[tauri::command]
+pub fn comparison_plan(selection: Selection) -> Result<usize, String> {
+    plan(&selection).map(|p| p.len()).map_err(str::to_owned)
+}
+#[tauri::command]
+pub fn comparison_status(
+    comparisons: tauri::State<'_, Comparisons>,
+    generation: u64,
+    after: usize,
+) -> Status {
+    comparisons.status(generation, after)
+}
+#[tauri::command]
+pub fn start_comparison(
+    app: tauri::AppHandle,
+    comparisons: tauri::State<'_, Comparisons>,
+    recorder: tauri::State<'_, crate::recorder::Recorder>,
+    selection: Selection,
+) -> Result<Status, String> {
+    let activity = app.state::<crate::activity::Activity>();
+    let _gate = activity.lock()?;
+    if app.state::<crate::updater::Updates>().working()
+        || app.state::<crate::correction::Corrector>().status().working
+        || ["starting", "downloading", "verifying"]
+            .contains(&app.state::<local_models::Manager>().status().phase.as_str())
+    {
+        return Err("他の処理の終了をお待ちください。".into());
+    }
+    comparisons.start(app.clone(), selection, recorder.inner().clone())
+}
+#[tauri::command]
+pub fn cancel_comparison(comparisons: tauri::State<'_, Comparisons>, clear: bool) {
+    comparisons.cancel(clear);
+}
+#[tauri::command]
+pub fn arm_comparison_context(
+    app: tauri::AppHandle,
+    comparisons: tauri::State<'_, Comparisons>,
+    recorder: tauri::State<'_, crate::recorder::Recorder>,
+    enabled: bool,
+) -> Result<(), String> {
+    let activity = app.state::<crate::activity::Activity>();
+    let _gate = activity.lock()?;
+    let snapshot = recorder.status()?;
+    if enabled
+        && (comparisons.working()
+            || matches!(snapshot.phase, "recording" | "preparing")
+            || snapshot.recognition.working)
+    {
+        return Err("処理を終えてから比較用文脈を有効にしてください。".into());
+    }
+    if !enabled {
+        comparisons.cancel(true);
+        recorder.clear_comparison_hint();
+    }
+    comparisons.armed.store(enabled, Ordering::Release);
+    app.state::<crate::context::Reader>()
+        .set_comparison(enabled);
+    Ok(())
+}
+#[tauri::command]
+pub fn copy_comparison_result(
+    comparisons: tauri::State<'_, Comparisons>,
+    generation: u64,
+    index: usize,
+) -> Result<(), String> {
+    let state = comparisons
+        .inner
+        .lock()
+        .map_err(|_| "比較状態を確認できません。")?;
+    if state.status.working || state.status.generation != generation {
+        return Err("比較結果を再確認してください。".into());
+    }
+    let text = state
+        .status
+        .rows
+        .iter()
+        .find(|r| r.index == index)
+        .and_then(|r| r.final_text.as_ref())
+        .filter(|s| !s.is_empty())
+        .ok_or("コピーできる候補がありません。")?;
+    arboard::Clipboard::new()
+        .and_then(|mut c| c.set_text(text.clone()))
+        .map_err(|_| "候補をコピーできません。".into())
+}
+
+#[tauri::command]
+pub fn copy_comparison_report(
+    comparisons: tauri::State<'_, Comparisons>,
+    generation: u64,
+    include_text: bool,
+) -> Result<(), String> {
+    let report = {
+        let state = comparisons
+            .inner
+            .lock()
+            .map_err(|_| "比較状態を確認できません。")?;
+        if state.status.working
+            || state.status.generation != generation
+            || state.status.rows.is_empty()
+        {
+            return Err("比較結果を再確認してください。".into());
+        }
+        let mut rows =
+            serde_json::to_value(&state.status.rows).map_err(|_| "比較結果を読み出せません。")?;
+        if !include_text && let Some(rows) = rows.as_array_mut() {
+            for row in rows {
+                if let Some(row) = row.as_object_mut() {
+                    for key in ["raw", "candidate", "finalText"] {
+                        row.remove(key);
+                    }
+                }
+            }
+        }
+        serde_json::to_string_pretty(&serde_json::json!({"schemaVersion":1,"appVersion":env!("CARGO_PKG_VERSION"),"audioMs":state.status.audio_ms,"hasReference":state.status.has_reference,"axCharacters":state.status.ax_characters,"ocrCharacters":state.status.ocr_characters,"includesText":include_text,"rows":rows})).map_err(|_|"レポートを作成できません。")?
+    };
+    arboard::Clipboard::new()
+        .and_then(|mut c| c.set_text(report))
+        .map_err(|_| "レポートをコピーできません。".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn case() -> Case {
+        Case {
+            speech: "base".into(),
+            speech_backend: "cpu".into(),
+            correction: "none".into(),
+            correction_backend: "none".into(),
+            source: "none".into(),
+            route: "none".into(),
+        }
+    }
+    #[test]
+    fn pagination_resets_after_clear_and_cancel_waits_for_worker() {
+        let owner = Comparisons::new();
+        {
+            let mut state = owner.inner.lock().unwrap();
+            state.active = Some(1);
+            state.status.generation = 1;
+            state.status.working = true;
+            state.status.rows = (0..20).map(|i| Row::new(i, case())).collect();
+        }
+        owner.epoch.store(1, Ordering::Release);
+        let first = owner.status(0, 999);
+        assert_eq!(first.rows.len(), 16);
+        assert_eq!(first.next, 16);
+        assert!(first.more);
+        let second = owner.status(1, first.next);
+        assert_eq!(second.rows.len(), 4);
+        assert!(!second.more);
+        owner.cancel(true);
+        assert!(owner.working());
+        assert!(!owner.has_results());
+        assert!(owner.status(1, 20).rows.is_empty());
+        owner.finish(1, None);
+        assert!(!owner.working());
+    }
+    #[test]
+    fn missing_context_is_not_silently_treated_as_no_context() {
+        let sources = crate::context::Sources {
+            ax: "AX fixture".into(),
+            ocr: String::new(),
+        };
+        assert_eq!(sources.for_source("none"), Some(String::new()));
+        assert_eq!(sources.for_source("ax"), Some("AX fixture".into()));
+        assert!(sources.for_source("both").is_none());
+        assert!(sources.for_source("ocr").is_none());
+    }
+}

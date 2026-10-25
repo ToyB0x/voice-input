@@ -1,0 +1,10 @@
+[package]
+name = "local-comparison"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+unicode-normalization = "0.1"
+unicode_categories = "0.1"

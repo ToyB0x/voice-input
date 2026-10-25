@@ -145,6 +145,13 @@ pub fn save_preferences(
     desktop: tauri::State<'_, Desktop>,
     mut preferences: Preferences,
 ) -> Result<Status, String> {
+    let activity = app.state::<crate::activity::Activity>();
+    let _gate = activity.lock()?;
+    if app.state::<crate::comparison::Comparisons>().working()
+        || app.state::<crate::updater::Updates>().installing()
+    {
+        return Err("比較・更新を終了してから設定を保存してください。".into());
+    }
     preferences.model_path = preferences.model_path.trim().into();
     preferences.correction_model_path = preferences.correction_model_path.trim().into();
     preferences.shortcut = preferences.shortcut.trim().into();
@@ -177,8 +184,10 @@ pub fn save_preferences(
         }
         return Err(format!("以前のショートカットを解除できません: {error}"));
     }
+    let mut context_config = preferences.context_config();
+    context_config.comparison = app.state::<crate::comparison::Comparisons>().armed();
     app.state::<crate::context::Reader>()
-        .configure(preferences.context_config());
+        .configure(context_config);
     if inner.preferences.correction_model_path != preferences.correction_model_path
         || inner.preferences.correction_engine != preferences.correction_engine
         || inner.preferences.correction_backend != preferences.correction_backend

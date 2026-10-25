@@ -8,6 +8,8 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 // Never pass native log text to a sink: debug builds can include prompt tokens.
 // Preserve only a fixed, exact backend marker needed by our Metal verification.
+static METAL_FAILURES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static METAL_INITIALIZATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 const METAL_MARKER: &[u8] = b"whisper_backend_init_gpu: using Metal backend\n";
 fn safe_diagnostic(message: &[u8]) -> Option<&'static [u8]> {
     (message == METAL_MARKER).then_some(METAL_MARKER)
@@ -22,7 +24,11 @@ unsafe extern "C" fn native_diagnostic(
     }
     // SAFETY: whisper.cpp's logging contract supplies a NUL-terminated C string.
     let message = unsafe { std::ffi::CStr::from_ptr(text) }.to_bytes();
+    if message == b"whisper_backend_init_gpu: failed to initialize Metal backend\n" {
+        METAL_FAILURES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     if let Some(marker) = safe_diagnostic(message) {
+        METAL_INITIALIZATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         use std::io::Write;
         // Ignore sink failures: no panic/unwind may cross this C callback.
         let _ = std::io::stderr().lock().write_all(marker);
@@ -72,6 +78,9 @@ pub enum Backend {
 
 pub struct Transcriber {
     context: WhisperContext,
+    metal_before: u64,
+    failures_before: u64,
+    requested_gpu: bool,
 }
 
 impl Transcriber {
@@ -83,13 +92,27 @@ impl Transcriber {
         configure_native_logging();
         let mut options = WhisperContextParameters::default();
         options.use_gpu(!matches!(backend, Backend::Cpu));
+        let before = METAL_INITIALIZATIONS.load(std::sync::atomic::Ordering::Relaxed);
+        let failures_before = METAL_FAILURES.load(std::sync::atomic::Ordering::Relaxed);
         let context =
             WhisperContext::new_with_params(path.to_str().ok_or(Error::ModelPath)?, options)
                 .map_err(|e| Error::Model(e.to_string()))?;
         if !context.is_multilingual() {
             return Err(Error::EnglishOnlyModel);
         }
-        Ok(Self { context })
+        Ok(Self {
+            context,
+            metal_before: before,
+            failures_before,
+            requested_gpu: !matches!(backend, Backend::Cpu),
+        })
+    }
+
+    /// Diagnostic for an isolated process owning one transcriber; query after inference.
+    pub fn metal_active(&self) -> bool {
+        self.requested_gpu
+            && METAL_INITIALIZATIONS.load(std::sync::atomic::Ordering::Relaxed) > self.metal_before
+            && METAL_FAILURES.load(std::sync::atomic::Ordering::Relaxed) == self.failures_before
     }
 
     /// Model identity comes from loaded weights, not a user-controlled filename.

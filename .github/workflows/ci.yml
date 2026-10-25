@@ -81,6 +81,10 @@ jobs:
             --manifest-path crates/local-transcription/Cargo.toml --locked \
             --test offline -- --ignored --nocapture \
             2>&1 | tee "$RUNNER_TEMP/transcription-evidence/api-tests.log"
+          sandbox-exec -p "$policy" python3 scripts/verify-comparison-pcm.py \
+            --binary crates/local-transcription/target/release/compare-transcription \
+            --model "$RUNNER_TEMP/ggml-base.bin" --backend metal \
+            --output "$RUNNER_TEMP/transcription-evidence/comparison-pcm.json"
           for backend in metal cpu; do
             extra=()
             if [[ "$backend" = cpu ]]; then extra=(--cpu); fi

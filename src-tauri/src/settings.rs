@@ -127,6 +127,7 @@ impl Preferences {
             ocr: self.ocr_context,
             whisper: self.whisper_context,
             correction: self.correction_context,
+            comparison: false,
         }
     }
 }

@@ -20,3 +20,6 @@ src-tauri/resources/local-correction
 crates/local-models/target/
 
 src-tauri/resources/apple-foundation-correction
+
+crates/local-comparison/target/
+src-tauri/resources/compare-transcription

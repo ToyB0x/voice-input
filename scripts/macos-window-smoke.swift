@@ -133,7 +133,7 @@ func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
 }
 
 guard CommandLine.arguments.count == 3
-    || (CommandLine.arguments.count == 4 && ["foundation", "models", "models-restore", "deny", "allow", "transcribe", "desktop", "insertion-denied", "insertion-grant", "insertion", "context-denied", "context", "context-restore", "ocr-denied", "ocr-grant", "ocr"].contains(CommandLine.arguments[3])) else {
+    || (CommandLine.arguments.count == 4 && ["comparison", "foundation", "models", "models-restore", "deny", "allow", "transcribe", "desktop", "insertion-denied", "insertion-grant", "insertion", "context-denied", "context", "context-restore", "ocr-denied", "ocr-grant", "ocr"].contains(CommandLine.arguments[3])) else {
     fputs("Usage: macos-window-smoke <app-bundle> <artifact-directory> [foundation|deny|allow|transcribe|desktop|insertion-denied|insertion-grant|insertion]\n", stderr)
     exit(2)
 }

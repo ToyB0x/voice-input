@@ -59,3 +59,9 @@ section p { margin-top: 0.5rem; }
 
 #foundation-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8rem; }
 details { margin: 0.75rem 0; }
+
+.comparison-table { overflow-x: auto; }
+.comparison-table table { min-width: 850px; width: 100%; border-collapse: collapse; }
+.comparison-table th, .comparison-table td { padding: .5rem; text-align: left; vertical-align: top; border-bottom: 1px solid #8885; white-space: pre-wrap; }
+.comparison-table pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 28rem; }
+#comparison-panel select { width: 100%; }
