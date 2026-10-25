@@ -26,7 +26,7 @@ defaults:
 jobs:
   foundation:
     name: Apple Foundation Models availability
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,7 +49,7 @@ jobs:
 
   whisper:
     name: Stronger Whisper ${{ matrix.model }}
-    if: github.event_name == 'workflow_dispatch'
+    if: false # Availability-only diagnostic branch; do not download large models.
     runs-on: macos-14
     timeout-minutes: 60
     strategy:
@@ -121,7 +121,7 @@ jobs:
 
   correction:
     name: Stronger correction Qwen3 8B (Linux CPU)
-    if: github.event_name == 'workflow_dispatch'
+    if: false # Availability-only diagnostic branch; do not download large models.
     runs-on: ubuntu-26.04
     timeout-minutes: 35
     env:
