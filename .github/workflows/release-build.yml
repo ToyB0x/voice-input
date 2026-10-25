@@ -1,0 +1,91 @@
+name: Build signed macOS release assets
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Stable release version
+        required: true
+        type: string
+    secrets:
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: rustup show
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            src-tauri/target
+            crates/local-correction/target
+            crates/local-transcription/target
+          key: release-${{ runner.arch }}-${{ hashFiles('src-tauri/Cargo.lock', 'crates/local-correction/Cargo.lock', 'crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: release-${{ runner.arch }}-
+      - name: Validate version and configure signed artifacts
+        run: |
+          python3 scripts/release-assets.py version --tag "$RELEASE_TAG"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          (Path(os.environ['RUNNER_TEMP'])/'release-config.json').write_text(json.dumps({'bundle':{'createUpdaterArtifacts':True}}))
+          PY
+      - name: Build signed update and initial installer
+        env:
+          RELEASE_PUBLIC_KEY: ${{ github.event_name == 'release' && vars.TAURI_UPDATER_PUBLIC_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'release' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'release' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          PUBLISH: ${{ github.event_name == 'release' }}
+          APPLE_SIGNING_IDENTITY: '-'
+        run: |
+          if [[ "$PUBLISH" == true ]]; then
+            if [[ -z "$RELEASE_PUBLIC_KEY" || -z "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
+              echo 'Configure TAURI_UPDATER_PUBLIC_KEY (variable) and TAURI_SIGNING_PRIVATE_KEY (secret) before publishing.' >&2
+              exit 1
+            fi
+            export VOICE_INPUT_UPDATER_PUBLIC_KEY="$RELEASE_PUBLIC_KEY"
+          else
+            # A manual build can prove packaging without accessing a permanent private key.
+            unset TAURI_SIGNING_PRIVATE_KEY
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=''
+            npm exec tauri signer generate -- --ci --password '' --write-keys "$RUNNER_TEMP/disposable-update.key" > /dev/null 2>&1
+            chmod 600 "$RUNNER_TEMP/disposable-update.key"
+            export TAURI_SIGNING_PRIVATE_KEY="$RUNNER_TEMP/disposable-update.key"
+            export VOICE_INPUT_UPDATER_PUBLIC_KEY
+            VOICE_INPUT_UPDATER_PUBLIC_KEY="$(cat "$RUNNER_TEMP/disposable-update.key.pub")"
+          fi
+          npm run tauri build -- --bundles app,dmg --ci --config "$RUNNER_TEMP/release-config.json" -- --locked
+          python3 scripts/release-assets.py package --tag "$RELEASE_TAG" --bundle src-tauri/target/release/bundle --output "$RUNNER_TEMP/release-assets"
+          # Verify the actual updater archive with the official plugin before publishing.
+          export VOICE_INPUT_VERIFY_UPDATE_DIR="$RUNNER_TEMP/release-assets"
+          cargo test --manifest-path src-tauri/Cargo.toml --locked official_updater_signature -- --nocapture
+      - name: Remove disposable private key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/disposable-update.key" "$RUNNER_TEMP/disposable-update.key.pub"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-assets/
+          retention-days: 14
+          if-no-files-found: error
+

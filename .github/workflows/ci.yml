@@ -28,7 +28,7 @@ jobs:
   release-validation:
     name: Signed release packaging (explicit only)
     if: github.event_name == 'workflow_dispatch' && inputs.release_validation
-    uses: ./.github/workflows/release.yml
+    uses: ./.github/workflows/release-build.yml
     with:
       tag: v0.1.1
 
