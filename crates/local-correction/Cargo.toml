@@ -10,6 +10,7 @@ default-run = "local-correction"
 ci-diagnostics = []
 
 [dependencies]
+libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 llama-cpp-sys-2 = { version = "=0.1.160", default-features = false }

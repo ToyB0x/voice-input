@@ -5,7 +5,10 @@ use llama_cpp_2::{
     model::{LlamaModel, params::LlamaModelParams},
     sampling::LlamaSampler,
 };
-use local_correction::{MAX_INPUT, MAX_OUTPUT, Report, Request, parse_answer};
+use local_correction::{
+    MAX_INPUT, MAX_OUTPUT, Report, Request, parse_answer,
+    performance::{Performance, peak_rss_bytes},
+};
 use std::{
     ffi::{CStr, c_char, c_void},
     io::{Read, Write},
@@ -121,6 +124,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 backend: args[1].clone(),
                 offloaded_layers: 0,
                 elapsed_ms: 0,
+                performance: None,
             },
         )?;
         return Ok(());
@@ -129,6 +133,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         llama_cpp_sys_2::llama_log_set(Some(native_log), std::ptr::null_mut());
         llama_cpp_sys_2::ggml_log_set(Some(native_log), std::ptr::null_mut());
     }
+    let mut performance = Performance::default();
+    let phase_started = Instant::now();
     PHASE.store(1, Ordering::Relaxed);
     let metal = args[1] == "metal";
     if metal {
@@ -138,6 +144,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if metal && !backend.supports_gpu_offload() {
         return Err(SafeRuntimeError("metal-backend-unavailable").into());
     }
+    performance.backend_ms = phase_started.elapsed().as_millis() as u64;
+    let phase_started = Instant::now();
     PHASE.store(2, Ordering::Relaxed);
     let model = LlamaModel::load_from_file(
         &backend,
@@ -152,6 +160,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if (metal && layers == 0) || (!metal && layers != 0) {
         return Err(SafeRuntimeError("gpu-offload-mismatch").into());
     }
+    performance.model_load_ms = phase_started.elapsed().as_millis() as u64;
+    let phase_started = Instant::now();
     PHASE.store(3, Ordering::Relaxed);
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4)) as i32;
     let params = LlamaContextParams::default()
@@ -168,6 +178,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if tokens.is_empty() || tokens.len() > 3500 {
         return Err("correction prompt exceeds context budget".into());
     }
+    performance.context_ms = phase_started.elapsed().as_millis() as u64;
+    performance.input_tokens = tokens.len() as u32;
+    let phase_started = Instant::now();
     PHASE.store(4, Ordering::Relaxed);
     let mut batch = LlamaBatch::new(512, 1);
     // Decode in bounded chunks, preserving token positions across chunks.
@@ -179,6 +192,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         context.decode(&mut batch)?;
     }
+    performance.prefill_ms = phase_started.elapsed().as_millis() as u64;
     PHASE.store(5, Ordering::Relaxed);
     let generation_started = Instant::now();
     const GRAMMAR: &str = "root ::= \"{\" ws \"\\\"text\\\"\" ws \":\" ws string ws \"}\"\nws ::= [ \\t\\n\\r]*\nstring ::= \"\\\"\" char* \"\\\"\"\nchar ::= [^\"\\\\\\x00-\\x1F] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])";
@@ -217,12 +231,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if !ended {
         return Err(SafeRuntimeError("output-token-budget").into());
     }
+    performance.generation_ms = generation_started.elapsed().as_millis() as u64;
+    performance.generated_tokens = generated.len() as u32;
+    let phase_started = Instant::now();
     PHASE.store(6, Ordering::Relaxed);
     let text = parse_answer(
         &vocab.detokenize(&generated, false, false),
         &request.transcript,
     )
     .map_err(Rejection)?;
+    performance.validation_ms = phase_started.elapsed().as_millis() as u64;
+    performance.peak_rss_bytes = peak_rss_bytes();
     PHASE.store(7, Ordering::Relaxed);
     let report = Report {
         text,
@@ -230,6 +249,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         backend: args[1].clone(),
         offloaded_layers: layers,
         elapsed_ms: started.elapsed().as_millis() as u64,
+        performance: Some(performance),
     };
     let mut output = std::io::stdout().lock();
     serde_json::to_writer(&mut output, &report)?;

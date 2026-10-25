@@ -179,6 +179,16 @@ jobs:
               assert report['backend'] == backend and report['text']
               assert (report['offloaded_layers'] == 0) if backend == 'cpu' else (report['offloaded_layers'] > 0)
           PYCODE
+      - name: Measure fresh correction processes on fixed synthetic input offline
+        if: inputs.full_integration
+        timeout-minutes: 8
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/measure_correction.py \
+            --binary "src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/local-correction" \
+            --model "$RUNNER_TEMP/correction-model.gguf" --runs 3 \
+            --output "$RUNNER_TEMP/voice-input-smoke/correction-performance"
+          cat "$RUNNER_TEMP/voice-input-smoke/correction-performance/summary.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify bundled correction runtime starts without a model or network
         run: |
           runtime="$PWD/src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/local-correction"

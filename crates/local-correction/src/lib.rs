@@ -1,6 +1,8 @@
 //! Bounded, local text correction. No network clients, files or prompt logging.
 use serde::{Deserialize, Serialize};
 
+pub mod performance;
+
 pub const MAX_INPUT: usize = 24_576;
 pub const MAX_OUTPUT: usize = 8192;
 #[derive(Deserialize, Serialize)]
@@ -22,6 +24,8 @@ pub struct Report {
     pub backend: String,
     pub offloaded_layers: u32,
     pub elapsed_ms: u64,
+    // No inference (empty transcript) has no performance sample.
+    pub performance: Option<performance::Performance>,
 }
 impl Request {
     pub fn validate(&self) -> Result<(), &'static str> {
