@@ -231,13 +231,16 @@ fn canonical_contrast(text: &str) -> String {
         .replace("じゃなく", "ではなく")
         .replace("でなく", "ではなく")
 }
-fn contrast_targets(text: &str) -> Vec<String> {
+fn contrast_prefixes(text: &str) -> Vec<&str> {
     ["ではなく", "じゃなく", "でなく"]
         .into_iter()
-        .flat_map(|marker| {
-            text.match_indices(marker)
-                .map(|(index, _)| subject_term(&text[..index]))
-        })
+        .flat_map(|marker| text.match_indices(marker).map(|(index, _)| &text[..index]))
+        .collect()
+}
+fn contrast_targets(text: &str) -> Vec<String> {
+    contrast_prefixes(text)
+        .into_iter()
+        .map(subject_term)
         .collect()
 }
 
@@ -294,10 +297,19 @@ fn assign_contrast_target(
 }
 
 fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static str> {
-    let source_targets = contrast_targets(original);
-    let candidate_targets = contrast_targets(candidate);
     let source = canonical_contrast(original);
-    let candidate = canonical_contrast(candidate);
+    let canonical_candidate = canonical_contrast(candidate);
+    // Formatting and equivalent contrast spellings retain every significant
+    // character. Raw whitespace boundaries must not turn these into rejections.
+    if source == canonical_candidate {
+        return Ok(());
+    }
+    let source_targets = contrast_targets(original);
+    let candidate_targets: Vec<_> = contrast_prefixes(candidate)
+        .into_iter()
+        .map(|prefix| (subject_term(prefix), normalized(prefix)))
+        .collect();
+    let candidate = canonical_candidate;
     if candidate.matches("ではなく").count() < source.matches("ではなく").count() {
         return Err("correction removed a contrast target");
     }
@@ -321,9 +333,11 @@ fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static st
                     // Reserve literal targets too, so a mixed target cannot
                     // reuse the candidate required by a known literal target.
                     let matches = if mixed {
-                        known_contrast_parts_match(target, other)
+                        known_contrast_parts_match(target, &other.0)
                     } else {
-                        other.ends_with(target)
+                        // Use the normalized prefix at this marker, not only
+                        // its last word (GitHub Actions must match GitHubActions).
+                        other.1.ends_with(target)
                     };
                     matches.then_some(index)
                 })
@@ -704,6 +718,37 @@ mod tests {
         ] {
             assert!(parse_answer(&encode(candidate), original).is_err());
         }
+    }
+
+    #[test]
+    fn contrast_name_spacing_does_not_discard_valid_corrections() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for (original, candidate) in [
+            (
+                "GitHubActionsではなくGitLabCIを使用します",
+                "GitHub ActionsではなくGitLab CIを使用します。",
+            ),
+            (
+                "GitHubActionsではなくGitLabCIをしようします",
+                "GitHub ActionsではなくGitLab CIを使用します。",
+            ),
+            (
+                "東京えきではなく大阪駅です",
+                "東京 えきでは なく大阪駅です。",
+            ),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+        assert!(
+            parse_answer(
+                &encode("東京 駅ではなく大阪です。大阪 空港ではなく京都です。"),
+                "東京駅ではなく大阪です。とうきょう駅ではなく京都です"
+            )
+            .is_err()
+        );
     }
 
     #[test]
