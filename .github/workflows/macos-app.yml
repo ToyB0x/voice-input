@@ -569,7 +569,7 @@ jobs:
           PYCODE
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: voice-input-macos26-${{ runner.arch }}-${{ github.run_attempt }}
+          name: voice-input-macos-${{ runner.arch }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/voice-input-app/
           retention-days: 14
           if-no-files-found: error
