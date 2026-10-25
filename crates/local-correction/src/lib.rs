@@ -143,6 +143,21 @@ fn is_kana(c: char) -> bool {
 fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'static str> {
     let source = normalized(original);
     let candidate = normalized(candidate);
+    // Explicit copular negatives are not lexical ない. Preserve their count
+    // while allowing contracted/expanded forms of the same negation.
+    let copular_count = |text: &str, forms: &[&str]| {
+        forms
+            .iter()
+            .map(|form| text.matches(form).count())
+            .sum::<usize>()
+    };
+    if copular_count(
+        &candidate,
+        &["ではない", "じゃない", "でない", "でいない", "ではいない"],
+    ) < copular_count(&source, &["ではない", "じゃない"])
+    {
+        return Err("correction changed a negation target");
+    }
     for marker in ["ない", "ません"] {
         // Bare ない can be lexical (うらない, おこないません). Do not
         // count it independently of an identifiable stem. Keep the existing
@@ -627,6 +642,25 @@ mod tests {
                 parse_answer(&encode(candidate), original).is_err(),
                 "{original} -> {candidate}"
             );
+        }
+    }
+
+    #[test]
+    fn explicit_copular_negations_survive_lexical_nai_conversion() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for candidate in [
+            "静かじゃないが変更しません。",
+            "静かでないが変更しません。",
+            "静かではないが変更しません。",
+        ] {
+            assert!(parse_answer(&encode(candidate), "静かではないが変更しません").is_ok());
+        }
+        for (original, candidate) in [
+            ("静かではないが変更しません", "静かですが変更しません。"),
+            ("静かじゃないが変更しません", "静かですが変更しません。"),
+            ("静かではない。安全ではない", "静かです。安全ではない。"),
+        ] {
+            assert!(parse_answer(&encode(candidate), original).is_err());
         }
     }
 
