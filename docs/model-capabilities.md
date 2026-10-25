@@ -33,3 +33,5 @@ ActionsのArtifact `stronger-whisper-*`、`stronger-correction-qwen3-8b-linux-cp
 モデルは公式配布の固定リビジョン・容量・SHA-256で照合します。Whisperのエンジンはlarge-v3とturboの両方を`large`と報告するため、正確なバリアントは重みのハッシュで検証します。公証・証明書の対応は引き続き先送りです。
 
 Apple Foundation Modelsを実アプリの最終補正に接続する実験実装と、実機での診断手順は[こちら](apple-foundation-models.md)です。通常CIで生成コードのコンパイルと旧OSへの同梱を検証し、利用可否の診断だけを実推論の成功として扱わない方針を維持します。
+
+2026-10-25にmacOS 26.6.2／Xcode 26.6の標準arm64ランナーで再確認しました。Frameworkのインポートは成功しましたが、実APIは`deviceNotEligible`を返し、`inferenceTested: false`でした（[検証Artifact](https://github.com/ToyB0x/voice-input/actions/runs/40191823755)）。macOS 26への更新だけではApple Intelligence対応端末の要件を満たしません。対応する個人Macでの確認が引き続き必要です。

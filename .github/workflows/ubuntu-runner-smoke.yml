@@ -17,7 +17,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ubuntu: ${{ steps.detect.outputs.ubuntu }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PYCODE'
+          import os, re, subprocess
+          changed = True  # Manual runs always exercise the actual Ubuntu runner.
+          if os.environ['EVENT_NAME'] == 'pull_request':
+              paths = [f'.github/workflows/{name}.yml' for name in
+                       ['model-capabilities', 'model-evaluation', 'model-presets']]
+              diff = subprocess.check_output(['git', 'diff', '--unified=0',
+                  os.environ['BASE_SHA'] + '...' + os.environ['HEAD_SHA'], '--', *paths], text=True)
+              changed = bool(re.search(r'^[+-]\s+(?:runs-on:\s*ubuntu-|(?:key|restore-keys):\s*(?:linux|ubuntu[0-9]+)-)', diff, re.MULTILINE))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('ubuntu=' + str(changed).lower() + '\n')
+          PYCODE
+
   correction:
+    needs: changes
+    if: needs.changes.outputs.ubuntu == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:

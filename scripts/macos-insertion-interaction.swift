@@ -91,11 +91,12 @@ func recordForInsertion(_ voice: AXUIElement, beforeStop: () throws -> Void = {}
     defer { if playback.isRunning { playback.terminate() } }
     try waitForUI("insertion audio playback", seconds: 30) { !playback.isRunning }
     guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Playback failed") }
+    try waitForCIVirtualAudioDrain()
     try beforeStop()
     // The hosted virtual HID can lose a second shortcut chord after playback.
     // Stop through the real tray menu without activating the app's window.
     // Background shortcut start/stop is covered by desktopInteraction.
-    try trayAction(voice, title: "録音を開始 / 停止")
+    try trayAction(voice, title: "録音を開始 / 停止", nativeKeyboard: true)
     // AXPress queues the menu action. Moving focus immediately can dismiss
     // the menu before that action is delivered on the hosted desktop. Require
     // the real recording transition before changing the target; do not toggle
@@ -125,15 +126,24 @@ func inspectInsertion(_ root: AXUIElement, output: URL, name: String, inserted: 
     return resultText(root)
 }
 
-func typePrivateCredential(_ element: AXUIElement, value: String, physicalHex: Bool = false) throws {
+func typePrivateCredential(_ element: AXUIElement, value: String, physicalASCII: Bool = false) throws {
     guard AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
         throw SmokeFailure(description: "Could not focus CI authorization field")
     }
+    // Native authorization fields are AppKit controls, not WebKit inputs.
+    // A direct AX write avoids hosted Secure Input dropping synthetic keys.
+    // Do not read the password back; the OS authorization result verifies it.
+    let written = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, value as CFString)
+    if written == .success { return }
     try key(0, flags: .maskCommand)
-    if physicalHex {
-        // Secure Input can disable Unicode input methods. The generated secret
-        // is lowercase hex, so send physical U.S.-layout keys for the CI image.
+    if physicalASCII {
+        // Secure Input can also block Unicode events in the username field.
+        // The disposable CI username and hex password use only these physical
+        // lowercase U.S.-layout keys. Never read or log the password field.
         let codes: [Character: CGKeyCode] = ["a": 0, "b": 11, "c": 8, "d": 2, "e": 14, "f": 3,
+            "g": 5, "h": 4, "i": 34, "j": 38, "k": 40, "l": 37, "m": 46,
+            "n": 45, "o": 31, "p": 35, "q": 12, "r": 15, "s": 1, "t": 17,
+            "u": 32, "v": 9, "w": 13, "x": 7, "y": 16, "z": 6, "-": 27,
             "0": 29, "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25]
         for character in value {
             guard let code = codes[character] else { throw SmokeFailure(description: "Unexpected CI credential format") }
@@ -181,12 +191,13 @@ func authorizeCISettingsChange() throws {
           let secret = fields.first(where: { axValue($0, kAXSubroleAttribute) as? String == "AXSecureTextField" }) else {
         throw SmokeFailure(description: "CI authorization form fields not found")
     }
-    try typePrivateCredential(user, value: username)
+    try typePrivateCredential(user, value: username, physicalASCII: true)
     try waitForUI("CI authorization user entered") { axValue(user, kAXValueAttribute) as? String == username }
-    try typePrivateCredential(secret, value: password, physicalHex: true)
+    try typePrivateCredential(secret, value: password, physicalASCII: true)
     // Password values are intentionally unreadable; drain posted key events
     // before submitting, without reading or recording the secret field.
     RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+    try waitForUI("authorization submit enabled") { uiButton(dialog!, ["Modify Settings"]) != nil }
     try press(uiButton(dialog!, ["Modify Settings"])!)
     try waitForUI("admin confirmation completes", seconds: 30) { uiButton(dialog!, ["Modify Settings"]) == nil }
 }

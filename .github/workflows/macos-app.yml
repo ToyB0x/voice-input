@@ -14,8 +14,8 @@ permissions:
 jobs:
   macos:
     name: ${{ inputs.full_integration && 'macOS full integration' || 'macOS build and window smoke' }}
-    runs-on: macos-14
-    timeout-minutes: ${{ inputs.full_integration && 60 || 15 }}
+    runs-on: macos-26
+    timeout-minutes: ${{ inputs.full_integration && 60 || 30 }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "14.0"
     defaults:
@@ -34,7 +34,7 @@ jobs:
         with:
           name: apple-foundation-runtime
           path: ${{ runner.temp }}/foundation-runtime
-      - name: Verify helper provenance and compatibility with macOS 14
+      - name: Verify helper provenance and protocol on the current macOS
         run: |
           echo "VOICE_INPUT_FOUNDATION_RUNTIME=$RUNNER_TEMP/foundation-runtime/apple-foundation-correction" >> "$GITHUB_ENV"
           python3 - <<'PYCODE'
@@ -52,7 +52,7 @@ jobs:
           sandbox-exec -p '(version 1) (allow default) (deny network*)' \
             python3 scripts/verify-foundation-runtime.py --require-framework \
             --binary "$RUNNER_TEMP/foundation-runtime/apple-foundation-correction" \
-            --output "$RUNNER_TEMP/foundation-runtime/macos14-verification.json"
+            --output "$RUNNER_TEMP/foundation-runtime/host-verification.json"
       - name: Record requested CI scope
         env:
           VOICE_INPUT_FULL_INTEGRATION: ${{ inputs.full_integration }}
@@ -65,7 +65,7 @@ jobs:
           root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
           root.mkdir(parents=True, exist_ok=True)
           import shutil
-          shutil.copyfile(Path(os.environ['RUNNER_TEMP']) / 'foundation-runtime/macos14-verification.json', root / 'foundation-runtime.json')
+          shutil.copyfile(Path(os.environ['RUNNER_TEMP']) / 'foundation-runtime/host-verification.json', root / 'foundation-runtime.json')
           (root / 'coverage.json').write_text(json.dumps(dict(requested_scope=mode, source_revision=os.environ['GITHUB_SHA']))+'\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write(f'CI scope: **{mode}**. Full permission/audio/OCR/insertion scenarios run on the weekly schedule or explicit full dispatch.\n')
@@ -89,22 +89,22 @@ jobs:
           path: |
             ~/.cargo/registry
             src-tauri/target
-          key: macos-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos-${{ runner.arch }}-app-rust-v1-
+          key: macos26-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos26-${{ runner.arch }}-app-rust-v1-
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: correction-cache
         with:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
-          key: macos-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos-${{ runner.arch }}-correction-runtime-v2-
+          key: macos26-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos26-${{ runner.arch }}-correction-runtime-v2-
       - name: Restore previous correction target cache
         if: steps.correction-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: crates/local-correction/target
-          key: macos-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          key: macos26-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Test evaluation helpers
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Test pinned model preparation without networking
@@ -258,6 +258,8 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/smoke.log"
       - name: Verify Apple engine selection and body-free diagnostics in the actual app
         timeout-minutes: 3
+        env:
+          VOICE_INPUT_FOUNDATION_VERIFICATION: ${{ runner.temp }}/voice-input-smoke/foundation-runtime.json
         run: |
           "$RUNNER_TEMP/voice-input-smoke-runner" \
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
@@ -300,6 +302,15 @@ jobs:
           SwitchAudioSource -c -t input | tee "$RUNNER_TEMP/voice-input-smoke/input-device.txt"
           xcrun swift scripts/macos-ci-audio-buffer.swift \
             | tee "$RUNNER_TEMP/voice-input-smoke/virtual-audio-buffer.json"
+          python3 - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path(os.environ['RUNNER_TEMP'], 'voice-input-smoke/virtual-audio-buffer.json').read_text())
+          drain = 2 * report['frames'] / report['sampleRate']
+          assert 0 < drain <= 4
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'VOICE_INPUT_CI_AUDIO_DRAIN_SECONDS={drain}\n')
+          PYCODE
       - name: Verify real microphone permission and recording controls
         if: inputs.full_integration
         timeout-minutes: 5

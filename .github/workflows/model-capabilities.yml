@@ -50,7 +50,7 @@ jobs:
   whisper:
     name: Stronger Whisper ${{ matrix.model }}
     if: github.event_name == 'workflow_dispatch'
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -71,7 +71,7 @@ jobs:
           path: |
             ~/.cargo/registry
             crates/local-transcription/target
-          key: macos-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+          key: macos26-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Build existing production benchmark
         id: build
         run: cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked --bin evaluate

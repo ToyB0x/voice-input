@@ -5,16 +5,61 @@ import Foundation
 func chooseModelOption(_ root: AXUIElement, label:String, title:String) throws {
     guard let popup=axElements(root).first(where:{axValue($0,kAXRoleAttribute) as? String == "AXPopUpButton" && axText($0).contains(label)}) else {throw SmokeFailure(description:"Missing model popup: "+label)}
     try press(popup)
-    var option:AXUIElement?
-    try waitForUI("model option "+title) {
-        option=(axElements(root)+axElements(popup)).first {element in
-            axValue(element,kAXRoleAttribute) as? String == "AXMenuItem" && [kAXTitleAttribute,kAXValueAttribute,kAXDescriptionAttribute].contains {axValue(element,$0) as? String == title}
+    let normalizedTitle = title.precomposedStringWithCompatibilityMapping
+    var option: AXUIElement?
+    let deadline = Date().addingTimeInterval(3)
+    repeat {
+        // Recent WebKit menus can be detached from the application's AX tree.
+        // Include the focused menu and its parents, while still matching the
+        // exact option title before pressing it.
+        var roots = [root, popup]
+        var focused = axValue(AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute)
+        for _ in 0..<4 {
+            guard let value = focused, CFGetTypeID(value) == AXUIElementGetTypeID() else { break }
+            let element = value as! AXUIElement
+            roots.append(element)
+            focused = axValue(element, kAXParentAttribute)
         }
-        return option != nil
+        option = roots.flatMap(axElements).first { element in
+            axValue(element,kAXRoleAttribute) as? String == "AXMenuItem" &&
+            [kAXTitleAttribute,kAXValueAttribute,kAXDescriptionAttribute].contains {
+                (axValue(element,$0) as? String)?.precomposedStringWithCompatibilityMapping == normalizedTitle
+            }
+        }
+        if option != nil { break }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    } while Date() < deadline
+    if let option {
+        try press(option)
+    } else {
+        // Exercise native type-to-select when WebKit does not expose its menu
+        // items. The selected popup value below remains a required assertion.
+        let source = CGEventSource(stateID: .hidSystemState)
+        let text = Array(title.utf16)
+        for down in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else {
+                throw SmokeFailure(description: "Could not construct menu selection event")
+            }
+            text.withUnsafeBufferPointer {
+                event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress!)
+            }
+            event.post(tap: .cghidEventTap)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        try key(36) // Return commits the native menu selection.
     }
-    try press(option!)
-    try waitForUI("model option selected") {axText(popup).contains(title)}
+    try waitForUI("model option selected: " + title) {
+        // Reacquire the popup from the live WebView tree. A cached AXValue
+        // can already match while the native menu is still closing, especially
+        // when selecting the option that was selected before opening the menu.
+        guard let current = axElements(root).first(where: {
+            axValue($0, kAXRoleAttribute) as? String == "AXPopUpButton" && axText($0).contains(label)
+        }) else { return false }
+        return axText(current).precomposedStringWithCompatibilityMapping.contains(normalizedTitle)
+            && uiButton(root, ["Save preferences"]) != nil
+    }
 }
+
 func modelTransportRunning(_ pid:pid_t)->Bool {
     let task=Process();task.executableURL=URL(fileURLWithPath:"/usr/bin/pgrep");task.arguments=["-P",String(pid),"-x","curl"]
     task.standardOutput=FileHandle.nullDevice;task.standardError=FileHandle.nullDevice

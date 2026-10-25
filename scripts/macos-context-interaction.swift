@@ -125,6 +125,7 @@ func contextInteraction(pid: pid_t, scenario: String, output: URL) throws {
             try playback.run()
             defer { if playback.isRunning { playback.terminate() } }
             try waitForUI("context audio completes", seconds: 30) { !playback.isRunning }
+            try waitForCIVirtualAudioDrain()
             guard playback.terminationStatus == 0, trayItem(voice).map(axText)?.contains("録音中") == true else {
                 throw SmokeFailure(description: "Context recording ended before stop: " + mode)
             }

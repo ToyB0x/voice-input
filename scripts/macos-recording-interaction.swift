@@ -190,6 +190,7 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
     if let playback {
         try waitForUI("public Japanese fixture playback", seconds: 30) { !playback.isRunning }
         guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Fixture playback failed") }
+        try waitForCIVirtualAudioDrain()
     }
     guard let stop = uiButton(root, ["Stop recording"]) else { throw SmokeFailure(description: "Stop control missing") }
     try press(stop)
@@ -222,6 +223,14 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
                   to: output.appendingPathComponent("interaction.json"))
 }
 
+func waitForCIVirtualAudioDrain() throws {
+    guard let raw = ProcessInfo.processInfo.environment["VOICE_INPUT_CI_AUDIO_DRAIN_SECONDS"] else { return }
+    guard let seconds = Double(raw), seconds.isFinite, (0...4).contains(seconds) else {
+        throw SmokeFailure(description: "Invalid CI virtual audio drain interval")
+    }
+    RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+}
+
 func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
     axElements(root).first { element in
         guard let role = axValue(element, kAXRoleAttribute) as? String,
@@ -233,9 +242,18 @@ func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
 }
 
 func typeField(_ root: AXUIElement, label: String, value path: String) throws {
-    guard CGPreflightPostEventAccess(), let field = textField(root, label: label) else {
-        throw SmokeFailure(description: "Could not find native input field")
+    guard CGPreflightPostEventAccess() else {
+        throw SmokeFailure(description: "Native keyboard event access is unavailable")
     }
+    var candidate: AXUIElement?
+    // A rendered WKWebView can precede its editable Accessibility subtree.
+    // Wait for the actual labeled field rather than racing the initial page OCR.
+    try waitForUI("native input field: " + label) {
+        candidate = textField(root, label: label)
+        return candidate != nil
+    }
+    guard let field = candidate else { throw SmokeFailure(description: "Missing native input field: " + label) }
+    _ = AXUIElementPerformAction(field, "AXScrollToVisible" as CFString)
     // Otherwise the value predicate can pass before already-correct replacement
     // events drain, letting later checkbox clicks redirect pending keystrokes.
     if axValue(field, kAXValueAttribute) as? String == path { return }
@@ -407,7 +425,7 @@ func clickAtCenter(_ element: AXUIElement) throws {
     }
 }
 
-func trayAction(_ root: AXUIElement, title: String) throws {
+func trayAction(_ root: AXUIElement, title: String, nativeKeyboard: Bool = false) throws {
     guard let tray = trayItem(root) else {
         throw SmokeFailure(description: "Voice Input menu bar item missing: \(trayElements(root).map(axText))")
     }
@@ -437,8 +455,23 @@ func trayAction(_ root: AXUIElement, title: String) throws {
     }
     // The menu is now proven visible. Invoke its native accessibility action:
     // a virtual pointer click can dismiss the popup without selecting the item.
-    guard AXUIElementPerformAction(choice!, kAXPressAction as CFString) == .success else {
-        throw SmokeFailure(description: "Could not activate visible tray menu item: " + title)
+    if nativeKeyboard {
+        // AXPress can dismiss the hosted menu without delivering the toggle.
+        // Hover the proven visible item, then commit the native selection with
+        // Return. Callers still require the real recording state transition.
+        let point = try elementCenter(choice!)
+        guard let move = CGEvent(mouseEventSource: CGEventSource(stateID: .hidSystemState),
+                                 mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) else {
+            throw SmokeFailure(description: "Could not construct menu hover event")
+        }
+        move.flags = []
+        move.post(tap: .cghidEventTap)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        try key(36)
+    } else {
+        guard AXUIElementPerformAction(choice!, kAXPressAction as CFString) == .success else {
+            throw SmokeFailure(description: "Could not activate visible tray menu item: " + title)
+        }
     }
     try waitForUI("tray menu selection delivered") {
         !onScreenWindows().contains { ($0[kCGWindowNumber as String] as? NSNumber) == menuWindow }
@@ -461,30 +494,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
         return text.contains("いずれかを含めて") && text.contains("Command+Shift+Space（登録済み）")
     }
     try typeField(root, label: "Recording shortcut", value: "Control+Alt+KeyV")
-    // Wait for the native popup to exist, then select its actual CPU menu item.
-    guard let backend = axElements(root).first(where: {
-        axValue($0, kAXRoleAttribute) as? String == "AXPopUpButton" && axText($0).contains("Inference backend")
-    }) else { throw SmokeFailure(description: "Inference backend popup missing") }
-    AXUIElementSetAttributeValue(backend, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-    try press(backend)
-    var cpuOption: AXUIElement?
-    try waitForUI("native CPU menu option") {
-        cpuOption = (axElements(root) + axElements(backend)).first { element in
-            axValue(element, kAXRoleAttribute) as? String == "AXMenuItem" &&
-            [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute].contains {
-                axValue(element, $0) as? String == "CPU"
-            }
-        }
-        return cpuOption != nil
-    }
-    try press(cpuOption!)
-    try waitForUI("CPU selected") {
-        axElements(root).contains { element in
-            axValue(element, kAXRoleAttribute) as? String == "AXPopUpButton" &&
-            axText(element).contains("Inference backend") &&
-            (axValue(element, kAXValueAttribute) as? String ?? "").contains("CPU")
-        }
-    }
+    try chooseModelOption(root, label: "Inference backend", title: "CPU")
     try press(uiButton(root, ["Save preferences"])!)
     try waitForUI("custom shortcut saved and registered") {
         let text = uiText(root)
@@ -525,6 +535,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     defer { if playback.isRunning { playback.terminate() } }
     try waitForUI("Japanese playback", seconds: 30) { !playback.isRunning }
     guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Playback failed") }
+    try waitForCIVirtualAudioDrain()
     try interactionScreenshot(output, name: "background-recording.png")
     try key(9, flags: [.maskControl, .maskAlternate])
     try waitForUI("tray shows recognition") { trayItem(root).map(axText)?.contains("処理中") == true }
