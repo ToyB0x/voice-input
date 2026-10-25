@@ -203,6 +203,7 @@ fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'st
 
 // These are literal, bounded checks, not Japanese morphological analysis.
 // Topic extraction deliberately declines long/ambiguous fragments.
+const MAX_CONTRAST_TARGET_CHARS: usize = 40;
 fn subject_term(text: &str) -> String {
     let prefix = text.trim_end_matches(literal_boundary);
     let clause = prefix.rsplit(literal_boundary).next().unwrap_or("");
@@ -219,7 +220,7 @@ fn subject_term(text: &str) -> String {
         }
     }
     let result = normalized(value);
-    if result.chars().count() > 40 {
+    if result.chars().count() > MAX_CONTRAST_TARGET_CHARS {
         String::new()
     } else {
         result
@@ -237,6 +238,54 @@ fn contrast_prefixes(text: &str) -> Vec<&str> {
         .flat_map(|marker| text.match_indices(marker).map(|(index, _)| &text[..index]))
         .collect()
 }
+// Keep original word boundaries while locating the normalized marker. This
+// also handles formatting inside the marker (では なく) without adding slots.
+fn normalized_contrast_prefixes(text: &str) -> Vec<&str> {
+    let mut compact = String::new();
+    let mut positions = Vec::new();
+    for (index, c) in text.char_indices() {
+        if let Some(c) = significant_char(c) {
+            positions.extend(std::iter::repeat_n(index, c.len_utf8()));
+            compact.push(c);
+        }
+    }
+    let mut prefixes = Vec::new();
+    for marker in ["ではなく", "じゃなく", "でなく"] {
+        for (index, _) in compact.match_indices(marker) {
+            prefixes.push(&text[..positions[index]]);
+        }
+    }
+    prefixes
+}
+
+// A formatted name may contain spaces. Consider trailing word groups as
+// alternative spellings of ONE marker occurrence, keeping the existing bound.
+fn candidate_contrast_forms(prefix: &str) -> Vec<String> {
+    let mut forms = vec![subject_term(prefix)];
+    let clause = prefix
+        .rsplit(|c| literal_boundary(c) && !c.is_whitespace())
+        .next()
+        .unwrap_or("");
+    let mut length = 0;
+    for (index, c) in clause.char_indices().rev() {
+        if c.is_whitespace() {
+            forms.push(subject_term(&normalized(&clause[index..])));
+        } else if significant_char(c).is_some() {
+            length += 1;
+            if length > MAX_CONTRAST_TARGET_CHARS {
+                break;
+            }
+        }
+    }
+    if length <= MAX_CONTRAST_TARGET_CHARS {
+        forms.push(subject_term(&normalized(clause)));
+    }
+    forms.retain(|form| !form.is_empty());
+    forms.sort();
+    forms.dedup();
+    forms
+}
+
 fn contrast_targets(text: &str) -> Vec<String> {
     contrast_prefixes(text)
         .into_iter()
@@ -305,9 +354,9 @@ fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static st
         return Ok(());
     }
     let source_targets = contrast_targets(original);
-    let candidate_targets: Vec<_> = contrast_prefixes(candidate)
+    let candidate_targets: Vec<_> = normalized_contrast_prefixes(candidate)
         .into_iter()
-        .map(|prefix| (subject_term(prefix), normalized(prefix)))
+        .map(|prefix| (candidate_contrast_forms(prefix), normalized(prefix)))
         .collect();
     let candidate = canonical_candidate;
     if candidate.matches("ではなく").count() < source.matches("ではなく").count() {
@@ -333,7 +382,10 @@ fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static st
                     // Reserve literal targets too, so a mixed target cannot
                     // reuse the candidate required by a known literal target.
                     let matches = if mixed {
-                        known_contrast_parts_match(target, &other.0)
+                        other
+                            .0
+                            .iter()
+                            .any(|form| known_contrast_parts_match(target, form))
                     } else {
                         // Use the normalized prefix at this marker, not only
                         // its last word (GitHub Actions must match GitHubActions).
@@ -444,21 +496,17 @@ fn comparison_source(text: &str) -> String {
     }
     text
 }
+fn significant_char(c: char) -> Option<char> {
+    let c = if ('！'..='～').contains(&c) {
+        char::from_u32(c as u32 - 0xfee0).unwrap_or(c)
+    } else {
+        c
+    };
+    (!c.is_whitespace() && !c.is_ascii_punctuation() && !"。、！？「」『』（）・：；…".contains(c))
+        .then_some(c)
+}
 fn significant(text: &str) -> Vec<char> {
-    text.chars()
-        .map(|c| {
-            if ('！'..='～').contains(&c) {
-                char::from_u32(c as u32 - 0xfee0).unwrap_or(c)
-            } else {
-                c
-            }
-        })
-        .filter(|c| {
-            !c.is_whitespace()
-                && !c.is_ascii_punctuation()
-                && !"。、！？「」『』（）・：；…".contains(*c)
-        })
-        .collect()
+    text.chars().filter_map(significant_char).collect()
 }
 fn edits(left: &[char], right: &[char]) -> usize {
     let mut previous: Vec<_> = (0..=right.len()).collect();
@@ -735,6 +783,22 @@ mod tests {
             (
                 "東京えきではなく大阪駅です",
                 "東京 えきでは なく大阪駅です。",
+            ),
+            (
+                "GitHubActionsではなくGitLabCIをしようします",
+                "GitHub Actionsで は なくGitLab CIを使用します。",
+            ),
+            (
+                "GitHubActionsではなくGitLabCIをしようします",
+                "GitHub Actionsで、はなくGitLab CIを使用します。",
+            ),
+            (
+                "東京えきではなく大阪駅をしようします",
+                "東京 駅では なく大阪駅を使用します。",
+            ),
+            (
+                "対象 GitHubあくしょんではなくGitLabCIをしようします",
+                "対象 GitHub ActionsではなくGitLab CIを使用します。",
             ),
         ] {
             assert!(
