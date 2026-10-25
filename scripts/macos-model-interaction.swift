@@ -49,7 +49,14 @@ func chooseModelOption(_ root: AXUIElement, label:String, title:String) throws {
         try key(36) // Return commits the native menu selection.
     }
     try waitForUI("model option selected: " + title) {
-        axText(popup).precomposedStringWithCompatibilityMapping.contains(normalizedTitle)
+        // Reacquire the popup from the live WebView tree. A cached AXValue
+        // can already match while the native menu is still closing, especially
+        // when selecting the option that was selected before opening the menu.
+        guard let current = axElements(root).first(where: {
+            axValue($0, kAXRoleAttribute) as? String == "AXPopUpButton" && axText($0).contains(label)
+        }) else { return false }
+        return axText(current).precomposedStringWithCompatibilityMapping.contains(normalizedTitle)
+            && uiButton(root, ["Save preferences"]) != nil
     }
 }
 
