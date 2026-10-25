@@ -152,6 +152,16 @@ fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'st
             fragments.insert(marker.to_owned());
         }
         for (index, _) in original.match_indices(marker) {
+            // In 行ないません / 行ないます, ない is part of the verb's
+            // spelling before a polite ending, not another negation.
+            let tail = &original[index + marker.len()..];
+            if marker == "ない"
+                && ["ます", "ませ", "まし"]
+                    .iter()
+                    .any(|ending| tail.starts_with(ending))
+            {
+                continue;
+            }
             // Keep clause boundaries until the stem is extracted. A filler
             // before a comma is not the target of a following bare negation.
             let clause = original[..index]
@@ -591,6 +601,9 @@ mod tests {
             ("うらないはしません", "占いはしません。"),
             ("おこないません", "行いません。"),
             ("かないません", "叶いません。"),
+            ("行ないません", "行いません。"),
+            ("行ないますが予約しません", "行いますが予約しません。"),
+            ("行ないましたが予約しません", "行いましたが予約しません。"),
             ("今日はうらないはしません", "今日は占いはしません。"),
             ("うらないをおこないません", "占いを行いません。"),
         ] {
@@ -604,6 +617,7 @@ mod tests {
             ("予約しない。変更しない", "予約しない。変更します。"),
             ("削除しない。削除しない", "削除しない。"),
             ("しません。しません", "しません。"),
+            ("出来ないが変更しません", "出来ますが変更しません。"),
             (
                 "うらないはしません確認もしません",
                 "占いはします。確認もしません。",
