@@ -50,7 +50,7 @@ jobs:
   whisper:
     name: Stronger Whisper ${{ matrix.model }}
     if: github.event_name == 'workflow_dispatch'
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 60
     strategy:
       fail-fast: false

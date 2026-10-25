@@ -14,7 +14,7 @@ permissions:
 jobs:
   macos:
     name: ${{ inputs.full_integration && 'macOS full integration' || 'macOS build and window smoke' }}
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: ${{ inputs.full_integration && 60 || 15 }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "14.0"
