@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: model-capabilities-${{ github.ref }}
@@ -45,6 +46,35 @@ jobs:
         with:
           name: apple-foundation-models-availability
           path: ${{ runner.temp }}/foundation-probe/
+          retention-days: 14
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: voice-input-macos26-ARM64-1
+          run-id: 40194873258
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/macos26-app
+      - name: Verify and launch the macOS 26 build on macOS 27
+        run: |
+          mkdir -p "$RUNNER_TEMP/macos27-app-smoke"
+          python3 - <<'PYCODE'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'], 'macos26-app')
+          provenance = json.loads((root / 'provenance.json').read_text())
+          assert provenance['archive_sha256'] == hashlib.sha256((root / 'Voice-Input-macos.zip').read_bytes()).hexdigest()
+          assert provenance['architecture'] == 'ARM64'
+          PYCODE
+          ditto -x -k "$RUNNER_TEMP/macos26-app/Voice-Input-macos.zip" "$RUNNER_TEMP/macos26-app/expanded"
+          cp scripts/macos-window-smoke.swift "$RUNNER_TEMP/main.swift"
+          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift scripts/macos-insertion-interaction.swift scripts/macos-context-interaction.swift scripts/macos-ocr-interaction.swift scripts/macos-model-interaction.swift scripts/macos-foundation-interaction.swift scripts/macos-comparison-interaction.swift \
+            -o "$RUNNER_TEMP/macos27-smoke"
+          "$RUNNER_TEMP/macos27-smoke" "$RUNNER_TEMP/macos26-app/expanded/Voice Input.app" "$RUNNER_TEMP/macos27-app-smoke"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: macos27-existing-app-smoke
+          path: ${{ runner.temp }}/macos27-app-smoke/
           retention-days: 14
 
   whisper:
