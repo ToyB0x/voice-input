@@ -68,3 +68,32 @@ checksum = "expected"
             with patch.object(metadata, 'get', side_effect=responses) as get:
                 self.assertIn('1.0.1', metadata.crate('example', ['1.0.1']))
                 self.assertEqual(get.call_args.kwargs, {'refresh': True})
+
+    def test_native_pnpm_bootstrap_companion_must_also_cool(self):
+        import json
+        import tempfile
+        class Registry:
+            companion_time = '2026-10-24T12:00:00Z'
+            def crate(self, name, versions):
+                return {'1.0.0': {'cksum': 'expected', 'pubtime': '2026-10-20T00:00:00Z'}}
+            def npm_release(self, name, version):
+                if name == 'pnpm':
+                    return '2026-10-20T00:00:00Z', {'optionalDependencies': {'@pnpm/native-test': '12.15.0'}}
+                return self.companion_time, {}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'src-tauri').mkdir()
+            (root / 'package.json').write_text(json.dumps({'packageManager': 'pnpm@12.15.0'}))
+            (root / 'src-tauri/Cargo.lock').write_text('''version = 4
+[[package]]
+name = "example"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "expected"
+''')
+            registry = Registry()
+            self.assertTrue(any('companion' in error for error in age.check(root, registry, self.now)['errors']))
+            registry.companion_time = None
+            self.assertTrue(age.check(root, registry, self.now)['errors'])
+            registry.companion_time = '2026-10-20T00:00:00Z'
+            self.assertEqual(age.check(root, registry, self.now)['errors'], [])
