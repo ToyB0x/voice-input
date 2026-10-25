@@ -56,7 +56,7 @@ jobs:
   correction:
     name: Preset ${{ matrix.asr }} + 4B (Linux CPU)
     needs: asr
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 55
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: "2"
@@ -124,7 +124,7 @@ jobs:
   summary:
     name: Compare complete model presets
     needs: correction
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Cache immutable registry publication metadata

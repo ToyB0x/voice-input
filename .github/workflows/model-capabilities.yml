@@ -122,7 +122,7 @@ jobs:
   correction:
     name: Stronger correction Qwen3 8B (Linux CPU)
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 35
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: "2"
