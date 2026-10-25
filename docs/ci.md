@@ -47,3 +47,5 @@ gh workflow run model-capabilities.yml --ref YOUR_BRANCH
 通常CIにはApple Foundation Models用ヘルパーのビルドと軽いモデル不要の検証も含めます。macOS最新SDKでコンパイルしたヘルパーを、同じworkflow runのArtifact経由でmacOS 14アプリへ同梱します。ハッシュ・リビジョンを照合し、weak linkによる旧OS起動と利用不可の応答、実画面の選択・診断コピー、候補の共通ガードを確認します。CIで実際のAppleモデルが使えない場合は`inferenceTested: false`を記録します。詳細は[AppleモデルのCI範囲](apple-foundation-models.md#実装とciの範囲)を参照してください。
 
 成功したMacジョブは、検証したアプリも `voice-input-macos-ARM64-<試行番号>` ArtifactへZIPとSHA-256・ソースリビジョン付きで保存します。モデルと個人設定は含めず、Developer ID署名・公証は行いません。実機での利用は[個人利用ガイド](user-guide.md#ciで検証したアプリを使う)を参照してください。
+
+評価workflowのUbuntuランナーを変更するPRでは、`Ubuntu runner compatibility`も実行します。Ubuntu 26.04で実際に補正ランタイムをビルド・テストし、通信を禁止して製品の補正ガードを検証します。モデルを取得する全件評価は起動しません。ネイティブ生成物のキャッシュはUbuntu 24.04と分離します。
