@@ -233,9 +233,18 @@ func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
 }
 
 func typeField(_ root: AXUIElement, label: String, value path: String) throws {
-    guard CGPreflightPostEventAccess(), let field = textField(root, label: label) else {
-        throw SmokeFailure(description: "Could not find native input field")
+    guard CGPreflightPostEventAccess() else {
+        throw SmokeFailure(description: "Native keyboard event access is unavailable")
     }
+    var candidate: AXUIElement?
+    // A rendered WKWebView can precede its editable Accessibility subtree.
+    // Wait for the actual labeled field rather than racing the initial page OCR.
+    try waitForUI("native input field: " + label) {
+        candidate = textField(root, label: label)
+        return candidate != nil
+    }
+    guard let field = candidate else { throw SmokeFailure(description: "Missing native input field: " + label) }
+    _ = AXUIElementPerformAction(field, "AXScrollToVisible" as CFString)
     // Otherwise the value predicate can pass before already-correct replacement
     // events drain, letting later checkbox clicks redirect pending keystrokes.
     if axValue(field, kAXValueAttribute) as? String == path { return }
