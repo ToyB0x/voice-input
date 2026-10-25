@@ -45,11 +45,6 @@ jobs:
       - name: Validate version and configure signed artifacts
         run: |
           python3 scripts/release-assets.py version --tag "$RELEASE_TAG"
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          (Path(os.environ['RUNNER_TEMP'])/'release-config.json').write_text(json.dumps({'bundle':{'createUpdaterArtifacts':True}}))
-          PY
       - name: Build signed update and initial installer
         env:
           RELEASE_PUBLIC_KEY: ${{ github.event_name == 'release' && vars.TAURI_UPDATER_PUBLIC_KEY || '' }}
@@ -74,6 +69,12 @@ jobs:
             export VOICE_INPUT_UPDATER_PUBLIC_KEY
             VOICE_INPUT_UPDATER_PUBLIC_KEY="$(cat "$RUNNER_TEMP/disposable-update.key.pub")"
           fi
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          config={'bundle':{'createUpdaterArtifacts':True},'plugins':{'updater':{'pubkey':os.environ['VOICE_INPUT_UPDATER_PUBLIC_KEY']}}}
+          (Path(os.environ['RUNNER_TEMP'])/'release-config.json').write_text(json.dumps(config))
+          PY
           npm run tauri build -- --bundles app,dmg --ci --config "$RUNNER_TEMP/release-config.json" -- --locked
           python3 scripts/release-assets.py package --tag "$RELEASE_TAG" --bundle src-tauri/target/release/bundle --output "$RUNNER_TEMP/release-assets"
           # Verify the actual updater archive with the official plugin before publishing.

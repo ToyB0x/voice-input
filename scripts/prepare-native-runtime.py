@@ -36,8 +36,11 @@ if status.get('protocol_version')!=1:
     raise RuntimeError('Invalid Foundation Models helper protocol')
 print('Foundation Models helper prepared: '+status['availability'])
 
-subprocess.run(['cargo','build','--manifest-path',str(ROOT/'crates/local-transcription/Cargo.toml'),'--release','--locked','--bin','compare-transcription'],check=True,env=build_env)
-comparison_source=Path(os.environ.get('CARGO_TARGET_DIR',ROOT/'crates/local-transcription/target'))/'release/compare-transcription'
+# Share Whisper build artifacts with the app instead of compiling the same native engine twice.
+comparison_env=dict(build_env)
+comparison_env.setdefault('CARGO_TARGET_DIR',str(ROOT/'src-tauri/target'))
+subprocess.run(['cargo','build','--manifest-path',str(ROOT/'crates/local-transcription/Cargo.toml'),'--release','--locked','--bin','compare-transcription'],check=True,env=comparison_env)
+comparison_source=Path(comparison_env['CARGO_TARGET_DIR'])/'release/compare-transcription'
 comparison_target=ROOT/'src-tauri/resources/compare-transcription'
 shutil.copy2(comparison_source,comparison_target)
 subprocess.run(['codesign','--force','--sign','-',str(comparison_target)],check=True)

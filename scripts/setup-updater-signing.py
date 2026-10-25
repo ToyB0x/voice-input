@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """One-time owner setup. Run locally; never paste a private key into a chat or commit."""
 import argparse
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -18,10 +17,10 @@ def main():
         raise RuntimeError('Choose a new key backup path outside the repository; existing files are never overwritten')
     # Check administration access and refuse implicit key rotation before generating anything.
     for kind, name in [('variables','TAURI_UPDATER_PUBLIC_KEY'),('secrets','TAURI_SIGNING_PRIVATE_KEY')]:
-        result=subprocess.run(['gh','api',f'repos/{REPO}/actions/{kind}'],capture_output=True,text=True)
+        result=subprocess.run(['gh','api','--paginate',f'repos/{REPO}/actions/{kind}','--jq',f'.{kind}[].name'],capture_output=True,text=True)
         if result.returncode:
             raise RuntimeError('GitHub Secrets/Variables administration access is required. Run as the repository owner')
-        if any(item['name']==name for item in json.loads(result.stdout)[kind]):
+        if name in result.stdout.splitlines():
             raise RuntimeError('Updater signing is already configured. Refusing to rotate or overwrite existing keys')
     key.parent.mkdir(parents=True,exist_ok=True)
     previous=os.umask(0o077)

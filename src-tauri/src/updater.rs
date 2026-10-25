@@ -325,6 +325,7 @@ mod signature_tests {
             stream.write_all(&body).unwrap();
         });
         let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+        context.package_info_mut().version = "0.0.0-0".parse().unwrap();
         context.config_mut().plugins.0.insert("updater".into(),serde_json::json!({"pubkey":public,"requireSignedVersion":true,"dangerousInsecureTransportProtocol":true,"endpoints":[endpoint]}));
         let app = tauri::test::mock_builder()
             .plugin(tauri_plugin_updater::Builder::new().build())

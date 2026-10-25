@@ -143,7 +143,7 @@
           <p class="hint">複数選択は⌘クリック。Appleの実行方式はOS管理で固定です。同一入力になる組み合わせは除外します。</p>
           <button id="compare-all">すべてのパターンを選択</button><button id="compare-refresh-models">モデルの準備状況を再取得</button>
           <label><input type="checkbox" id="compare-use-reference" />基準文を使ってCERを測定する</label>
-          <textarea id="compare-reference" rows="3" maxlength="2048" placeholder="自分で確認した正しい文字起こし（モデルには渡しません）。空欄の基準文は無音テストです。"></textarea>
+          <textarea id="compare-reference" spellcheck="false" autocomplete="off" rows="3" maxlength="2048" placeholder="自分で確認した正しい文字起こし（モデルには渡しません）。空欄の基準文は無音テストです。"></textarea>
           <p class="hint">CERは小さいほど誤りが少なく、100%を超える場合もあります。NFKC・小文字化・空白と句読点の除去後に計算します。意味や整形の良し悪しは本文を確認してください。</p>
           <p id="compare-count"></p>
           <button id="compare-start">録音済み音声で直列比較を開始</button><button id="compare-cancel" disabled>比較を中止</button><button id="compare-clear">比較結果を破棄</button>
