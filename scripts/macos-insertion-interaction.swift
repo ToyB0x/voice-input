@@ -125,15 +125,19 @@ func inspectInsertion(_ root: AXUIElement, output: URL, name: String, inserted: 
     return resultText(root)
 }
 
-func typePrivateCredential(_ element: AXUIElement, value: String, physicalHex: Bool = false) throws {
+func typePrivateCredential(_ element: AXUIElement, value: String, physicalASCII: Bool = false) throws {
     guard AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
         throw SmokeFailure(description: "Could not focus CI authorization field")
     }
     try key(0, flags: .maskCommand)
-    if physicalHex {
-        // Secure Input can disable Unicode input methods. The generated secret
-        // is lowercase hex, so send physical U.S.-layout keys for the CI image.
+    if physicalASCII {
+        // Secure Input can also block Unicode events in the username field.
+        // The disposable CI username and hex password use only these physical
+        // lowercase U.S.-layout keys. Never read or log the password field.
         let codes: [Character: CGKeyCode] = ["a": 0, "b": 11, "c": 8, "d": 2, "e": 14, "f": 3,
+            "g": 5, "h": 4, "i": 34, "j": 38, "k": 40, "l": 37, "m": 46,
+            "n": 45, "o": 31, "p": 35, "q": 12, "r": 15, "s": 1, "t": 17,
+            "u": 32, "v": 9, "w": 13, "x": 7, "y": 16, "z": 6, "-": 27,
             "0": 29, "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25]
         for character in value {
             guard let code = codes[character] else { throw SmokeFailure(description: "Unexpected CI credential format") }
@@ -181,9 +185,9 @@ func authorizeCISettingsChange() throws {
           let secret = fields.first(where: { axValue($0, kAXSubroleAttribute) as? String == "AXSecureTextField" }) else {
         throw SmokeFailure(description: "CI authorization form fields not found")
     }
-    try typePrivateCredential(user, value: username)
+    try typePrivateCredential(user, value: username, physicalASCII: true)
     try waitForUI("CI authorization user entered") { axValue(user, kAXValueAttribute) as? String == username }
-    try typePrivateCredential(secret, value: password, physicalHex: true)
+    try typePrivateCredential(secret, value: password, physicalASCII: true)
     // Password values are intentionally unreadable; drain posted key events
     // before submitting, without reading or recording the secret field.
     RunLoop.current.run(until: Date().addingTimeInterval(0.5))
