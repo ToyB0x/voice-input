@@ -302,6 +302,15 @@ jobs:
           SwitchAudioSource -c -t input | tee "$RUNNER_TEMP/voice-input-smoke/input-device.txt"
           xcrun swift scripts/macos-ci-audio-buffer.swift \
             | tee "$RUNNER_TEMP/voice-input-smoke/virtual-audio-buffer.json"
+          python3 - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path(os.environ['RUNNER_TEMP'], 'voice-input-smoke/virtual-audio-buffer.json').read_text())
+          drain = 2 * report['frames'] / report['sampleRate']
+          assert 0 < drain <= 4
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'VOICE_INPUT_CI_AUDIO_DRAIN_SECONDS={drain}\n')
+          PYCODE
       - name: Verify real microphone permission and recording controls
         if: inputs.full_integration
         timeout-minutes: 5

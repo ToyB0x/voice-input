@@ -91,6 +91,7 @@ func recordForInsertion(_ voice: AXUIElement, beforeStop: () throws -> Void = {}
     defer { if playback.isRunning { playback.terminate() } }
     try waitForUI("insertion audio playback", seconds: 30) { !playback.isRunning }
     guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Playback failed") }
+    try waitForCIVirtualAudioDrain()
     try beforeStop()
     // The hosted virtual HID can lose a second shortcut chord after playback.
     // Stop through the real tray menu without activating the app's window.

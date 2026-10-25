@@ -190,6 +190,7 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
     if let playback {
         try waitForUI("public Japanese fixture playback", seconds: 30) { !playback.isRunning }
         guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Fixture playback failed") }
+        try waitForCIVirtualAudioDrain()
     }
     guard let stop = uiButton(root, ["Stop recording"]) else { throw SmokeFailure(description: "Stop control missing") }
     try press(stop)
@@ -220,6 +221,14 @@ func runRecordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, o
     try writeJSON(["status": "passed", "scenario": "allow", "realPermissionDialog": true,
                    "inputLevel": peak, "sampleCount": sampleCount, "recordingStopped": true, "recordingDiscarded": true],
                   to: output.appendingPathComponent("interaction.json"))
+}
+
+func waitForCIVirtualAudioDrain() throws {
+    guard let raw = ProcessInfo.processInfo.environment["VOICE_INPUT_CI_AUDIO_DRAIN_SECONDS"] else { return }
+    guard let seconds = Double(raw), seconds.isFinite, (0...4).contains(seconds) else {
+        throw SmokeFailure(description: "Invalid CI virtual audio drain interval")
+    }
+    RunLoop.current.run(until: Date().addingTimeInterval(seconds))
 }
 
 func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
@@ -526,6 +535,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     defer { if playback.isRunning { playback.terminate() } }
     try waitForUI("Japanese playback", seconds: 30) { !playback.isRunning }
     guard playback.terminationStatus == 0 else { throw SmokeFailure(description: "Playback failed") }
+    try waitForCIVirtualAudioDrain()
     try interactionScreenshot(output, name: "background-recording.png")
     try key(9, flags: [.maskControl, .maskAlternate])
     try waitForUI("tray shows recognition") { trayItem(root).map(axText)?.contains("処理中") == true }

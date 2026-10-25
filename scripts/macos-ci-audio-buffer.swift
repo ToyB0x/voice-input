@@ -29,11 +29,16 @@ size=UInt32(MemoryLayout<UInt32>.size)
 try check(AudioObjectGetPropertyData(device,&property,0,nil,&size,&frames),"current buffer")
 let previous=frames
 if settable.boolValue {
-    frames=UInt32(min(range.mMaximum,max(range.mMinimum,2048)))
+    frames=UInt32(min(range.mMaximum,max(range.mMinimum,8192)))
     try check(AudioObjectSetPropertyData(device,&property,0,nil,size,&frames),"CI virtual buffer size")
 }
 try check(AudioObjectGetPropertyData(device,&property,0,nil,&size,&frames),"applied buffer")
-let report:[String:Any]=["device":"BlackHole 2ch","previousFrames":previous,"frames":frames,"settable":settable.boolValue]
+var rate=Float64(0)
+property=address(kAudioDevicePropertyNominalSampleRate)
+size=UInt32(MemoryLayout<Float64>.size)
+try check(AudioObjectGetPropertyData(device,&property,0,nil,&size,&rate),"nominal sample rate")
+guard rate.isFinite && rate > 0 else {throw NSError(domain:"Invalid virtual device sample rate",code:1)}
+let report:[String:Any]=["device":"BlackHole 2ch","previousFrames":previous,"frames":frames,"settable":settable.boolValue,"minimumFrames":range.mMinimum,"maximumFrames":range.mMaximum,"sampleRate":rate]
 let data=try JSONSerialization.data(withJSONObject:report,options:[.sortedKeys])
 FileHandle.standardOutput.write(data)
 FileHandle.standardOutput.write(Data("\n".utf8))
