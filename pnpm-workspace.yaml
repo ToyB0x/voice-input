@@ -2,5 +2,7 @@
 minimumReleaseAge: 2880
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
+# Exact-version security exceptions must also be recorded in dependency-security-exceptions.json.
+minimumReleaseAgeExclude: []
 # Dependency installation must not run unreviewed lifecycle scripts.
 strictDepBuilds: true

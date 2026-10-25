@@ -8,6 +8,9 @@ age = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(age)
 
 
+PNPM_POLICY = "minimumReleaseAge: 2880\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\n"
+
+
 class DependencyAge(unittest.TestCase):
     def setUp(self):
         self.now = dt.datetime(2026, 10, 25, 12, tzinfo=dt.timezone.utc)
@@ -84,6 +87,7 @@ checksum = "expected"
             root = Path(directory)
             (root / 'src-tauri').mkdir()
             (root / 'package.json').write_text(json.dumps({'packageManager': 'pnpm@12.15.0'}))
+            (root / 'pnpm-workspace.yaml').write_text(PNPM_POLICY)
             (root / 'src-tauri/Cargo.lock').write_text('''version = 4
 [[package]]
 name = "example"
@@ -97,3 +101,54 @@ checksum = "expected"
             self.assertTrue(age.check(root, registry, self.now)['errors'])
             registry.companion_time = '2026-10-20T00:00:00Z'
             self.assertEqual(age.check(root, registry, self.now)['errors'], [])
+
+    def test_security_exception_is_exact_checked_and_time_bounded(self):
+        checksum = 'a' * 64
+        published = '2026-10-25T11:00:00Z'
+        entry = {'cksum': checksum, 'pubtime': published}
+        approval = dict(ecosystem='crates.io', name='example', version='1.0.1', checksum=checksum,
+                        reason='Confirmed upstream security fix', references=['https://example.org/security'],
+                        expiresAt='2026-10-27T00:00:00Z')
+        policies = {('crates.io', 'example', '1.0.1'): approval}
+        record = age.check_package('example', '1.0.1', checksum, entry, self.now, policies)
+        self.assertEqual(record['securityException']['reason'], approval['reason'])
+        with self.assertRaises(ValueError):  # No exemption for the next release.
+            age.check_package('example', '1.0.2', checksum, entry, self.now, policies)
+        for invalid in [dict(approval, checksum='b' * 64), dict(approval, expiresAt='2026-10-25T00:00:00Z'), dict(approval, expiresAt='2027-01-01T00:00:00Z')]:
+            with self.assertRaises(ValueError):
+                age.check_package('example', '1.0.1', checksum, entry, self.now, {('crates.io', 'example', '1.0.1'): invalid})
+        for invalid in [dict(entry, cksum='b' * 64), dict(entry, pubtime=None)]:
+            with self.assertRaises(ValueError):
+                age.check_package('example', '1.0.1', checksum, invalid, self.now, policies)
+
+    def test_security_policy_requires_evidence_and_rejects_version_ranges(self):
+        import tempfile
+        import json
+        approval = dict(ecosystem='crates.io', name='example', version='1.0.1', checksum='a' * 64,
+                        reason='Upstream security fix', references=['https://example.org/security'],
+                        expiresAt='2026-10-27T00:00:00Z')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'dependency-security-exceptions.json'
+            path.write_text(json.dumps(dict(schemaVersion=1, exceptions=[approval])))
+            self.assertIn(('crates.io', 'example', '1.0.1'), age.security_exceptions(root))
+            for invalid in [dict(approval, version='*'), dict(approval, version='^1.0'), dict(approval, reason=''), dict(approval, references=[]), dict(approval, checksum='')]:
+                path.write_text(json.dumps(dict(schemaVersion=1, exceptions=[invalid])))
+                with self.assertRaises(ValueError):
+                    age.security_exceptions(root)
+
+    def test_native_pnpm_cannot_silently_exclude_whole_packages(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'pnpm-workspace.yaml'
+            policies = {('npm', 'example', '1.0.1'): {}}
+            path.write_text(PNPM_POLICY + 'minimumReleaseAgeExclude: ["example@1.0.1"]\n')
+            age.validate_pnpm_exclusions(root, policies)
+            for exclusions in ['["example"]', '["*"]', '["example@1.0.2"]', '[]']:
+                path.write_text(PNPM_POLICY + 'minimumReleaseAgeExclude: '+exclusions+'\n')
+                with self.assertRaises(ValueError):
+                    age.validate_pnpm_exclusions(root, policies)
+            path.write_text(PNPM_POLICY.replace('2880', '0'))
+            with self.assertRaises(ValueError):
+                age.validate_pnpm_exclusions(root, {})
