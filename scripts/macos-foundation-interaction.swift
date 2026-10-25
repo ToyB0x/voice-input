@@ -8,10 +8,6 @@ func foundationInteraction(pid: pid_t, output: URL) throws {
     try chooseModelOption(root, label: "Correction engine", title: "Apple Foundation Models（実験的）")
     try press(uiButton(root, ["Save preferences"])!)
     try waitForUI("Apple engine saved") { uiText(root).contains("設定を保存しました") }
-    guard let disclosure = axElements(root).first(where: {
-        axValue($0, kAXRoleAttribute) as? String == "AXDisclosureTriangle" && axText($0).contains("Appleモデルの診断")
-    }) else { throw SmokeFailure(description: "Missing Apple model diagnostics disclosure") }
-    try press(disclosure)
     try waitForUI("Apple diagnostics expanded") { uiButton(root, ["Check Apple model availability"]) != nil }
     try press(uiButton(root, ["Check Apple model availability"])!)
     try waitForUI("real Apple helper status", seconds: 20) {
@@ -37,6 +33,13 @@ func foundationInteraction(pid: pid_t, output: URL) throws {
     try chooseModelOption(root, label: "Correction engine", title: "Qwen3（ローカルGGUF）")
     try press(uiButton(root, ["Save preferences"])!)
     try waitForUI("Qwen engine restored") { uiText(root).contains("設定を保存しました") }
+    try waitForUI("diagnostic controls ready after restore") { uiButton(root, ["Copy Apple model diagnostics"]) != nil }
+    try press(uiButton(root, ["Copy Apple model diagnostics"])!)
+    try waitForUI("Qwen preference actually restored") {
+        guard let value = NSPasteboard.general.string(forType: .string), let data = value.data(using: .utf8),
+              let current = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return current["selected_engine"] as? String == "qwen3"
+    }
     try writeJSON(["status":"passed", "realHelper":true, "frameworkCompiled":true,
                    "inferenceTested":false, "engineSelectionSaved":true,
                    "diagnosticsCopiedWithoutBody":true, "originalUnchanged":true],

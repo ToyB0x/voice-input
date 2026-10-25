@@ -74,6 +74,7 @@ const correctionContext = document.querySelector<HTMLInputElement>("#correction-
 const ocrStatus = document.querySelector<HTMLParagraphElement>("#ocr-status")!;
 const screenPermission = document.querySelector<HTMLButtonElement>("#screen-permission")!;
 const correctionEngine = document.querySelector<HTMLSelectElement>("#correction-engine")!;
+const foundationDiagnostics = document.querySelector<HTMLDetailsElement>("#foundation-diagnostics")!;
 const foundationCheck = document.querySelector<HTMLButtonElement>("#foundation-check")!;
 const foundationCopy = document.querySelector<HTMLButtonElement>("#foundation-copy")!;
 const foundationInfo = document.querySelector<HTMLParagraphElement>("#foundation-info")!;
@@ -217,6 +218,7 @@ async function refresh() {
         whisperContext.checked = desktop.preferences.whisperContext;
         correctionContext.checked = desktop.preferences.correctionContext;
         correctionEngine.value = desktop.preferences.correctionEngine;
+        if (correctionEngine.value === "apple-foundation") foundationDiagnostics.open = true;
         correctionModelPath.value = desktop.preferences.correctionModelPath;
         correctionBackend.value = desktop.preferences.correctionBackend;
         preferencesInitialized = true;
@@ -265,7 +267,10 @@ for (const field of [modelPath, backend, shortcut, autoInsert, recognitionContex
 }
 modelPath.addEventListener("input", render);
 correctionModelPath.addEventListener("input", render);
-correctionEngine.addEventListener("change", render);
+correctionEngine.addEventListener("change", () => {
+  if (correctionEngine.value === "apple-foundation") foundationDiagnostics.open = true;
+  render();
+});
 foundationCheck.addEventListener("click", () => void action(async () => { correction = await invoke<CorrectionStatus>("check_foundation_model"); }));
 foundationCopy.addEventListener("click", () => void action(async () => { await invoke("copy_foundation_diagnostics"); preferencesMessage.textContent = "本文を含まない診断情報をコピーしました。"; }));
 screenPermission.addEventListener("click", () => void action(() => invoke("request_screen_permission")));

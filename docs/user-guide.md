@@ -33,6 +33,10 @@ Gatekeeperが起動を止めた場合は、入手元と内容を確認し、一�
 「破損」「マルウェア」などの警告を無条件に解除せず、まず入手元や再ビルドを確認する。
 システム全体のGatekeeperを無効にする必要はない。
 
+## CIで検証したアプリを使う
+
+成功したActionsのArtifact `voice-input-macos-ARM64-<試行番号>`には、Apple Silicon向けの`Voice-Input-macos.zip`と`provenance.json`を保存する。JSONのソースリビジョンとSHA-256を確認し、ZIPを展開して`Voice Input.app`を自分のApplicationsへ配置する。モデルや個人設定は含まない。Developer ID署名・公証はないため、隔離属性で起動できない場合は上記の対象アプリを「このまま開く」手順を使う。
+
 ## モデルを準備して設定する
 
 ```sh

@@ -7,8 +7,8 @@ Whisperによるローカル文字起こしの後に、Appleのオンデバイ�
 ## 実機で試す手順
 
 1. Apple Intelligenceに対応したMacで、macOS 26以降を利用します。システム設定でApple Intelligenceを有効にし、モデルの準備完了を待ちます。日本語への対応はOS・モデルの版にも依存し、ヘルパーで`supportsLocale(ja)`を確認します。
-2. 本PRのCIで生成したアプリ、またはXcode 26以降でビルドしたアプリを使います。署名・公証を行わない個人利用の起動手順は[利用ガイド](user-guide.md)と同じです。
-3. 最終補正欄で「Apple Foundation Models（実験的）」を選び、「設定を保存」を押します。GGUFパスとCPU / Metalの指定はAppleモデルでは利用しません。以前のQwen設定は保存したままです。
+2. 成功したCIのArtifact `voice-input-macos-ARM64-<試行番号>` をダウンロードし、`Voice-Input-macos.zip`を展開してアプリを使えます（Apple Silicon向け）。`provenance.json`にソースリビジョンとZIPのSHA-256を記録します。手元で作る場合はXcode 26以降でビルドします。署名・公証を行わない個人利用の起動手順は[利用ガイド](user-guide.md)と同じです。
+3. 最終補正欄で「Apple Foundation Models（実験的）」を選び、「設定を保存」を押します。GGUFパスとCPU / Metalの指定はAppleモデルでは利用しません。実行デバイスはOSが管理します。以前のQwen設定は保存したままです。
 4. 「Appleモデルの診断」を開き、「Appleモデルの利用可否を確認」を押します。この操作では推論しません。
 5. いつものWhisperで録音・文字起こしを行い、「最終補正をプレビュー」を押します。初めは短い日本語で試してください。
 6. 原文と比較してから「補正結果をコピー」を押します。補正結果は原文を上書きせず、自動入力もしません。既存の直接入力を有効にしている場合、それは引き続きWhisperの原文を入力する機能です。

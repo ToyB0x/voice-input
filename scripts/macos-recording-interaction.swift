@@ -488,7 +488,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     let settingsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/dev.toyb0x.voiceinput/settings.json")
     let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as! [String: Any]
-    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert", "recognitionContext", "ocrContext", "whisperContext", "correctionContext", "correctionModelPath", "correctionBackend"]),
+    guard Set(stored.keys) == Set(["version", "modelPath", "backend", "shortcut", "autoInsert", "recognitionContext", "ocrContext", "whisperContext", "correctionContext", "correctionModelPath", "correctionBackend", "correctionEngine"]),
           stored["modelPath"] as? String == model, stored["backend"] as? String == "cpu",
           stored["shortcut"] as? String == "Control+Alt+KeyV", stored["autoInsert"] as? Bool == false, stored["recognitionContext"] as? Bool == false else {
         throw SmokeFailure(description: "Persisted preferences mismatch or unexpected private data")

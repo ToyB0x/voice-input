@@ -467,7 +467,8 @@ jobs:
           from pathlib import Path
           settings = json.loads((Path.home() / 'Library/Application Support/dev.toyb0x.voiceinput/settings.json').read_text())
           assert settings['recognitionContext'] is True
-          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'recognitionContext', 'ocrContext', 'whisperContext', 'correctionContext', 'correctionModelPath', 'correctionBackend'}
+          assert settings['correctionEngine'] == 'qwen3'
+          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'recognitionContext', 'ocrContext', 'whisperContext', 'correctionContext', 'correctionModelPath', 'correctionBackend', 'correctionEngine'}
           PY
       - name: Verify trusted product insertion and cancellation guards
         if: inputs.full_integration
@@ -528,6 +529,27 @@ jobs:
             echo "::error::Compiler or smoke failure was not propagated through tee"
             exit 1
           fi
+      - name: Package the tested app for personal device debugging
+        run: |
+          mkdir -p "$RUNNER_TEMP/voice-input-app"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-app/Voice-Input-macos.zip"
+          python3 - <<'PYCODE'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-app'
+          archive = root / 'Voice-Input-macos.zip'
+          (root / 'provenance.json').write_text(json.dumps(dict(source_revision=os.environ['GITHUB_SHA'],
+              architecture=os.environ['RUNNER_ARCH'], developer_id_signed=False, notarized=False,
+              archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))+'\n')
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-input-macos-${{ runner.arch }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-input-app/
+          retention-days: 14
+          if-no-files-found: error
       - name: Upload native window evidence
         if: always()
         uses: actions/upload-artifact@v4
