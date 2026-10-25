@@ -2,28 +2,24 @@ name: Apple Foundation Models runtime
 
 on:
   workflow_call:
-    inputs:
-      verify_legacy:
-        description: Optional macOS 14 startup check before runner retirement on 2026-11-02
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 jobs:
   foundation:
-    name: Compile Apple model helper with macOS 26 SDK
-    runs-on: macos-latest
+    name: Compile Apple model helper with macOS 27 SDK
+    runs-on: xcode-27
     timeout-minutes: 8
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Compile production helper with weak linking for macOS 14
+      - name: Compile production helper for macOS 27
         run: |
           mkdir -p "$RUNNER_TEMP/foundation-runtime"
+          python3 scripts/verify-macos-support.py --output "$RUNNER_TEMP/foundation-runtime/platform.json"
           xcodebuild -version > "$RUNNER_TEMP/foundation-runtime/xcode.txt"
           xcrun --sdk macosx --show-sdk-version > "$RUNNER_TEMP/foundation-runtime/sdk.txt"
           python3 scripts/build-foundation-runtime.py --require-framework \
@@ -52,39 +48,4 @@ jobs:
           name: apple-foundation-runtime
           path: ${{ runner.temp }}/foundation-runtime/
           overwrite: true
-          retention-days: 14
-
-  legacy:
-    if: inputs.verify_legacy
-    name: Verify weak-linked Apple helper on macOS 14
-    needs: foundation
-    runs-on: macos-26
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: apple-foundation-runtime
-          path: ${{ runner.temp }}/foundation-runtime
-      - name: Verify old-OS startup and explicit unavailability offline
-        shell: bash
-        run: |
-          binary="$RUNNER_TEMP/foundation-runtime/apple-foundation-correction"
-          chmod +x "$binary"
-          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
-            python3 scripts/verify-foundation-runtime.py --require-framework \
-            --binary "$binary" --output "$RUNNER_TEMP/legacy-foundation.json"
-          python3 - <<'PYCODE'
-          import json, os
-          from pathlib import Path
-          report = json.loads(Path(os.environ['RUNNER_TEMP'], 'legacy-foundation.json').read_text())
-          assert report['availability']['os_major'] == 14
-          assert report['availability']['availability'] == 'osTooOld'
-          assert report['inferenceTested'] is False
-          PYCODE
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: apple-foundation-legacy
-          path: ${{ runner.temp }}/legacy-foundation.json
           retention-days: 14

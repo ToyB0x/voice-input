@@ -1,6 +1,6 @@
 # 依存更新と48時間の待機期間
 
-JavaScriptはpnpm 12、ビルド用Node.jsは`.nvmrc`の26.12.1を使います。`packageManager`でpnpmを固定し、`pnpm-lock.yaml`と5つの`Cargo.lock`をコミットします。Node.jsはビルド時だけ必要で、配布アプリのmacOS 14以降という条件は変わりません。
+JavaScriptはpnpm 12、ビルド用Node.jsは`.nvmrc`の26.12.1を使います。`packageManager`でpnpmを固定し、`pnpm-lock.yaml`と5つの`Cargo.lock`をコミットします。Node.jsはビルド時だけ必要で、配布アプリのmacOS 27以降という条件は変わりません。
 
 ## JavaScript
 

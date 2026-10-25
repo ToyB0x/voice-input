@@ -30,8 +30,8 @@
 ## 実行
 
 Python 3.9 以降、C/C++ コンパイラー、CMake、libclang が必要。Mac では Xcode Command Line Tools と
-`brew install cmake` を使う。Metal が使える macOS の検証対象は現時点で CI の macOS 14。
-アプリの対象下限も macOS 14 に設定している。旧OSは検証対象外。
+`brew install cmake` を使う。音声エンジン単体は CI の macOS 26でも検証する。アプリの動作確認は macOS 27で行う。
+アプリの対象下限は macOS 27。macOS 26以下はサポート対象外。
 Linux では例として `build-essential cmake clang libclang-dev` が必要。
 
 ```sh

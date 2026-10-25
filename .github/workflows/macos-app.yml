@@ -14,16 +14,18 @@ permissions:
 jobs:
   macos:
     name: ${{ inputs.full_integration && 'macOS full integration' || 'macOS build and window smoke' }}
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: ${{ inputs.full_integration && 60 || 30 }}
     env:
-      MACOSX_DEPLOYMENT_TARGET: "14.0"
+      MACOSX_DEPLOYMENT_TARGET: "27.0"
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify supported host and SDK
+        run: python3 scripts/verify-macos-support.py --output "$RUNNER_TEMP/platform.json"
       - name: Cache immutable registry publication metadata
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -89,22 +91,22 @@ jobs:
           path: |
             ~/.cargo/registry
             src-tauri/target
-          key: macos26-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos26-${{ runner.arch }}-app-rust-v1-
+          key: macos27-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos27-${{ runner.arch }}-app-rust-v1-
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: correction-cache
         with:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
-          key: macos26-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos26-${{ runner.arch }}-correction-runtime-v2-
+          key: macos27-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos27-${{ runner.arch }}-correction-runtime-v2-
       - name: Restore previous correction target cache
         if: steps.correction-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: crates/local-correction/target
-          key: macos26-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          key: macos27-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Test evaluation helpers
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Test pinned model preparation without networking
@@ -158,6 +160,11 @@ jobs:
         run: pnpm run tauri build --bundles app --ci -- --locked
         env:
           APPLE_SIGNING_IDENTITY: "-"
+      - name: Verify packaged app and every bundled executable require macOS 27
+        run: |
+          python3 scripts/verify-macos-support.py \
+            --app "src-tauri/target/release/bundle/macos/Voice Input.app" \
+            --output "$RUNNER_TEMP/voice-input-smoke/platform.json"
       # Save after a successful build even if a later native UI check fails.
       # Cargo rechecks local sources when restoring this dependency/build cache.
       - name: Save Rust build cache
@@ -168,6 +175,28 @@ jobs:
             ~/.cargo/registry
             src-tauri/target
           key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+      - name: Package the built app for personal device debugging
+        run: |
+          mkdir -p "$RUNNER_TEMP/voice-input-app"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-app/Voice-Input-macos.zip"
+          python3 - <<'PYCODE'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-app'
+          archive = root / 'Voice-Input-macos.zip'
+          (root / 'provenance.json').write_text(json.dumps(dict(source_revision=os.environ['GITHUB_SHA'],
+              architecture=os.environ['RUNNER_ARCH'], developer_id_signed=False, notarized=False,
+              minimum_system_version='27.0', validation='build-only; inspect CI result and macos-window-smoke artifact for runtime validation',
+              archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))+'\n')
+          PYCODE
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: voice-input-macos-${{ runner.arch }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-input-app/
+          retention-days: 14
+          if-no-files-found: error
       - name: Build observable native context fixture
         if: inputs.full_integration
         run: |
@@ -561,27 +590,6 @@ jobs:
             echo "::error::Compiler or smoke failure was not propagated through tee"
             exit 1
           fi
-      - name: Package the tested app for personal device debugging
-        run: |
-          mkdir -p "$RUNNER_TEMP/voice-input-app"
-          ditto -c -k --sequesterRsrc --keepParent \
-            "src-tauri/target/release/bundle/macos/Voice Input.app" \
-            "$RUNNER_TEMP/voice-input-app/Voice-Input-macos.zip"
-          python3 - <<'PYCODE'
-          import hashlib, json, os
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-app'
-          archive = root / 'Voice-Input-macos.zip'
-          (root / 'provenance.json').write_text(json.dumps(dict(source_revision=os.environ['GITHUB_SHA'],
-              architecture=os.environ['RUNNER_ARCH'], developer_id_signed=False, notarized=False,
-              archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))+'\n')
-          PYCODE
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: voice-input-macos-${{ runner.arch }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/voice-input-app/
-          retention-days: 14
-          if-no-files-found: error
       - name: Upload native window evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

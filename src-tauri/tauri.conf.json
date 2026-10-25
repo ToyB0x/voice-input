@@ -31,7 +31,7 @@
       "app"
     ],
     "macOS": {
-      "minimumSystemVersion": "14.0",
+      "minimumSystemVersion": "27.0",
       "entitlements": "Entitlements.plist"
     },
     "icon": [

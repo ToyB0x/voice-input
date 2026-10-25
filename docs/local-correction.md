@@ -121,4 +121,4 @@ Apple Silicon実機で同じ測定をGPUで行うには`--backend metal`を指�
 
 ## Appleのオンデバイスモデル（実験的）
 
-補正エンジンとしてApple Foundation Modelsも選択できます。macOS 26以降・Apple Intelligence対応と有効化・日本語対応モデルの準備が必要です。GGUFを指定せずに利用でき、生成後はQwenと共通の原文保持チェックを通します。利用不可・生成失敗・棄却でも原文を保持します。初期値はQwenのままです。[利用手順と診断方法](apple-foundation-models.md)を参照してください。
+補正エンジンとしてApple Foundation Modelsも選択できます。macOS 27以降・Apple Intelligence対応と有効化・日本語対応モデルの準備が必要です。GGUFを指定せずに利用でき、生成後はQwenと共通の原文保持チェックを通します。利用不可・生成失敗・棄却でも原文を保持します。初期値はQwenのままです。[利用手順と診断方法](apple-foundation-models.md)を参照してください。

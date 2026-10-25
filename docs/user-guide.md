@@ -6,7 +6,7 @@
 
 ## 自分のMacでビルド・配置する
 
-macOS 14以降、Xcode Command Line Tools、Node.js 26、Rust（rustup）、CMakeが必要。
+macOS 27以降、Xcode 27以降（macOS 27 SDKを含む）、Node.js 26、Rust（rustup）、CMakeが必要。
 [開発環境の説明](../README.md#macos-で開発する) に従って導入する。
 
 ```sh
@@ -134,3 +134,11 @@ CIから個人Macの許可を操作することはできない。必要な初回
 アプリ内から公式モデルを準備する操作・プリセット・保存先は[モデル準備ガイド](model-setup.md)を参照してください。取得は明示操作時だけ行い、音声や画面情報は送信しません。既存の手入力パスも利用できます。
 
 Apple Intelligence対応Macで最終補正にAppleのオンデバイスモデルを試す場合は、[Apple Foundation Modelsの利用・診断手順](apple-foundation-models.md)を参照してください。音声認識は引き続きWhisperで行います。新しいTCC権限の自動付与や署名・公証は行いません。
+
+## 対応OSとCIの結果
+
+対応OSはmacOS 27以降です。macOS 26以下はサポート対象外です。アプリのビルド・表示・権限の検証とRelease生成には、GitHub ActionsのPreviewイメージ `xcode-27` を使用します。26上の音声エンジン単体テストは補助検証です。
+
+アプリArtifactはビルド完了時に保存するため、その後の画面・権限テストが失敗した場合もダウンロードできます。`provenance.json`のリビジョン・SHA-256を照合し、対応するCI結果と`macos-window-smoke` Artifactも確認してください。Artifactの存在は動作確認の成功を意味しません。
+
+実機では、起動と画面表示、マイク・アクセシビリティ・画面収録の許可と拒否、録音から文字起こし・コピー、任意の直接入力とOCRを確認します。Appleモデルは診断で実際の利用可否を確認し、利用できる場合に短い発話の補正と原文保持を試してください。GHAの`deviceNotEligible`は実機での利用不可を意味せず、CIでは推論未検証として扱います。

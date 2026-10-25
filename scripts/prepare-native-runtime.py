@@ -11,7 +11,8 @@ if platform.system() != 'Darwin':
     raise SystemExit('The app runtime is built on macOS. The standalone correction crate also supports CPU tests on Linux.')
 subprocess.run(['python3',str(ROOT/'scripts/check-dependency-age.py')],check=True)
 build_env=dict(os.environ)
-build_env.setdefault('MACOSX_DEPLOYMENT_TARGET','14.0')
+minimum=json.loads((ROOT/'src-tauri/tauri.conf.json').read_text())['bundle']['macOS']['minimumSystemVersion']
+build_env['MACOSX_DEPLOYMENT_TARGET']=minimum
 subprocess.run(['cargo','build','--manifest-path',str(ROOT/'crates/local-correction/Cargo.toml'),'--release','--locked'],check=True,env=build_env)
 source=Path(os.environ.get('CARGO_TARGET_DIR',ROOT/'crates/local-correction/target'))/'release/local-correction'
 # Refuse to package a diagnostic variant, including after switching Cargo features.

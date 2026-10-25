@@ -64,7 +64,7 @@ base / small を固定した人間の読み上げ音声と無音で比較し、�
 
 ## macOS で開発する
 
-- macOS 14 以降（アプリの対象下限。CI は macOS 14 / Apple Silicon）
+- macOS 27 以降（アプリの対象下限。アプリCIは `xcode-27` / Apple Silicon）
 - Xcode Command Line Tools: `xcode-select --install`
 - Node.js 26.12.1（`.nvmrc`）と pnpm 12.15.0（`package.json`の`packageManager`で固定）
 - CMake: `brew install cmake`（文字起こしエンジンのビルドに必要）
@@ -163,7 +163,7 @@ docs/architecture.md  フレームワーク選定と後続機能
 
 ## ローカルOCR・最終補正
 
-入力先の欄をApple VisionでOCRし、取得テキストのWhisper／最終補正への利用を独立して切り替えられます。軽量なローカルQwen3による補正はプレビュー専用で、元の文字起こしを保持します。初期状態では取得元は無効、補正モデルは未設定です。[準備・権限・比較方法](docs/local-correction.md)を参照してください。macOS 26以降では、[Appleのオンデバイスモデルによる補正](docs/apple-foundation-models.md)も実験的に選べます。
+入力先の欄をApple VisionでOCRし、取得テキストのWhisper／最終補正への利用を独立して切り替えられます。軽量なローカルQwen3による補正はプレビュー専用で、元の文字起こしを保持します。初期状態では取得元は無効、補正モデルは未設定です。[準備・権限・比較方法](docs/local-correction.md)を参照してください。macOS 27以降では、[Appleのオンデバイスモデルによる補正](docs/apple-foundation-models.md)も実験的に選べます。
 
 ### 実機での一括比較
 

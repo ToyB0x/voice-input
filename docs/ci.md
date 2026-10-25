@@ -44,13 +44,21 @@ gh workflow run model-capabilities.yml --ref YOUR_BRANCH
 
 完全CIでは、アプリ同梱の補正ランタイムを固定の合成文で3回起動し、処理段階ごとの時間とプロセスのピークRSSも記録します。`correction-performance/performance.json`と`summary.md`を通常のMac Artifactに含めます。通常のPR／pushでは実行しません。各実行は新しいプロセスであり、初回／後続の差はモデル常駐化の効果を示しません。計測範囲と手元での実行方法は[最終補正の計測](local-correction.md#処理時間メモリの計測)を参照してください。
 
-通常CIにはApple Foundation Models用ヘルパーのビルドと軽いモデル不要の検証も含めます。macOS最新SDKでコンパイルしたヘルパーを、同じworkflow runのArtifact経由でmacOS 26のアプリ検証ジョブへ渡します。最低対応OSは14のまま維持し、任意のmacOS 14ジョブでヘルパーの起動と非対応応答を確認します。ハッシュ・リビジョンを照合し、weak linkによる旧OS起動と利用不可の応答、実画面の選択・診断コピー、候補の共通ガードを確認します。CIで実際のAppleモデルが使えない場合は`inferenceTested: false`を記録します。詳細は[AppleモデルのCI範囲](apple-foundation-models.md#実装とciの範囲)を参照してください。
+通常CIにはApple Foundation Models用ヘルパーのビルドとモデル不要の検証も含めます。macOS 27 SDKでコンパイルしたヘルパーを同じrunのArtifact経由で27のアプリ検証へ渡し、ハッシュ・リビジョン・プロトコル・実画面での選択と診断コピーを確認します。実際のAppleモデルが使えない場合は`inferenceTested: false`を記録します。[AppleモデルのCI範囲](apple-foundation-models.md#実装とciの範囲)も参照してください。
 
-成功したMacジョブは、検証したアプリも `voice-input-macos-ARM64-<試行番号>` ArtifactへZIPとSHA-256・ソースリビジョン付きで保存します。モデルと個人設定は含めず、Developer ID署名・公証は行いません。実機での利用は[個人利用ガイド](user-guide.md#ciで検証したアプリを使う)を参照してください。
+Macジョブは、ビルドが完了した時点でアプリを `voice-input-macos-ARM64-<試行番号>` ArtifactへZIPとSHA-256・ソースリビジョン付きで保存します。モデルと個人設定は含めず、Developer ID署名・公証は行いません。実機での利用は[個人利用ガイド](user-guide.md#ciで検証したアプリを使う)を参照してください。
 
-macOS 26のRust/CMakeビルドキャッシュはmacOS 14のものと分けます。OpenSSLやSDKの絶対パスを含む旧OSの生成物を新OSへ復元しません。OS更新直後の初回はキャッシュがないため、通常より長くかかることがあります。
+macOS 27のRust/CMakeビルドキャッシュは26以下のものと分けます。OpenSSLやSDKの絶対パスを含む旧OSの生成物を新OSへ復元しません。OS更新直後の初回はキャッシュがないため、通常より長くかかることがあります。
 評価workflowのUbuntuランナー／ネイティブキャッシュを変更するPRでは、`Ubuntu runner compatibility`も実行します。Ubuntu 26.04で実際に補正ランタイムをビルド・テストし、通信を禁止して製品の補正ガードを検証します。モデルを取得する全件評価は起動しません。ネイティブ生成物のキャッシュはUbuntu 24.04と分離します。
 
 通常Macジョブのタイムアウトは30分です。macOSメジャー更新や空キャッシュ時のC++・Rustの初回コンパイルを完了させるための上限であり、通常実行の10分未満という目標は維持します。完全テストの60分上限とは分けています。
 
-macOS 14ランナーは[2026-11-02に提供終了予定](https://github.com/actions/runner-images/issues/13518)です。旧OSでのヘルパー起動は今回実行して成功を確認しましたが、今後の通常CIには必須にしません。廃止前は`gh workflow run ci.yml --ref YOUR_BRANCH -f full_integration=false -f legacy_macos14=true`で追加実行できます。通常CIは26上で最低対応OS 14・weak link・プロトコルを検証し、廃止後に14で実行したかのような結果は記録しません。
+## 対応OSとPreviewランナー
+
+アプリの最低対応OSはmacOS 27です。ビルド・画面・権限検証・Release生成には、[公式の27イメージ](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)のラベル`xcode-27`を明示します。これはPublic Previewであり、`macos-latest`が27を指すとは限りません。ホストOSとSDKを実測し、27未満なら失敗させます。配布アプリのInfo.plistと主実行ファイル・補正・Appleモデル・比較の各実行ファイルの最低OSも検証します。14専用ジョブと手動入力は削除しました。
+
+音声エンジン単体・モデル比較のmacOS 26ジョブは補助検証として残します。26での成功は27のアプリ動作確認を代替しません。
+
+Previewでの画面撮影・描画・権限操作の失敗はCI上も失敗として残し、Artifactとログで調査します。実機テスト用のPRは、静的解析・ビルド結果と失敗の範囲を明記して判断できます。27での起動・画面表示が未確認なら、配布アプリの動作確認済みとは扱いません。ビルド済みアプリは後続のUIテストが失敗してもArtifactに残し、利用者が実機で検証できるようにします。
+
+2026-10-25の27 Preview調査では、26でビルドしたアプリのウィンドウ内容が空で、表示検証は未通過でした。今回の27向けビルドでも同じかは実行結果を確認します。Appleモデルの実APIは26・27の標準GHA環境で`deviceNotEligible`を返し、推論は未検証です。対応する実機での[確認手順](user-guide.md#対応osとciの結果)を残します。
