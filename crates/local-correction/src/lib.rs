@@ -270,6 +270,29 @@ fn known_contrast_parts_match(source: &str, candidate: &str) -> bool {
     true
 }
 
+// Find a distinct candidate for each constrained source target. Reassign an
+// earlier match when necessary; a greedy match can consume the only candidate
+// available to a more specific target. Inputs/targets retain the existing bounds.
+fn assign_contrast_target(
+    source: usize,
+    edges: &[Vec<usize>],
+    owners: &mut [Option<usize>],
+    seen: &mut [bool],
+) -> bool {
+    for &candidate in &edges[source] {
+        if seen[candidate] {
+            continue;
+        }
+        seen[candidate] = true;
+        let previous = owners[candidate];
+        if previous.is_none_or(|other| assign_contrast_target(other, edges, owners, seen)) {
+            owners[candidate] = Some(source);
+            return true;
+        }
+    }
+    false
+}
+
 fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static str> {
     let source_targets = contrast_targets(original);
     let candidate_targets = contrast_targets(candidate);
@@ -278,25 +301,44 @@ fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static st
     if candidate.matches("ではなく").count() < source.matches("ではなく").count() {
         return Err("correction removed a contrast target");
     }
+    let mut edges = Vec::new();
     for target in &source_targets {
         if target.is_empty() || target.chars().all(is_kana) {
             continue;
         }
-        if target.chars().any(is_kana) {
-            let matches = |targets: &[String]| {
-                targets
-                    .iter()
-                    .filter(|other| known_contrast_parts_match(target, other))
-                    .count()
-            };
-            if matches(&candidate_targets) < matches(&source_targets) {
-                return Err("correction removed a contrast target");
-            }
-        } else {
+        let mixed = target.chars().any(is_kana);
+        if !mixed {
             let fragment = format!("{target}ではなく");
             if candidate.matches(&fragment).count() < source.matches(&fragment).count() {
                 return Err("correction removed a contrast target");
             }
+        }
+        edges.push(
+            candidate_targets
+                .iter()
+                .enumerate()
+                .filter_map(|(index, other)| {
+                    // Reserve literal targets too, so a mixed target cannot
+                    // reuse the candidate required by a known literal target.
+                    let matches = if mixed {
+                        known_contrast_parts_match(target, other)
+                    } else {
+                        other.ends_with(target)
+                    };
+                    matches.then_some(index)
+                })
+                .collect(),
+        );
+    }
+    let mut owners = vec![None; candidate_targets.len()];
+    for target in 0..edges.len() {
+        if !assign_contrast_target(
+            target,
+            &edges,
+            &mut owners,
+            &mut vec![false; candidate_targets.len()],
+        ) {
+            return Err("correction removed a contrast target");
         }
     }
     Ok(())
@@ -662,6 +704,31 @@ mod tests {
         ] {
             assert!(parse_answer(&encode(candidate), original).is_err());
         }
+    }
+
+    #[test]
+    fn overlapping_contrast_constraints_use_distinct_candidates() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for original in [
+            "東京えきではなく大阪です。とうきょう駅ではなく京都です",
+            "東京駅ではなく大阪です。とうきょう駅ではなく京都です",
+        ] {
+            assert!(
+                parse_answer(
+                    &encode("東京駅ではなく大阪です。大阪空港ではなく京都です。"),
+                    original
+                )
+                .is_err()
+            );
+        }
+        // Both valid targets remain when a formatter reorders whole clauses.
+        assert!(
+            parse_answer(
+                &encode("東京駅ではなく京都です。富士駅ではなく甲府です。"),
+                "ふじ駅ではなく甲府です。東京えきではなく京都です"
+            )
+            .is_ok()
+        );
     }
 
     #[test]
