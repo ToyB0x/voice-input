@@ -66,7 +66,7 @@ base / small を固定した人間の読み上げ音声と無音で比較し、�
 
 - macOS 14 以降（アプリの対象下限。CI は macOS 14 / Apple Silicon）
 - Xcode Command Line Tools: `xcode-select --install`
-- Node.js 24（`.nvmrc`。npm を使用）
+- Node.js 26.12.1（`.nvmrc`）と pnpm 12.15.0（`package.json`の`packageManager`で固定）
 - CMake: `brew install cmake`（文字起こしエンジンのビルドに必要）
 - [rustup](https://rustup.rs/)（Rust は `rust-toolchain.toml` で指定）
 
@@ -74,8 +74,9 @@ base / small を固定した人間の読み上げ音声と無音で比較し、�
 git clone https://github.com/ToyB0x/voice-input.git
 cd voice-input
 # nvm を使っている場合: nvm install && nvm use
-npm ci
-npm run tauri dev
+pnpm install --frozen-lockfile
+pnpm run check:dependencies
+pnpm run tauri dev
 ```
 
 初回は Rust ツールチェーンと依存クレートをダウンロードします。
@@ -84,14 +85,14 @@ Vite とネイティブウィンドウが起動し、初期画面に「Voice Inp
 
 ```sh
 # TypeScript の型検査 + フロントエンドのビルド
-npm run build
+pnpm run build
 # Rust のフォーマット・静的解析
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 # 合成音声によるバッファ上限・変換・入力レベル・状態遷移のテスト
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 # ローカル確認用の未署名 .app（配布用署名・公証は別途必要）
-npm run tauri build -- --bundles app
+pnpm run tauri build --bundles app
 ```
 
 生成先は `src-tauri/target/release/bundle/macos/Voice Input.app` です。
@@ -101,7 +102,7 @@ npm run tauri build -- --bundles app
 
 ## Linux / クラウド環境
 
-UI のみを確認する場合は `npm ci` → `npm run dev`、ビルド確認は `npm run build` を実行します。
+UI のみを確認する場合は `pnpm install --frozen-lockfile` → `pnpm run dev`、ビルド確認は `pnpm run build` を実行します。
 これはブラウザー用 UI で、macOS ネイティブアプリの動作確認とは別です。
 Linux 上で Tauri 自体をコンパイルする場合は、Rust に加えて WebKitGTK などの
 [システム依存](https://v2.tauri.app/start/prerequisites/#linux) が必要です。
@@ -109,7 +110,7 @@ macOS の `.app` のビルド・起動には Mac が必要です。
 
 ## CI
 
-PR と `main` への push 時に macOS 上で npm 依存導入、Rust のフォーマット・Clippy、
+PR と `main` への push 時に macOS 上で pnpm 依存導入、Rust のフォーマット・Clippy、
 音声処理の Rust テスト、評価器の Python テスト、モデル不要の固定補正ガード32件、
 Tauri の `.app` ビルド、短いオフライン認識、ネイティブウィンドウの表示確認を実行します。
 権限・録音・OCR・直接入力の完全テストは手動・週次実行へ、全モデル比較は手動・週次の別workflowへ分けます。
@@ -185,14 +186,16 @@ Tauri公式の`tauri-plugin-updater`を利用します。署名キーを設定�
 初回のみ、リポジトリ所有者としてGitHub CLIにログインしたMacで以下を実行します。通常のリポジトリアクセスとは別に、Actions SecretsとVariablesの管理権限が必要です。
 
 ```sh
-npm ci
+pnpm install --frozen-lockfile
 python3 scripts/setup-updater-signing.py --key-file "$HOME/Library/Application Support/Voice Input/updater.key"
 ```
 
 このスクリプトは公式Tauri CLIで鍵を生成し、秘密鍵を`TAURI_SIGNING_PRIVATE_KEY`（Actions Secret）、空の鍵パスワードを`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`（Secret）、公開鍵を`TAURI_UPDATER_PUBLIC_KEY`（Actions Variable）へ設定します。秘密鍵は指定したリポジトリ外の場所へ0600で保持し、出力・コミットしません。既存ファイルや既存のリポジトリ設定を検出したら上書き・鍵交換せず停止します。秘密鍵のバックアップを保管してください。途中で設定に失敗した場合も鍵ファイルは残るので、新しい鍵に交換せず既存の鍵で設定を完了してください。鍵のローテーションは旧アプリからの更新を壊すため、このスクリプトでは行いません。
 
-`v0.1.1`などの安定版SemVerタグでGitHub Releaseを公開すると、`Build and publish macOS release`がApple Silicon向けアプリをビルドします。Tauri生成の更新用`.app.tar.gz`と署名、初回インストール用`.dmg`、`latest.json`、SHA-256一覧を同じReleaseへ添付します。アップロードにはCIの`GITHUB_TOKEN`だけを使い、アプリにGitHubトークンは埋め込みません。署名設定がない公開Releaseは失敗させます。アーカイブの実データを公式プラグインで検証し、改変データ・改変バージョン・不正署名の拒否も確認してから添付します。既存の同名添付は上書きしません。
+`v0.0.1`などの安定版SemVerタグでGitHub Releaseを公開すると、`Build and publish macOS release`がApple Silicon向けアプリをビルドします。Tauri生成の更新用`.app.tar.gz`と署名、初回インストール用`.dmg`、`latest.json`、SHA-256一覧を同じReleaseへ添付します。アップロードにはCIの`GITHUB_TOKEN`だけを使い、アプリにGitHubトークンは埋め込みません。署名設定がない公開Releaseは失敗させます。アーカイブの実データを公式プラグインで検証し、改変データ・改変バージョン・不正署名の拒否も確認してから添付します。既存の同名添付は上書きしません。
 
 ワークフローの手動実行は**一時キーによるビルド検証のみ**です。Releaseを公開・添付せず、Actions Artifactへ成果物を保存します。一時キー版は公開版の更新経路のテストには使わないでください。通常のPR CIではDMG生成や全モデル推論を実行しません。
 
 当面は個人利用を前提とし、Developer ID証明書・Apple公証は行いません。更新用の署名はAppleの署名・公証とは別です。初回はReleaseのDMGを開き、Voice Input.appを`/Applications`へコピーし、DMGを取り出してから起動してください。Gatekeeperで止まる場合は既存の未公証アプリ手順に従い「システム設定 → プライバシーとセキュリティ → このまま開く」を使います。OS全体のGatekeeperを無効化しないでください。更新後もOSの確認や権限の再許可が必要な場合があります。Intel Mac向け配布とAppleの署名・公証は後続対応です。
+
+依存更新は公開後48時間以上経過した版を対象にします。pnpmの厳格なminimum release ageと、Rustの全ロックファイルの公開日時検査を適用します。詳細と手動更新手順は[依存更新ポリシー](docs/dependency-policy.md)を参照してください。

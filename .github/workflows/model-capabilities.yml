@@ -29,7 +29,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Compile against runner SDK and probe under network denial
         run: |
           mkdir -p "$RUNNER_TEMP/foundation-probe"
@@ -40,7 +40,7 @@ jobs:
           sandbox-exec -p '(version 1) (allow default) (deny network*)' \
             "$RUNNER_TEMP/foundation-probe/probe" | tee "$RUNNER_TEMP/foundation-probe/report.json"
           cat "$RUNNER_TEMP/foundation-probe/report.json" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: apple-foundation-models-availability
@@ -57,8 +57,16 @@ jobs:
       matrix:
         model: [medium, large-v3-turbo, large-v3]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - name: Enforce 48-hour dependency cooling before building
+        run: python3 scripts/check-dependency-age.py
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -104,7 +112,7 @@ jobs:
           Path(os.environ['RUNNER_TEMP'], 'stronger-whisper', 'metal-coverage.json').write_text(json.dumps(report, indent=2)+'\n')
           PY
           echo 'Metal NOT TESTED: larger-model GPU diagnostics require explicit manual opt-in.' >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: stronger-whisper-${{ matrix.model }}
@@ -119,8 +127,16 @@ jobs:
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: "2"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - name: Enforce 48-hour dependency cooling before building
+        run: python3 scripts/check-dependency-age.py
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -148,7 +164,7 @@ jobs:
             --model "$RUNNER_TEMP/correction-model.gguf" --model-name qwen3-8b \
             --output "$RUNNER_TEMP/stronger-correction" --cpu-only
           cat "$RUNNER_TEMP/stronger-correction/summary.md" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: stronger-correction-qwen3-8b-linux-cpu

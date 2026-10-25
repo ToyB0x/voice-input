@@ -6,15 +6,15 @@
 
 ## 自分のMacでビルド・配置する
 
-macOS 14以降、Xcode Command Line Tools、Node.js 24、Rust（rustup）、CMakeが必要。
+macOS 14以降、Xcode Command Line Tools、Node.js 26、Rust（rustup）、CMakeが必要。
 [開発環境の説明](../README.md#macos-で開発する) に従って導入する。
 
 ```sh
 git clone https://github.com/ToyB0x/voice-input.git
 cd voice-input
-npm ci
+pnpm install --frozen-lockfile
 # Developer IDではなくアドホック署名でローカル.appを作る。
-APPLE_SIGNING_IDENTITY="-" npm run tauri build -- --bundles app --ci -- --locked
+APPLE_SIGNING_IDENTITY="-" pnpm run tauri build --bundles app --ci -- --locked
 mkdir -p "$HOME/Applications"
 ditto "src-tauri/target/release/bundle/macos/Voice Input.app" \
   "$HOME/Applications/Voice Input.app"

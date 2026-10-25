@@ -1,0 +1,32 @@
+name: Dependency release age
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Verify 48-hour dependency cooling
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - name: Reject young or undated dependencies before compilation
+        run: |
+          python3 -m unittest discover -s scripts/tests -p test_dependency_age.py -v
+          python3 scripts/check-dependency-age.py --report "$RUNNER_TEMP/dependency-age.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: dependency-age-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dependency-age.json
+          retention-days: 14
+          if-no-files-found: warn

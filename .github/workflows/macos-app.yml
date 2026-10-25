@@ -23,8 +23,14 @@ jobs:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: apple-foundation-runtime
           path: ${{ runner.temp }}/foundation-runtime
@@ -64,24 +70,28 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write(f'CI scope: **{mode}**. Full permission/audio/OCR/insertion scenarios run on the weekly schedule or explicit full dispatch.\n')
           PYCODE
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          run_install: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Restore Rust build cache
         id: rust-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             src-tauri/target
           key: macos-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: macos-${{ runner.arch }}-app-rust-v1-
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: correction-cache
         with:
           path: |
@@ -91,7 +101,7 @@ jobs:
           restore-keys: macos-${{ runner.arch }}-correction-runtime-v2-
       - name: Restore previous correction target cache
         if: steps.correction-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: crates/local-correction/target
           key: macos-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
@@ -113,8 +123,8 @@ jobs:
           cargo fmt --manifest-path crates/local-correction/Cargo.toml -- --check
           cargo clippy --manifest-path crates/local-correction/Cargo.toml --locked --all-targets -- -D warnings
           cargo test --manifest-path crates/local-correction/Cargo.toml --locked
-          npm run prepare-native
-      - uses: actions/cache/save@v4
+          pnpm run prepare-native
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.correction-cache.outputs.cache-hit != 'true'
         with:
           path: |
@@ -139,20 +149,20 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - name: Build frontend
-        run: npm run build
+        run: pnpm run build
       - name: Check Rust
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
       - name: Test local audio processing
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Build unsigned macOS app
-        run: npm run tauri build -- --bundles app --ci -- --locked
+        run: pnpm run tauri build --bundles app --ci -- --locked
         env:
           APPLE_SIGNING_IDENTITY: "-"
       # Save after a successful build even if a later native UI check fails.
       # Cargo rechecks local sources when restoring this dependency/build cache.
       - name: Save Rust build cache
         if: steps.rust-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -555,7 +565,7 @@ jobs:
               architecture=os.environ['RUNNER_ARCH'], developer_id_signed=False, notarized=False,
               archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))+'\n')
           PYCODE
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: voice-input-macos-${{ runner.arch }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/voice-input-app/
@@ -563,7 +573,7 @@ jobs:
           if-no-files-found: error
       - name: Upload native window evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-window-smoke-${{ github.run_attempt }}
           path: ${{ runner.temp }}/voice-input-smoke/

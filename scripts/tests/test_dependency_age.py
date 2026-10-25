@@ -1,0 +1,70 @@
+import datetime as dt
+import importlib.util
+from pathlib import Path
+import unittest
+
+spec = importlib.util.spec_from_file_location('dependency_age', Path(__file__).resolve().parents[1] / 'check-dependency-age.py')
+age = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(age)
+
+
+class DependencyAge(unittest.TestCase):
+    def setUp(self):
+        self.now = dt.datetime(2026, 10, 25, 12, tzinfo=dt.timezone.utc)
+
+    def test_exact_48_hour_boundary_and_missing_timezone(self):
+        self.assertTrue(age.cooled('2026-10-23T12:00:00Z', self.now))
+        self.assertFalse(age.cooled('2026-10-23T12:00:01Z', self.now))
+        for value in [None, '', '2026-10-23T12:00:00']:
+            with self.assertRaises(ValueError):
+                age.cooled(value, self.now)
+
+    def test_sparse_index_paths(self):
+        self.assertEqual(age.index_path('a'), '1/a')
+        self.assertEqual(age.index_path('ab'), '2/ab')
+        self.assertEqual(age.index_path('syn'), '3/s/syn')
+        self.assertEqual(age.index_path('serde_json'), 'se/rd/serde_json')
+        with self.assertRaises(ValueError):
+            age.index_path('../secret')
+
+    def test_young_missing_and_tampered_transitive_versions_are_rejected(self):
+        entry = {'pubtime': '2026-10-23T12:00:00Z', 'cksum': 'expected'}
+        self.assertEqual(age.check_package('transitive', '1.0.0', 'expected', entry, self.now)['version'], '1.0.0')
+        for invalid in [None, {'cksum': 'expected'}, dict(entry, cksum='tampered'), dict(entry, pubtime='2026-10-24T00:00:00Z')]:
+            with self.assertRaises(ValueError):
+                age.check_package('transitive', '1.0.0', 'expected', invalid, self.now)
+
+    def test_all_lockfiles_include_target_specific_transitive_packages(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'src-tauri').mkdir()
+            (root / 'crates/helper').mkdir(parents=True)
+            lock = '''version = 4
+[[package]]
+name = "local-path"
+version = "0.1.0"
+[[package]]
+name = "target-transitive"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "expected"
+'''
+            (root / 'src-tauri/Cargo.lock').write_text(lock)
+            (root / 'crates/helper/Cargo.lock').write_text(lock)
+            packages, locks = age.packages(root)
+            self.assertEqual(len(locks), 2)
+            self.assertEqual(packages, [('target-transitive', '1.0.0', 'expected')])
+            (root / 'crates/helper/Cargo.lock').write_text(lock.replace(age.CRATES_IO, 'git+https://example.com/repository'))
+            with self.assertRaisesRegex(ValueError, 'Unsupported dependency source'):
+                age.packages(root)
+
+    def test_stale_metadata_is_refreshed_for_a_new_locked_version(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            metadata = age.Metadata(Path(directory))
+            responses = [b'{"vers":"1.0.0"}\n', b'{"vers":"1.0.0"}\n{"vers":"1.0.1"}\n']
+            with patch.object(metadata, 'get', side_effect=responses) as get:
+                self.assertIn('1.0.1', metadata.crate('example', ['1.0.1']))
+                self.assertEqual(get.call_args.kwargs, {'refresh': True})

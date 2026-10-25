@@ -30,10 +30,18 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - name: Enforce 48-hour dependency cooling before building
+        run: python3 scripts/check-dependency-age.py
       - name: Install pinned Rust toolchain
         run: rustup show
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -71,7 +79,7 @@ jobs:
               --binary crates/local-transcription/target/release/evaluate \
               --model "$RUNNER_TEMP/model.bin" --model-name '${{ matrix.model }}' \
               --output "$RUNNER_TEMP/model-evaluation/context" --require-network-denied
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: model-evaluation-${{ matrix.model }}
@@ -84,8 +92,16 @@ jobs:
     needs: evaluate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - name: Enforce 48-hour dependency cooling before building
+        run: python3 scripts/check-dependency-age.py
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: model-evaluation-*
           path: ${{ runner.temp }}/evaluation-reports
@@ -96,7 +112,7 @@ jobs:
           python3 scripts/summarize_evaluation.py "$RUNNER_TEMP/evaluation-reports" \
             "$RUNNER_TEMP/evaluation-summary" --models "$EVALUATION_MODELS" --require-network-denied
           cat "$RUNNER_TEMP/evaluation-summary/summary.md" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: model-evaluation-summary
           path: ${{ runner.temp }}/evaluation-summary/
@@ -117,13 +133,21 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - name: Enforce 48-hour dependency cooling before building
+        run: python3 scripts/check-dependency-age.py
       - name: Install pinned Rust toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang libclang-dev libseccomp2 time
           rustup show
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: correction-cache
         with:
           path: |
@@ -131,7 +155,7 @@ jobs:
             crates/local-correction/target
           key: linux-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: linux-${{ runner.arch }}-correction-runtime-v1-
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: model-evaluation-small
           path: ${{ runner.temp }}/small-asr
@@ -142,7 +166,7 @@ jobs:
           cargo test --manifest-path crates/local-correction/Cargo.toml --locked
           cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked
           python3 -m unittest discover -s scripts/tests -v
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.correction-cache.outputs.cache-hit != 'true'
         with:
           path: |
@@ -176,7 +200,7 @@ jobs:
               --require-network-denied --cpu-only "${baseline[@]}" \
               2>&1 | tee "$RUNNER_TEMP/correction-evaluation/run.log"
           cat "$RUNNER_TEMP/correction-evaluation/summary.md" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: correction-evaluation-${{ matrix.model }}
@@ -189,8 +213,16 @@ jobs:
     needs: correction
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - name: Enforce 48-hour dependency cooling before building
+        run: python3 scripts/check-dependency-age.py
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: correction-evaluation-*
           path: ${{ runner.temp }}/correction-reports
@@ -198,7 +230,7 @@ jobs:
         run: |
           python3 scripts/summarize_correction.py "$RUNNER_TEMP/correction-reports" "$RUNNER_TEMP/correction-summary"
           cat "$RUNNER_TEMP/correction-summary/summary.md" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: correction-quality-summary
           path: ${{ runner.temp }}/correction-summary/

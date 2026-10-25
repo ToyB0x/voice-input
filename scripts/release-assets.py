@@ -12,17 +12,15 @@ REPO = 'ToyB0x/voice-input'
 
 def version(tag):
     if not re.fullmatch(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', tag):
-        raise ValueError('Use a stable SemVer tag such as v0.1.1')
+        raise ValueError('Use a stable SemVer tag such as v0.0.1')
     return tag[1:]
 
 def set_version(root, tag):
     value = version(tag)
-    for name in ['package.json', 'package-lock.json', 'src-tauri/tauri.conf.json']:
+    for name in ['package.json', 'src-tauri/tauri.conf.json']:
         path = root / name
         data = json.loads(path.read_text())
         data['version'] = value
-        if name == 'package-lock.json':
-            data['packages']['']['version'] = value
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n')
     path = root / 'src-tauri/Cargo.toml'
     path.write_text(re.sub(r'(?m)^version = "[^"]+"', f'version = "{value}"', path.read_text(), count=1))

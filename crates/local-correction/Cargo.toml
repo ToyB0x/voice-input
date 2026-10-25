@@ -10,9 +10,9 @@ default-run = "local-correction"
 ci-diagnostics = []
 
 [dependencies]
-libc = "0.2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+libc = "0.2.191"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 llama-cpp-sys-2 = { version = "=0.1.160", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]

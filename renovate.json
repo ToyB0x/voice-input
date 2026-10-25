@@ -1,0 +1,11 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "minimumReleaseAge": "2 days",
+  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {"matchManagers": ["cargo"], "groupName": "Rust dependencies", "separateMajorMinor": false},
+    {"matchManagers": ["npm"], "groupName": "JavaScript dependencies", "separateMajorMinor": false}
+  ]
+}

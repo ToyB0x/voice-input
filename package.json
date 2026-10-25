@@ -4,23 +4,25 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=26 <27"
   },
   "scripts": {
     "dev": "vite",
     "check": "tsc --noEmit",
-    "build": "npm run check && vite build",
+    "build": "pnpm run check && vite build",
     "preview": "vite preview",
-    "tauri": "npm run prepare-native && tauri",
-    "prepare-native": "python3 scripts/prepare-native-runtime.py"
+    "tauri": "pnpm run prepare-native && tauri",
+    "prepare-native": "python3 scripts/prepare-native-runtime.py",
+    "check:dependencies": "python3 scripts/check-dependency-age.py"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.12.4",
-    "@types/node": "^24.0.0",
-    "typescript": "~6.0.3",
-    "vite": "^8.3.5"
+    "@tauri-apps/cli": "2.12.4",
+    "@types/node": "26.6.5",
+    "typescript": "7.0.2",
+    "vite": "8.3.5"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.4"
-  }
+    "@tauri-apps/api": "2.12.4"
+  },
+  "packageManager": "pnpm@12.15.0"
 }

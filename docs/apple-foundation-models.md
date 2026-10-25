@@ -42,8 +42,8 @@ Whisperによるローカル文字起こしの後に、Appleのオンデバイ�
 
 ```sh
 # Xcode 26以降を選択した状態で実行
-npm ci
-npm run tauri build -- --bundles app
+pnpm install --frozen-lockfile
+pnpm run tauri build --bundles app
 ```
 
 `prepare-native-runtime.py`は、従来のRust補正ランタイムとSwiftヘルパーをアプリへ同梱します。Swiftヘルパーの最低実行OSはmacOS 14で、FoundationModelsをweak linkします。古いOSでもアプリが起動でき、Apple補正を選ぶと`osTooOld`を返します。古いSDKでも非対応を返すヘルパーはビルドできますが、Appleモデルの生成コードを含みません。
