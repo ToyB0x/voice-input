@@ -95,6 +95,35 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
+    if args == ["--validate"] {
+        PHASE.store(6, Ordering::Relaxed);
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Validation {
+            transcript: String,
+            candidate: String,
+        }
+        let mut input = Vec::new();
+        std::io::stdin()
+            .take(MAX_INPUT as u64 + 1)
+            .read_to_end(&mut input)?;
+        if input.len() > MAX_INPUT {
+            return Err("correction input exceeds limit".into());
+        }
+        let request: Validation =
+            serde_json::from_slice(&input).map_err(|_| "invalid validation request")?;
+        Request {
+            transcript: request.transcript.clone(),
+            context: String::new(),
+        }
+        .validate()?;
+        let candidate = serde_json::to_vec(&local_correction::Answer {
+            text: request.candidate,
+        })?;
+        let text = parse_answer(&candidate, &request.transcript).map_err(Rejection)?;
+        serde_json::to_writer(std::io::stdout(), &serde_json::json!({"text": text}))?;
+        return Ok(());
+    }
     if args.len() != 2 || !["cpu", "metal"].contains(&args[1].as_str()) {
         return Err(
             "usage: local-correction /absolute/model.gguf cpu|metal (JSON on stdin)".into(),

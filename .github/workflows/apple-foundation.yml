@@ -1,0 +1,50 @@
+name: Apple Foundation Models runtime
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    name: Compile Apple model helper with macOS 26 SDK
+    runs-on: macos-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile production helper with weak linking for macOS 14
+        run: |
+          mkdir -p "$RUNNER_TEMP/foundation-runtime"
+          xcodebuild -version > "$RUNNER_TEMP/foundation-runtime/xcode.txt"
+          xcrun --sdk macosx --show-sdk-version > "$RUNNER_TEMP/foundation-runtime/sdk.txt"
+          python3 scripts/build-foundation-runtime.py --require-framework \
+            --output "$RUNNER_TEMP/foundation-runtime/apple-foundation-correction"
+      - name: Verify actual framework and bounded protocol offline
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/verify-foundation-runtime.py --require-framework \
+            --binary "$RUNNER_TEMP/foundation-runtime/apple-foundation-correction" \
+            --output "$RUNNER_TEMP/foundation-runtime/verification.json"
+      - name: Record artifact provenance
+        run: |
+          python3 - <<'PYCODE'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'foundation-runtime'
+          digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+          (root / 'provenance.json').write_text(json.dumps(dict(
+              source_revision=os.environ['GITHUB_SHA'],
+              source_sha256=digest(Path('scripts/apple-foundation-correction.swift')),
+              binary_sha256=digest(root / 'apple-foundation-correction')))+'\n')
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apple-foundation-runtime
+          path: ${{ runner.temp }}/foundation-runtime/
+          overwrite: true
+          retention-days: 14

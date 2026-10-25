@@ -96,6 +96,9 @@
       </section>
       <section aria-labelledby="correction-title">
         <h2 id="correction-title">ローカル最終補正（実験的プレビュー）</h2>
+        <label for="correction-engine">補正エンジン</label>
+        <select id="correction-engine" aria-label="Correction engine"><option value="qwen3">Qwen3（ローカルGGUF）</option><option value="apple-foundation">Apple Foundation Models（実験的）</option></select>
+        <p class="hint">AppleモデルはmacOS 26以降とApple Intelligence対応・有効化が必要です。GGUFの指定は不要です。選択後に「設定を保存」を押してください。利用不可でも他のエンジンへ自動で切り替えません。</p>
         <label for="correction-model-path">補正モデルの絶対パス（Qwen3 GGUF）</label>
         <input id="correction-model-path" aria-label="Correction model path" type="text" placeholder="/Users/you/Models/Qwen3-1.7B-Q8_0.gguf" spellcheck="false" autocomplete="off" />
         <label for="correction-backend">補正の実行方式</label>
@@ -104,6 +107,14 @@
         <button id="correct" aria-label="Preview local correction" disabled>最終補正をプレビュー</button>
         <p id="correction-status" role="status">補正は未実行です。</p>
         <textarea id="corrected" aria-label="Corrected text" rows="4" readonly placeholder="元の文字起こしは上の認識結果に保持します。"></textarea>
+        <details>
+          <summary>Appleモデルの診断</summary>
+          <button id="foundation-check" aria-label="Check Apple model availability">Appleモデルの利用可否を確認</button>
+          <p id="foundation-info" role="status">Appleモデルの利用可否は未確認です。</p>
+          <pre id="foundation-detail" aria-label="Apple model diagnostics"></pre>
+          <button id="foundation-copy" aria-label="Copy Apple model diagnostics">診断情報をコピー（本文なし）</button>
+          <p class="hint">確認操作は推論しません。診断には利用可否・OSバージョン・処理時間・固定の失敗理由を含み、音声・文字起こし・取得文脈・補正本文・モデルパスを含みません。</p>
+        </details>
         <button id="copy-correction" aria-label="Copy correction" disabled>補正結果をコピー</button>
         <p class="hint">補正結果は自動入力しません。意味・数値・否定・固有名詞が変わっていないか確認してからコピーしてください。再試行は取得テキストなしで行います。画像・取得テキスト・補正結果をファイルに保存・クラウド送信しません。</p>
       </section>

@@ -180,6 +180,7 @@ pub fn save_preferences(
     app.state::<crate::context::Reader>()
         .configure(preferences.context_config());
     if inner.preferences.correction_model_path != preferences.correction_model_path
+        || inner.preferences.correction_engine != preferences.correction_engine
         || inner.preferences.correction_backend != preferences.correction_backend
         || inner.preferences.context_config() != preferences.context_config()
     {

@@ -24,6 +24,29 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: apple-foundation-runtime
+          path: ${{ runner.temp }}/foundation-runtime
+      - name: Verify helper provenance and compatibility with macOS 14
+        run: |
+          echo "VOICE_INPUT_FOUNDATION_RUNTIME=$RUNNER_TEMP/foundation-runtime/apple-foundation-correction" >> "$GITHUB_ENV"
+          python3 - <<'PYCODE'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'foundation-runtime'
+          provenance = json.loads((root / 'provenance.json').read_text())
+          digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+          assert provenance['source_revision'] == os.environ['GITHUB_SHA']
+          assert provenance['source_sha256'] == digest(Path('scripts/apple-foundation-correction.swift'))
+          binary = root / 'apple-foundation-correction'
+          assert provenance['binary_sha256'] == digest(binary)
+          binary.chmod(0o755)
+          PYCODE
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/verify-foundation-runtime.py --require-framework \
+            --binary "$RUNNER_TEMP/foundation-runtime/apple-foundation-correction" \
+            --output "$RUNNER_TEMP/foundation-runtime/macos14-verification.json"
       - name: Record requested CI scope
         env:
           VOICE_INPUT_FULL_INTEGRATION: ${{ inputs.full_integration }}
@@ -35,6 +58,8 @@ jobs:
           mode = 'full-integration' if full else 'build-window-smoke'
           root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
           root.mkdir(parents=True, exist_ok=True)
+          import shutil
+          shutil.copyfile(Path(os.environ['RUNNER_TEMP']) / 'foundation-runtime/macos14-verification.json', root / 'foundation-runtime.json')
           (root / 'coverage.json').write_text(json.dumps(dict(requested_scope=mode, source_revision=os.environ['GITHUB_SHA']))+'\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write(f'CI scope: **{mode}**. Full permission/audio/OCR/insertion scenarios run on the weekly schedule or explicit full dispatch.\n')
@@ -99,6 +124,8 @@ jobs:
               --binary crates/local-correction/target/release/check-guards \
               --output "$RUNNER_TEMP/voice-input-smoke/guards" --require-network-denied
           cat "$RUNNER_TEMP/voice-input-smoke/guards/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            python3 scripts/verify-correction-validation.py --binary src-tauri/resources/local-correction
       - name: Inspect macOS permission automation support
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
@@ -207,13 +234,19 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
           cp scripts/macos-window-smoke.swift "$RUNNER_TEMP/main.swift"
-          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift scripts/macos-insertion-interaction.swift scripts/macos-context-interaction.swift scripts/macos-ocr-interaction.swift scripts/macos-model-interaction.swift \
+          xcrun swiftc "$RUNNER_TEMP/main.swift" scripts/macos-recording-interaction.swift scripts/macos-insertion-interaction.swift scripts/macos-context-interaction.swift scripts/macos-ocr-interaction.swift scripts/macos-model-interaction.swift scripts/macos-foundation-interaction.swift \
             -o "$RUNNER_TEMP/voice-input-smoke-runner" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/swift-build.log"
           "$RUNNER_TEMP/voice-input-smoke-runner" \
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/smoke.log"
+      - name: Verify Apple engine selection and body-free diagnostics in the actual app
+        timeout-minutes: 3
+        run: |
+          "$RUNNER_TEMP/voice-input-smoke-runner" \
+            "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-smoke/foundation" foundation
       - name: Verify explicit model preparation, cancellation and preset isolation
         if: inputs.full_integration
         timeout-minutes: 14

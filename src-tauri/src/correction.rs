@@ -19,6 +19,8 @@ pub struct Status {
     pub error: Option<String>,
     pub model: String,
     pub elapsed_ms: u64,
+    pub checking_foundation: bool,
+    pub foundation: Option<FoundationStatus>,
 }
 #[derive(Deserialize)]
 struct Report {
@@ -27,6 +29,20 @@ struct Report {
     elapsed_ms: u64,
     backend: String,
     offloaded_layers: u32,
+}
+#[derive(Clone, Deserialize, Serialize)]
+pub struct FoundationStatus {
+    protocol_version: u32,
+    framework_imported: bool,
+    os_supported: bool,
+    availability: String,
+    os_major: u32,
+    os_minor: u32,
+    os_patch: u32,
+}
+enum Outcome {
+    Correction(Report),
+    Foundation(FoundationStatus),
 }
 struct Inner {
     status: Status,
@@ -57,6 +73,7 @@ impl Corrector {
             let working = state.status.working;
             state.status = Status {
                 working,
+                foundation: state.status.foundation.clone(),
                 ..Status::default()
             };
         }
@@ -91,10 +108,11 @@ impl Corrector {
         hint: Option<crate::context::Hint>,
         generation: u64,
     ) -> Result<Status, String> {
-        if model.is_empty()
-            || model.len() > 4096
-            || !Path::new(&model).is_absolute()
-            || !Path::new(&model).is_file()
+        if backend != "foundation"
+            && (model.is_empty()
+                || model.len() > 4096
+                || !Path::new(&model).is_absolute()
+                || !Path::new(&model).is_file())
         {
             return Err("補正モデルの絶対パスを指定して設定を保存してください。元の認識結果は保持しています。".into());
         }
@@ -103,6 +121,26 @@ impl Corrector {
                 "補正ランタイムがありません。利用ガイドのビルド手順を確認してください。".into(),
             );
         }
+        self.start_job(generation, false, move |worker, epoch| {
+            let context = hint.and_then(|hint| hint.correction()).unwrap_or_default();
+            run(
+                &runtime,
+                &model,
+                &backend,
+                &raw,
+                &context,
+                &worker.epoch,
+                epoch,
+            )
+            .map(Outcome::Correction)
+        })
+    }
+    fn start_job(
+        &self,
+        generation: u64,
+        checking: bool,
+        task: impl FnOnce(&Self, u64) -> Result<Outcome, String> + Send + 'static,
+    ) -> Result<Status, String> {
         // Serialize publication of the worker with shutdown. The worker itself
         // never takes this lock, so joining cannot prevent its cancellation.
         let mut handle = self
@@ -125,10 +163,18 @@ impl Corrector {
                 .compare_exchange(generation, epoch, Ordering::AcqRel, Ordering::Acquire)
                 .map_err(|_| "録音または設定が変わったため補正を取り消しました。")?;
             state.epoch = epoch;
-            state.status = Status {
-                working: true,
-                ..Status::default()
+            let mut status = if checking {
+                state.status.clone()
+            } else {
+                Status {
+                    foundation: state.status.foundation.clone(),
+                    ..Status::default()
+                }
             };
+            status.working = true;
+            status.checking_foundation = checking;
+            status.error = None;
+            state.status = status;
             epoch
         };
         if let Some(previous) = handle.take() {
@@ -136,23 +182,16 @@ impl Corrector {
         }
         let worker = self.clone();
         *handle = Some(std::thread::spawn(move || {
-            let context = hint.and_then(|hint| hint.correction()).unwrap_or_default();
-            let result = run(
-                &runtime,
-                &model,
-                &backend,
-                &raw,
-                &context,
-                &worker.epoch,
-                epoch,
-            );
+            let result = task(&worker, epoch);
             if let Ok(mut state) = worker.state.lock()
                 && state.epoch == epoch
             {
                 state.status.working = false;
+                state.status.checking_foundation = false;
                 if worker.epoch.load(Ordering::Acquire) == epoch {
                     match result {
-                        Ok(report) => {
+                        Ok(Outcome::Foundation(status)) => state.status.foundation = Some(status),
+                        Ok(Outcome::Correction(report)) => {
                             state.status.text = Some(report.text);
                             state.status.model = report.model;
                             state.status.elapsed_ms = report.elapsed_ms;
@@ -185,9 +224,116 @@ fn run(
     if epoch.load(Ordering::Acquire) != current {
         return Err("補正を取り消しました。".into());
     }
-    let mut child = Command::new(runtime)
-        .arg(model)
-        .arg(backend)
+    let started = Instant::now();
+    let mut command = Command::new(if backend == "foundation" {
+        runtime.with_file_name("apple-foundation-correction")
+    } else {
+        runtime.to_path_buf()
+    });
+    if backend == "foundation" {
+        command.arg("--correct");
+    } else {
+        command.arg(model).arg(backend);
+    }
+    let result = child_output(
+        &mut command,
+        input,
+        epoch,
+        current,
+        Duration::from_secs(150),
+    )?;
+    let status = result.status;
+    let output = result.stdout;
+    if !status.success() {
+        use std::os::unix::process::ExitStatusExt;
+        if status.signal() == Some(9) {
+            return Err("ローカル補正に失敗しました（OSがプロセスを停止）。空きメモリ・モデルサイズ・実行方式を確認してください。元の認識結果は保持しています。".into());
+        }
+        let failure: serde_json::Value = serde_json::from_slice(&output).unwrap_or_default();
+        if matches!(
+            failure["reason"].as_str(),
+            Some("metal-device-unavailable" | "metal-simd-unavailable")
+        ) {
+            return Err("このMacのGPUは補正に必要な演算機能を利用できません。CPUを選んで設定を保存してください。元の認識結果は保持しています。".into());
+        }
+        if failure["error"] == "rejected" {
+            return Err("補正結果が原文保持のチェックを満たさず棄却されました。元の認識結果を確認してください。".into());
+        }
+        if backend == "foundation" {
+            return Err(foundation_failure(&failure));
+        }
+        let stage = match failure["stage"].as_str() {
+            Some("input") => "入力の確認",
+            Some("backend") => "実行方式の初期化",
+            Some("model") => "モデルの読み込み",
+            Some("prompt") => "補正入力の準備",
+            Some("prefill") => "補正入力の処理",
+            Some("generation") => "文章の生成",
+            _ => "実行結果の確認",
+        };
+        return Err(format!(
+            "ローカル補正に失敗しました（{stage}）。モデル・実行方式・入力上限を確認してください。元の認識結果は保持しています。"
+        ));
+    }
+    let report: Report = serde_json::from_slice(&output).map_err(|_| failed())?;
+    if report.text.len() > 8192
+        || report.text.contains('\0')
+        || report.backend != backend
+        || (backend == "metal" && report.offloaded_layers == 0)
+        || (["cpu", "foundation"].contains(&backend) && report.offloaded_layers != 0)
+    {
+        return Err(failed());
+    }
+    if backend == "foundation" {
+        let input =
+            serde_json::to_vec(&serde_json::json!({"transcript":raw,"candidate":report.text}))
+                .map_err(|_| failed())?;
+        let guard = child_output(
+            Command::new(runtime).arg("--validate"),
+            input,
+            epoch,
+            current,
+            Duration::from_secs(150).saturating_sub(started.elapsed()),
+        )?;
+        if !guard.status.success() {
+            let failure: serde_json::Value =
+                serde_json::from_slice(&guard.stdout).unwrap_or_default();
+            if failure["error"] == "rejected" {
+                return Err(format!(
+                    "補正結果が原文保持のチェックを満たさず棄却されました [{}]。元の認識結果は保持しています。",
+                    guard_code(failure["reason"].as_str())
+                ));
+            }
+            return Err("原文保持チェックを実行できません [guard-runtime-failed]。元の認識結果は保持しています。".into());
+        }
+        #[derive(Deserialize)]
+        struct Validated {
+            text: String,
+        }
+        let validated: Validated = serde_json::from_slice(&guard.stdout).map_err(|_| failed())?;
+        if validated.text != report.text {
+            return Err(failed());
+        }
+    }
+    if epoch.load(Ordering::Acquire) != current {
+        return Err("補正を取り消しました。".into());
+    }
+    Ok(report)
+}
+fn child_output(
+    command: &mut Command,
+    input: Vec<u8>,
+    epoch: &AtomicU64,
+    current: u64,
+    timeout: Duration,
+) -> Result<std::process::Output, String> {
+    let failed = || {
+        "補正ヘルパーを実行できません。診断とビルド手順を確認してください。元の認識結果は保持しています。".to_owned()
+    };
+    if epoch.load(Ordering::Acquire) != current {
+        return Err("補正を取り消しました。".into());
+    }
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -211,8 +357,7 @@ fn run(
     });
     let started = Instant::now();
     let status = loop {
-        if epoch.load(Ordering::Acquire) != current || started.elapsed() > Duration::from_secs(150)
-        {
+        if epoch.load(Ordering::Acquire) != current || started.elapsed() > timeout {
             let _ = child.kill();
             let _ = child.wait();
             let _ = writer.join();
@@ -236,43 +381,11 @@ fn run(
     if written.is_err() || output.len() > 24_576 {
         return Err(failed());
     }
-    if !status.success() {
-        use std::os::unix::process::ExitStatusExt;
-        if status.signal() == Some(9) {
-            return Err("ローカル補正に失敗しました（OSがプロセスを停止）。空きメモリ・モデルサイズ・実行方式を確認してください。元の認識結果は保持しています。".into());
-        }
-        let failure: serde_json::Value = serde_json::from_slice(&output).unwrap_or_default();
-        if matches!(
-            failure["reason"].as_str(),
-            Some("metal-device-unavailable" | "metal-simd-unavailable")
-        ) {
-            return Err("このMacのGPUは補正に必要な演算機能を利用できません。CPUを選んで設定を保存してください。元の認識結果は保持しています。".into());
-        }
-        if failure["error"] == "rejected" {
-            return Err("補正結果が原文保持のチェックを満たさず棄却されました。元の認識結果を確認してください。".into());
-        }
-        let stage = match failure["stage"].as_str() {
-            Some("input") => "入力の確認",
-            Some("backend") => "実行方式の初期化",
-            Some("model") => "モデルの読み込み",
-            Some("prompt") => "補正入力の準備",
-            Some("prefill") => "補正入力の処理",
-            Some("generation") => "文章の生成",
-            _ => "実行結果の確認",
-        };
-        return Err(format!(
-            "ローカル補正に失敗しました（{stage}）。モデル・実行方式・入力上限を確認してください。元の認識結果は保持しています。"
-        ));
-    }
-    let report: Report = serde_json::from_slice(&output).map_err(|_| failed())?;
-    if report.text.len() > 8192
-        || report.text.contains('\0')
-        || report.backend != backend
-        || (backend == "metal" && report.offloaded_layers == 0)
-    {
-        return Err(failed());
-    }
-    Ok(report)
+    Ok(std::process::Output {
+        status,
+        stdout: output,
+        stderr: Vec::new(),
+    })
 }
 #[tauri::command]
 pub fn correction_status(corrector: tauri::State<'_, Corrector>) -> Status {
@@ -289,8 +402,10 @@ pub fn correct_transcript(
     let generation = corrector.generation();
     let preferences = crate::desktop::preferences(&app)?;
     // Validate configuration before consuming the one-shot context lease.
-    if !Path::new(&preferences.correction_model_path).is_absolute()
-        || !Path::new(&preferences.correction_model_path).is_file()
+    let foundation = preferences.correction_engine == "apple-foundation";
+    if !foundation
+        && (!Path::new(&preferences.correction_model_path).is_absolute()
+            || !Path::new(&preferences.correction_model_path).is_file())
     {
         return Err("補正モデルの絶対パスを指定して設定を保存してください。".into());
     }
@@ -299,11 +414,25 @@ pub fn correct_transcript(
         .resource_dir()
         .map_err(|_| "補正ランタイムの場所を確認できません。")?
         .join("bin/local-correction");
+    if foundation
+        && !runtime
+            .with_file_name("apple-foundation-correction")
+            .is_file()
+    {
+        return Err(
+            "Appleモデルのヘルパーがありません [helper-missing]。ビルド手順を確認してください。"
+                .into(),
+        );
+    }
     let (raw, hint) = recorder.correction_input()?;
     corrector.start(
         runtime,
         preferences.correction_model_path,
-        preferences.correction_backend,
+        if foundation {
+            "foundation".into()
+        } else {
+            preferences.correction_backend
+        },
         raw,
         hint,
         generation,
@@ -327,6 +456,149 @@ pub fn copy_correction(corrector: tauri::State<'_, Corrector>) -> Result<(), Str
     arboard::Clipboard::new()
         .and_then(|mut clipboard| clipboard.set_text(text.clone()))
         .map_err(|_| "補正結果をコピーできません。".into())
+}
+
+fn foundation_failure(failure: &serde_json::Value) -> String {
+    let reason = failure["reason"].as_str().unwrap_or("");
+    let (code, guidance) = match reason {
+        "osTooOld" => ("osTooOld", "macOS 26以降が必要です。"),
+        "frameworkMissingFromSDK" => (
+            "frameworkMissingFromSDK",
+            "Xcode 26以降でヘルパーを再ビルドしてください。",
+        ),
+        "deviceNotEligible" => (
+            "deviceNotEligible",
+            "Apple Intelligenceに対応したMacが必要です。",
+        ),
+        "appleIntelligenceNotEnabled" => (
+            "appleIntelligenceNotEnabled",
+            "システム設定でApple Intelligenceを有効にしてください。",
+        ),
+        "modelNotReady" | "assets-unavailable" => (
+            "modelNotReady",
+            "OSのモデル準備完了を待って、利用可否を再確認してください。",
+        ),
+        "unsupportedLanguageOrLocale" | "unsupported-language-or-locale" => (
+            "unsupportedLanguageOrLocale",
+            "日本語を利用できるOS・モデルの設定を確認してください。",
+        ),
+        "context-window-exceeded" => (
+            "context-window-exceeded",
+            "発話を短くするか、補正への文脈利用を無効にして試してください。",
+        ),
+        "guardrail-violation" => (
+            "guardrail-violation",
+            "Appleモデルの安全制約により生成できませんでした。",
+        ),
+        "rate-limited" => ("rate-limited", "しばらく待ってから再試行してください。"),
+        "decoding-failure" => (
+            "decoding-failure",
+            "構造化した補正結果を生成できませんでした。",
+        ),
+        "unsupported-guide" => (
+            "unsupported-guide",
+            "このOSでは補正の出力形式を利用できません。",
+        ),
+        "concurrent-requests" => (
+            "concurrent-requests",
+            "他のモデル処理の完了を待ってください。",
+        ),
+        "invalid-input" | "input-limit" => ("input-limit", "補正入力の上限を確認してください。"),
+        "invalid-output" => ("invalid-output", "補正結果が空または上限を超えました。"),
+        _ => (
+            "generation-failed",
+            "利用可否を再確認し、診断情報を確認してください。",
+        ),
+    };
+    format!("Appleモデルの補正を完了できません [{code}]。{guidance} 元の認識結果は保持しています。")
+}
+fn guard_code(reason: Option<&str>) -> &'static str {
+    match reason {
+        Some("correction changed numeric facts") => "guard-numbers",
+        Some("correction removed a negation marker" | "correction changed a negation target") => {
+            "guard-negation"
+        }
+        Some("correction removed a contrast target") => "guard-contrast",
+        Some("correction removed a sentence connective") => "guard-connective",
+        Some(
+            "correction omitted the explicit final repair"
+            | "correction retained the discarded repair",
+        ) => "guard-self-repair",
+        Some("correction replaced or removed too much of the source") => "guard-content-loss",
+        Some("correction expanded the source excessively") => "guard-expansion",
+        _ => "guard-output",
+    }
+}
+fn probe_foundation(
+    helper: &Path,
+    epoch: &AtomicU64,
+    current: u64,
+) -> Result<FoundationStatus, String> {
+    let result = child_output(
+        Command::new(helper).arg("--status"),
+        Vec::new(),
+        epoch,
+        current,
+        Duration::from_secs(10),
+    )?;
+    let failed = || {
+        "Appleモデルの利用可否を確認できません [invalid-status]。ビルド手順とヘルパーの配置を確認してください。".to_owned()
+    };
+    if !result.status.success() {
+        return Err(failed());
+    }
+    let status: FoundationStatus = serde_json::from_slice(&result.stdout).map_err(|_| failed())?;
+    if status.protocol_version != 1
+        || ![
+            "available",
+            "osTooOld",
+            "frameworkMissingFromSDK",
+            "deviceNotEligible",
+            "appleIntelligenceNotEnabled",
+            "modelNotReady",
+            "unsupportedLanguageOrLocale",
+            "unknownUnavailableReason",
+            "unknownAvailability",
+        ]
+        .contains(&status.availability.as_str())
+    {
+        return Err(failed());
+    }
+    Ok(status)
+}
+#[tauri::command]
+pub fn check_foundation_model(
+    app: tauri::AppHandle,
+    corrector: tauri::State<'_, Corrector>,
+) -> Result<Status, String> {
+    let generation = corrector.generation();
+    let helper = app
+        .path()
+        .resource_dir()
+        .map_err(|_| "補正ヘルパーの配置を確認できません。")?
+        .join("bin/apple-foundation-correction");
+    // Uses the same tracked worker as correction: recording/cancel/exit kills and reaps the probe too.
+    corrector.start_job(generation, true, move |worker, epoch| {
+        probe_foundation(&helper, &worker.epoch, epoch).map(Outcome::Foundation)
+    })
+}
+#[tauri::command]
+pub fn copy_foundation_diagnostics(
+    app: tauri::AppHandle,
+    corrector: tauri::State<'_, Corrector>,
+) -> Result<(), String> {
+    let preferences = crate::desktop::preferences(&app)?;
+    let status = corrector.status();
+    // No paths, model metadata, audio, transcript, context, or generated body.
+    let diagnostic = serde_json::json!({
+        "app_version": env!("CARGO_PKG_VERSION"), "diagnostic_version": 1,
+        "selected_engine": preferences.correction_engine, "availability": status.foundation,
+        "working": status.working, "checking_availability": status.checking_foundation,
+        "last_elapsed_ms": status.elapsed_ms, "last_error": status.error,
+    });
+    arboard::Clipboard::new()
+        .and_then(|mut clipboard| clipboard.set_text(diagnostic.to_string()))
+        .map_err(|_| "診断情報をコピーできません。".into())
 }
 
 #[cfg(test)]
@@ -355,5 +627,113 @@ mod tests {
         assert!(!corrector.status().working);
         assert!(corrector.status().text.is_none());
         assert!(corrector.worker.lock().unwrap().is_none());
+    }
+    fn fixture_root(name: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("voice-afm-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+    fn executable(path: &Path, source: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::write(path, source).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    #[test]
+    fn foundation_candidates_use_the_bundled_rust_guard() {
+        let root = fixture_root("guard");
+        let runtime = root.join("local-correction");
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/local-correction"),
+            &runtime,
+        )
+        .unwrap();
+        let helper = root.join("apple-foundation-correction");
+        let epoch = AtomicU64::new(1);
+        for (candidate, accepted) in [("会議は10時です。", true), ("会議は20時です。", false)]
+        {
+            let report = serde_json::json!({"text":candidate,"model":"Apple Foundation Models","backend":"foundation","offloaded_layers":0,"elapsed_ms":5});
+            executable(
+                &helper,
+                &format!("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{}'\n", report),
+            );
+            let result = run(&runtime, "", "foundation", "会議は10時です", "", &epoch, 1);
+            if accepted {
+                assert_eq!(result.ok().unwrap().text, candidate);
+            } else {
+                assert!(result.err().unwrap().contains("guard-numbers"));
+            }
+        }
+        // Native stderr and unknown error content must never enter UI/diagnostics.
+        executable(
+            &helper,
+            "#!/bin/sh\ncat >/dev/null\necho PRIVATE-CANARY >&2\nprintf '%s' '{\"error\":\"runtime\",\"reason\":\"PRIVATE-CANARY\"}'\nexit 1\n",
+        );
+        let error = run(&runtime, "", "foundation", "会議は10時です", "", &epoch, 1)
+            .err()
+            .unwrap();
+        assert!(error.contains("generation-failed") && !error.contains("PRIVATE-CANARY"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn shutdown_cancels_and_reaps_an_availability_probe() {
+        let root = fixture_root("probe-cancel");
+        let helper = root.join("probe");
+        let pid_file = root.join("child.pid");
+        executable(
+            &helper,
+            &format!(
+                "#!/bin/sh\necho $$ > '{}'\nexec /bin/sleep 30\n",
+                pid_file.display()
+            ),
+        );
+        let corrector = Corrector::new();
+        corrector
+            .start_job(corrector.generation(), true, move |worker, epoch| {
+                probe_foundation(&helper, &worker.epoch, epoch).map(Outcome::Foundation)
+            })
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !pid_file.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let pid = std::fs::read_to_string(&pid_file).unwrap();
+        let started = Instant::now();
+        corrector.shutdown();
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", pid.trim()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(!corrector.status().working);
+        assert!(
+            corrector
+                .start_job(corrector.generation(), true, |_, _| unreachable!())
+                .is_err()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn foundation_failures_use_fixed_diagnostic_codes() {
+        for code in [
+            "osTooOld",
+            "frameworkMissingFromSDK",
+            "deviceNotEligible",
+            "appleIntelligenceNotEnabled",
+            "modelNotReady",
+            "context-window-exceeded",
+            "guardrail-violation",
+        ] {
+            assert!(foundation_failure(&serde_json::json!({"reason":code})).contains(code));
+        }
+        assert!(
+            !foundation_failure(&serde_json::json!({"reason":"PRIVATE-CANARY"}))
+                .contains("PRIVATE")
+        );
     }
 }

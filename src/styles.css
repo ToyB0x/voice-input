@@ -56,3 +56,6 @@ section p { margin-top: 0.5rem; }
 
 #managed-info { white-space: pre-line; }
 #model-progress { width: 100%; margin-top: 0.75rem; }
+
+#foundation-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8rem; }
+details { margin: 0.75rem 0; }
