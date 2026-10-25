@@ -470,30 +470,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
         return text.contains("いずれかを含めて") && text.contains("Command+Shift+Space（登録済み）")
     }
     try typeField(root, label: "Recording shortcut", value: "Control+Alt+KeyV")
-    // Wait for the native popup to exist, then select its actual CPU menu item.
-    guard let backend = axElements(root).first(where: {
-        axValue($0, kAXRoleAttribute) as? String == "AXPopUpButton" && axText($0).contains("Inference backend")
-    }) else { throw SmokeFailure(description: "Inference backend popup missing") }
-    AXUIElementSetAttributeValue(backend, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-    try press(backend)
-    var cpuOption: AXUIElement?
-    try waitForUI("native CPU menu option") {
-        cpuOption = (axElements(root) + axElements(backend)).first { element in
-            axValue(element, kAXRoleAttribute) as? String == "AXMenuItem" &&
-            [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute].contains {
-                axValue(element, $0) as? String == "CPU"
-            }
-        }
-        return cpuOption != nil
-    }
-    try press(cpuOption!)
-    try waitForUI("CPU selected") {
-        axElements(root).contains { element in
-            axValue(element, kAXRoleAttribute) as? String == "AXPopUpButton" &&
-            axText(element).contains("Inference backend") &&
-            (axValue(element, kAXValueAttribute) as? String ?? "").contains("CPU")
-        }
-    }
+    try chooseModelOption(root, label: "Inference backend", title: "CPU")
     try press(uiButton(root, ["Save preferences"])!)
     try waitForUI("custom shortcut saved and registered") {
         let text = uiText(root)

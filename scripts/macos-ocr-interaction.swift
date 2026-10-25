@@ -159,19 +159,7 @@ func ocrInteraction(pid:pid_t,scenario:String,output:URL) throws {
     let raw=resultText(voice)
     guard let model=ProcessInfo.processInfo.environment["VOICE_INPUT_CORRECTION_MODEL"] else {throw SmokeFailure(description:"Missing correction model")}
     try typeField(voice,label:"Correction model path",value:model)
-    guard let backend=axElements(voice).first(where:{axValue($0,kAXRoleAttribute) as? String=="AXPopUpButton" && axText($0).contains("Correction backend")}) else {throw SmokeFailure(description:"Correction backend control missing")}
-    AXUIElementSetAttributeValue(backend,kAXFocusedAttribute as CFString,kCFBooleanTrue)
-    try press(backend)
-    var cpu:AXUIElement?
-    try waitForUI("correction CPU menu") {
-        cpu=(axElements(voice)+axElements(backend)).first {element in
-            axValue(element,kAXRoleAttribute) as? String=="AXMenuItem" && [kAXTitleAttribute,kAXDescriptionAttribute,kAXValueAttribute].contains {axValue(element,$0) as? String=="CPU"}
-        }
-        return cpu != nil
-    }
-    guard let cpu else {throw SmokeFailure(description:"Correction CPU option missing")}
-    try press(cpu)
-    try waitForUI("correction CPU selected") {axText(backend).contains("CPU")}
+    try chooseModelOption(voice, label: "Correction backend", title: "CPU")
     try pressContextButton(voice,"Save preferences")
     try pressContextButton(voice,"Preview local correction")
     func waitForCorrectionCandidate() throws -> Bool {
