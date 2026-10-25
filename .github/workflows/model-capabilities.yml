@@ -12,6 +12,9 @@ on:
       - .github/workflows/model-capabilities.yml
       - scripts/macos-foundation-model-probe.swift
       - scripts/probe-correction-model.py
+      - crates/local-correction/src/**
+      - evaluation/correction-cases.json
+      - evaluation/correction-guard-cases.json
       - scripts/run-offline-linux.py
       - crates/local-models/catalog.json
       - scripts/transcription_models.py

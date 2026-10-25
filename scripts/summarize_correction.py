@@ -10,6 +10,8 @@ from evaluate_correction import MODES, route_summary
 from evaluate_models import ROOT, normalize, score
 from transcription_models import checksum, MODELS as ASR_MODELS
 
+from correction_baselines import validate_frozen,render_baseline
+
 EXPECTED = ['qwen3-1.7b', 'qwen3-4b', 'qwen3-8b']
 
 
@@ -115,6 +117,7 @@ def render(indexed):
             q = baseline[version]
             lines.append(f"| {version} | {q['generated']} | {q['facts_passed']} | {q['format_passed']} | {q['both_passed']} | {q['rejected']} |")
         lines += ['', baseline['limitation']]
+    lines += ['', '4B preservation comparison:', '', render_baseline(indexed['qwen3-4b'])]
     lines += ['', 'CER uses public read speech with fixed reference-vocabulary contexts. Fact/format checks apply only '
               'to declared synthetic cases and do not establish general semantic equivalence. Rejection retains raw text '
               'and is not a generated success. No GPU inference was tested. Timings include model loading on separate '
@@ -134,6 +137,7 @@ def main():
     indexed = validate_reports(reports, corpus, cases, revision)
     for report in indexed.values():
         validate_sources(report)
+        validate_frozen(report,corpus,cases,MODES)
     baseline_path = ROOT/'evaluation/correction-baseline/qwen3-8b.json'
     baseline = load_baseline(baseline_path, 'qwen3-8b', MODELS['qwen3-8b'], cases)
     if (indexed['qwen3-8b']['baseline_sha256'] != checksum(baseline_path)

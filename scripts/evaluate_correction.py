@@ -8,6 +8,8 @@ from evaluate_models import ROOT,normalize,score
 from transcription_models import MODELS as ASR_MODELS
 from correction_quality import constraints,load_cases,quality_summary,load_baseline,compare_baseline,diff_text
 
+from correction_baselines import load_routes,compare_routes,render_baseline
+
 MODES={'none':(False,False),'asr_only':(True,False),'correction_only':(False,True),'both':(True,True)}
 
 def metal_unavailable(failure):
@@ -124,9 +126,7 @@ def render_summary(report):
         formatting=str(item['constraints']['format_ok']) if not item['failed'] else 'fallback'
         lines.append(f"| {item['case']['id']} | {item['rejected']} | {item['failed'] and not item['rejected']} | {facts} | {formatting} |")
     if report.get('baseline'):
-        lines+=['','Frozen baseline: same original cases, re-scored with current checks.',
-                'Before: '+json.dumps(report['baseline']['before']),
-                'After: '+json.dumps(report['baseline']['after']),report['baseline']['limitation']]
+        lines+=['',render_baseline(report)]
     return '\n'.join(lines)+'\n'
 
 
@@ -145,6 +145,8 @@ def persist_report(output, report):
     files['cases.diff']='\n'.join(diffs)
     if report.get('baseline'):
         files['baseline.diff']='\n'.join(pair['diff'] for pair in report['baseline']['pairs'])
+    if report.get('route_baseline'):
+        files['route-baseline.diff']='\n'.join(pair['diff'] for pair in report['route_baseline']['pairs'])
     for name,data in files.items():
         temporary=output/(name+'.tmp')
         temporary.write_text(data)
@@ -196,6 +198,7 @@ def main():
     revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     asr,asr_metadata=load_asr(args.asr,corpus,revision,args.require_network_denied,args.asr_model)
     baseline=load_baseline(args.baseline,args.model_name,MODELS[args.model_name],supplemental_cases) if args.baseline else None
+    frozen_routes=load_routes(baseline,args.asr_model,corpus,MODES) if baseline else None
     args.output.mkdir(parents=True,exist_ok=True)
     report=dict(protocol_version='correction-quality-v2',complete=False,model=args.model_name,
         model_identity=MODELS[args.model_name],source_revision=revision,
@@ -210,7 +213,7 @@ def main():
         corpus_sha256=checksum(ROOT/'evaluation/corpus.json'),supplemental_sha256=checksum(ROOT/'evaluation/correction-cases.json'),
         expected_records=len(corpus['cases'])*len(MODES),expected_supplemental=len(supplemental_cases),
         records=[],supplemental=[],metal_smoke=None,metal_skipped=args.cpu_only,metal_unavailable=False,
-        baseline=None,baseline_sha256=checksum(args.baseline) if args.baseline else None,
+        baseline=None,route_baseline=None,baseline_sha256=checksum(args.baseline) if args.baseline else None,
         limitation='Public read speech and fixed reference-vocabulary contexts, not live OCR or natural dictation accuracy. '
                    'Fixed-case fact/format checks do not establish general semantic equivalence. '
                    'Rejected previews retain raw ASR and are not generated successes. Timings include model loading; VM timings do not predict physical Mac performance.')
@@ -236,6 +239,7 @@ def main():
         persist_report(args.output,report)
         print(case['id'],'rejected' if item['rejected'] else ('runtime-failed' if item['failed'] else 'generated'),flush=True)
     if baseline:report['baseline']=compare_baseline(baseline,report['supplemental'])
+    if frozen_routes:report['route_baseline']=compare_routes(frozen_routes,report['records'])
     report['complete']=True
     persist_report(args.output,report)
     print(render_summary(report))

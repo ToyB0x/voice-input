@@ -3,6 +3,7 @@ name = "local-correction"
 version = "0.1.0"
 edition = "2024"
 publish = false
+default-run = "local-correction"
 
 [features]
 # Synthetic/public CI fixtures only. Never enabled by prepare-native-runtime.py.

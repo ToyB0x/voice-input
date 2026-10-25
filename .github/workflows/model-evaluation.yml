@@ -154,12 +154,21 @@ jobs:
           key: ${{ steps.correction-cache.outputs.cache-primary-key }}
       - name: Prepare checksum-verified official model (setup only)
         run: python3 scripts/prepare-correction-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/correction-model.gguf"
+      - name: Compare fixed harmful accepts and valid format rejections
+        if: matrix.model == 'qwen3-4b'
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/evaluate_guard_regression.py \
+            --binary crates/local-correction/target/release/check-guards \
+            --output "$RUNNER_TEMP/correction-evaluation/guards" --require-network-denied
+          cat "$RUNNER_TEMP/correction-evaluation/guards/summary.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Compare all four context routes with networking denied
         run: |
           mkdir -p "$RUNNER_TEMP/correction-evaluation"
           baseline=()
           if [[ '${{ matrix.model }}' == qwen3-8b ]]; then
             baseline=(--baseline evaluation/correction-baseline/qwen3-8b.json)
+          elif [[ '${{ matrix.model }}' == qwen3-4b ]]; then
+            baseline=(--baseline evaluation/correction-baseline/qwen3-4b-preservation.json)
           fi
           free -b > "$RUNNER_TEMP/correction-evaluation/hardware.txt"
           lscpu >> "$RUNNER_TEMP/correction-evaluation/hardware.txt"

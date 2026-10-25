@@ -1,0 +1,228 @@
+{
+  "cases": [
+    {
+      "id": "drop-mata",
+      "original": "またNHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました",
+      "candidate": "NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+      "should_accept": false,
+      "category": "connective"
+    },
+    {
+      "id": "drop-shikashi",
+      "original": "しかし変更願いや要望はホテルに直接ではなく旅行代理店に連絡してください",
+      "candidate": "変更願いや要望はホテルに直接ではなく旅行代理店に連絡してください。",
+      "should_accept": false,
+      "category": "connective"
+    },
+    {
+      "id": "drop-later-connective",
+      "original": "資料を確認します。また日程も共有します",
+      "candidate": "資料を確認します。日程も共有します。",
+      "should_accept": false,
+      "category": "connective"
+    },
+    {
+      "id": "flatten-contrast",
+      "original": "会議は水曜日ではなく木曜日です",
+      "candidate": "会議は木曜日です。",
+      "should_accept": false,
+      "category": "contrast"
+    },
+    {
+      "id": "swap-contrast-target",
+      "original": "東京ではなく大阪です",
+      "candidate": "大阪ではなく東京です。",
+      "should_accept": false,
+      "category": "contrast"
+    },
+    {
+      "id": "move-negation",
+      "original": "明日は休みません会議には参加します",
+      "candidate": "明日は休みます。会議には参加しません。",
+      "should_accept": false,
+      "category": "negation-target"
+    },
+    {
+      "id": "retain-old-name",
+      "original": "宛先は山田さんいや鈴木さんです",
+      "candidate": "宛先は山田さんや鈴木さんです。",
+      "should_accept": false,
+      "category": "repair"
+    },
+    {
+      "id": "retain-old-place",
+      "original": "集合場所は東口、いや西口です",
+      "candidate": "集合場所は東口または西口です。",
+      "should_accept": false,
+      "category": "repair"
+    },
+    {
+      "id": "revert-repair",
+      "original": "会議は水曜日いや木曜日です",
+      "candidate": "会議は水曜日です。",
+      "should_accept": false,
+      "category": "repair"
+    },
+    {
+      "id": "drop-repeated-negation",
+      "original": "予約しません。変更もしません",
+      "candidate": "予約します。変更もしません。",
+      "should_accept": false,
+      "category": "negation-target"
+    },
+    {
+      "id": "change-number",
+      "original": "予算は120万円です",
+      "candidate": "予算は150万円です。",
+      "should_accept": false,
+      "category": "numeric"
+    },
+    {
+      "id": "negative-repair-conservative",
+      "original": "予約しません、いや予約します",
+      "candidate": "予約します。",
+      "should_accept": false,
+      "category": "conservative-repair"
+    },
+    {
+      "id": "punctuate-mata",
+      "original": "また資料を確認します",
+      "candidate": "また、資料を確認します。",
+      "should_accept": true,
+      "category": "connective"
+    },
+    {
+      "id": "punctuate-shikashi",
+      "original": "しかし予定は変更しません",
+      "candidate": "しかし、予定は変更しません。",
+      "should_accept": true,
+      "category": "connective"
+    },
+    {
+      "id": "bullet-connective",
+      "original": "また資料を確認します",
+      "candidate": "- また資料を確認します",
+      "should_accept": true,
+      "category": "format"
+    },
+    {
+      "id": "reflow-connectives",
+      "original": "資料を確認します。また日程も共有します",
+      "candidate": "資料を確認します。\n\nまた、日程も共有します。",
+      "should_accept": true,
+      "category": "format"
+    },
+    {
+      "id": "alternative-not-mata",
+      "original": "または別館を使います",
+      "candidate": "又は別館を使います。",
+      "should_accept": true,
+      "category": "lexical"
+    },
+    {
+      "id": "matagu-not-mata",
+      "original": "またぐ動作を確認します",
+      "candidate": "またぐ動作を確認します。",
+      "should_accept": true,
+      "category": "lexical"
+    },
+    {
+      "id": "tamatama-not-mata",
+      "original": "たまたま見つけました",
+      "candidate": "偶然見つけました。",
+      "should_accept": true,
+      "category": "lexical"
+    },
+    {
+      "id": "literal-iya",
+      "original": "今日はいやな天気です",
+      "candidate": "今日は嫌な天気です。",
+      "should_accept": true,
+      "category": "lexical"
+    },
+    {
+      "id": "literal-iyashi",
+      "original": "このいやしの音楽が好きです",
+      "candidate": "この癒しの音楽が好きです。",
+      "should_accept": true,
+      "category": "lexical"
+    },
+    {
+      "id": "repair-correct-day",
+      "original": "会議は水曜日いや木曜日です",
+      "candidate": "会議は木曜日です。",
+      "should_accept": true,
+      "category": "repair"
+    },
+    {
+      "id": "repair-shared-prefix",
+      "original": "宛先は山田、いや山田太郎です",
+      "candidate": "宛先は山田太郎です。",
+      "should_accept": true,
+      "category": "repair"
+    },
+    {
+      "id": "repair-other-mention",
+      "original": "山田さんに連絡しました。宛先は山田さん、いや鈴木さんです",
+      "candidate": "山田さんに連絡しました。宛先は鈴木さんです。",
+      "should_accept": true,
+      "category": "repair"
+    },
+    {
+      "id": "repair-later-mention",
+      "original": "宛先は山田さん、いや鈴木さんです。山田さんには報告します",
+      "candidate": "宛先は鈴木さんです。山田さんには報告します。",
+      "should_accept": true,
+      "category": "repair"
+    },
+    {
+      "id": "negative-list",
+      "original": "箇条書きで一つ目は資料を削除しない二つ目は会場を予約しません",
+      "candidate": "- 資料を削除しない\n- 会場を予約しません",
+      "should_accept": true,
+      "category": "format"
+    },
+    {
+      "id": "contrast-variant",
+      "original": "会議は水曜日じゃなく木曜日です",
+      "candidate": "会議は水曜日ではなく木曜日です。",
+      "should_accept": true,
+      "category": "contrast"
+    },
+    {
+      "id": "two-contrasts",
+      "original": "場所は東京ではなく大阪です。日程は火曜ではなく水曜です",
+      "candidate": "場所は東京ではなく大阪です。\n日程は火曜ではなく水曜です。",
+      "should_accept": true,
+      "category": "contrast"
+    },
+    {
+      "id": "remove-filler-negative",
+      "original": "えー、資料は削除しないでください",
+      "candidate": "資料は削除しないでください。",
+      "should_accept": true,
+      "category": "format"
+    },
+    {
+      "id": "fullwidth-number",
+      "original": "予算は１２００円です",
+      "candidate": "予算は1200円です。",
+      "should_accept": true,
+      "category": "numeric"
+    },
+    {
+      "id": "preserve-repeated-negation",
+      "original": "予約しません変更もしません",
+      "candidate": "予約しません。変更もしません。",
+      "should_accept": true,
+      "category": "negation-target"
+    },
+    {
+      "id": "preserve-alternative",
+      "original": "本館または別館を使います",
+      "candidate": "本館、または別館を使います。",
+      "should_accept": true,
+      "category": "lexical"
+    }
+  ]
+}

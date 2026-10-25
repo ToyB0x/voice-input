@@ -194,11 +194,17 @@
       "context": "古い予定：水曜日。",
       "reference": "会議は水曜日ではなく木曜日です。",
       "required": [
-        "水曜日ではなく",
         "木曜日"
       ],
       "forbidden": [],
-      "punctuation": true
+      "punctuation": true,
+      "required_any": [
+        [
+          "水曜日ではなく",
+          "水曜日じゃなく",
+          "水曜日でなく"
+        ]
+      ]
     },
     {
       "id": "signed-facts",
@@ -291,6 +297,136 @@
       ],
       "punctuation": true,
       "source": "ASR of public-domain Oku no Hosomichi app fixture; CI run 40100448970"
+    },
+    {
+      "id": "connective-mata",
+      "transcript": "またNHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました",
+      "context": "報道：NHK、新潟県、柏崎刈羽原発。",
+      "reference": "また、NHKは新潟県の柏崎刈羽原発が正常に稼働していると報道していました。",
+      "required": [
+        "また",
+        "NHK",
+        "柏崎刈羽原発"
+      ],
+      "forbidden": [],
+      "punctuation": true,
+      "source": "Public FLEURS ja-027 turbo ASR; PR14 preset CI 40123819093"
+    },
+    {
+      "id": "connective-shikashi",
+      "transcript": "しかし変更ネガや要望はホテルに直接ではなくまず旅行代理店に連絡してください",
+      "context": "連絡：旅行代理店。",
+      "reference": "しかし、変更願いや要望はホテルに直接ではなく、まず旅行代理店に連絡してください。",
+      "required": [
+        "しかし",
+        "直接ではなく",
+        "旅行代理店"
+      ],
+      "forbidden": [],
+      "punctuation": true,
+      "source": "Public FLEURS ja-104 small ASR; prior CI 40103861296"
+    },
+    {
+      "id": "repair-shared-prefix",
+      "transcript": "宛先は山田、いや山田太郎です",
+      "context": "宛先：山田。",
+      "reference": "宛先は山田太郎です。",
+      "required": [
+        "山田太郎"
+      ],
+      "forbidden": [],
+      "punctuation": true,
+      "forbidden_format": [
+        "いや"
+      ]
+    },
+    {
+      "id": "repair-other-mention",
+      "transcript": "山田さんに連絡しました。宛先は山田さん、いや鈴木さんです",
+      "context": "古い宛先：山田さん。",
+      "reference": "山田さんに連絡しました。宛先は鈴木さんです。",
+      "required": [
+        "山田さんに連絡",
+        "宛先は鈴木さん"
+      ],
+      "forbidden": [],
+      "punctuation": true,
+      "forbidden_format": [
+        "いや"
+      ]
+    },
+    {
+      "id": "literal-iya",
+      "transcript": "今日はいやな天気です",
+      "context": "",
+      "reference": "今日はいやな天気です。",
+      "required": [
+        "天気"
+      ],
+      "forbidden": [],
+      "punctuation": true,
+      "required_any": [
+        [
+          "いやな",
+          "嫌な"
+        ]
+      ]
+    },
+    {
+      "id": "alternative-matawa",
+      "transcript": "本館を使います。または別館を使います",
+      "context": "",
+      "reference": "本館を使います。または別館を使います。",
+      "required": [
+        "本館",
+        "別館"
+      ],
+      "forbidden": [],
+      "punctuation": true,
+      "required_any": [
+        [
+          "または",
+          "又は",
+          "もしくは"
+        ]
+      ]
+    },
+    {
+      "id": "negative-format-list",
+      "transcript": "箇条書きで一つ目は資料を削除しない二つ目は会場を予約しません",
+      "context": "",
+      "reference": "- 資料を削除しない\n- 会場を予約しません",
+      "required": [
+        "削除しない",
+        "予約しません"
+      ],
+      "forbidden": [],
+      "punctuation": false,
+      "bullets": 2,
+      "forbidden_format": [
+        "箇条書きで",
+        "一つ目は",
+        "二つ目は"
+      ]
+    },
+    {
+      "id": "contrast-variant",
+      "transcript": "集合場所は東口じゃなく西口です",
+      "context": "集合：西口。",
+      "reference": "集合場所は東口ではなく西口です。",
+      "required": [
+        "東口",
+        "西口"
+      ],
+      "forbidden": [],
+      "punctuation": true,
+      "required_any": [
+        [
+          "東口ではなく",
+          "東口じゃなく",
+          "東口でなく"
+        ]
+      ]
     }
   ]
 }

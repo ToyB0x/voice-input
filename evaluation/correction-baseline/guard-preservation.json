@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "source_revision": "aec0b58a2a5f3625d36c680470ab83b9d8a4b59f",
+  "runtime_source_sha256": "a7e1ce15c9e441370638cb7127b69c6d038547b361c41953ebe1515779a41050",
+  "cases_sha256": "6c25b5f735ec4569e94f489b72d2c59b6a18c2b0af8c00c74eba4c53fe652e15",
+  "results": [
+    {
+      "accepted": true,
+      "id": "drop-mata"
+    },
+    {
+      "accepted": true,
+      "id": "drop-shikashi"
+    },
+    {
+      "accepted": true,
+      "id": "drop-later-connective"
+    },
+    {
+      "accepted": true,
+      "id": "flatten-contrast"
+    },
+    {
+      "accepted": true,
+      "id": "swap-contrast-target"
+    },
+    {
+      "accepted": true,
+      "id": "move-negation"
+    },
+    {
+      "accepted": true,
+      "id": "retain-old-name"
+    },
+    {
+      "accepted": true,
+      "id": "retain-old-place"
+    },
+    {
+      "accepted": false,
+      "id": "revert-repair"
+    },
+    {
+      "accepted": true,
+      "id": "drop-repeated-negation"
+    },
+    {
+      "accepted": false,
+      "id": "change-number"
+    },
+    {
+      "accepted": false,
+      "id": "negative-repair-conservative"
+    },
+    {
+      "accepted": true,
+      "id": "punctuate-mata"
+    },
+    {
+      "accepted": true,
+      "id": "punctuate-shikashi"
+    },
+    {
+      "accepted": true,
+      "id": "bullet-connective"
+    },
+    {
+      "accepted": true,
+      "id": "reflow-connectives"
+    },
+    {
+      "accepted": true,
+      "id": "alternative-not-mata"
+    },
+    {
+      "accepted": true,
+      "id": "matagu-not-mata"
+    },
+    {
+      "accepted": true,
+      "id": "tamatama-not-mata"
+    },
+    {
+      "accepted": true,
+      "id": "literal-iya"
+    },
+    {
+      "accepted": true,
+      "id": "literal-iyashi"
+    },
+    {
+      "accepted": true,
+      "id": "repair-correct-day"
+    },
+    {
+      "accepted": true,
+      "id": "repair-shared-prefix"
+    },
+    {
+      "accepted": true,
+      "id": "repair-other-mention"
+    },
+    {
+      "accepted": true,
+      "id": "repair-later-mention"
+    },
+    {
+      "accepted": true,
+      "id": "negative-list"
+    },
+    {
+      "accepted": true,
+      "id": "contrast-variant"
+    },
+    {
+      "accepted": true,
+      "id": "two-contrasts"
+    },
+    {
+      "accepted": true,
+      "id": "remove-filler-negative"
+    },
+    {
+      "accepted": true,
+      "id": "fullwidth-number"
+    },
+    {
+      "accepted": true,
+      "id": "preserve-repeated-negation"
+    },
+    {
+      "accepted": true,
+      "id": "preserve-alternative"
+    }
+  ]
+}
