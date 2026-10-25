@@ -1,10 +1,7 @@
 name: Model preset evaluation
 on:
-  pull_request:
-    paths-ignore: ["docs/**", "README.md", "evaluation/baseline/**"]
-  push:
-    branches: [main]
-    paths-ignore: ["docs/**", "README.md", "evaluation/baseline/**"]
+  schedule:
+    - cron: '27 18 * * 4'
   workflow_dispatch:
 permissions:
   contents: read

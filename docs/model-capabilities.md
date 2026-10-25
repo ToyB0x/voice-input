@@ -12,7 +12,7 @@
 
 重みの容量と実行時メモリは異なります。標準Macランナーの7 GiB環境では8Bが約84〜113秒かかり、言い直しの1ケースが製品の時間上限に達しました。標準の`ubuntu-24.04`（公開リポジトリでは16 GBメモリ）へモデルのCPU検証を移し、製品と同じ時間上限で評価します。Mac上のアプリ結合テストは従来のMac CIが担当します。異なるランナーの時間・メモリを直接の性能比較には使いません。
 
-Macの仮想GPUではmedium / large-v3-turbo / large-v3がMetal初期化後の最初の音声で不正UTF-8を返しました。[初回検証のArtifact](https://github.com/ToyB0x/voice-input/actions/runs/40084677593)に失敗ログとCPU結果を保存しています。標準PRではCPUを必須評価にし、Metalは`NOT TESTED`と記録します。再検証する場合は手動実行の`include_experimental_metal`を有効にします。その場合もMetalが失敗すればジョブを失敗にし、エラーの置換や成功扱いは行いません。CPU推論成功とGPU推論成功は区別します。
+Macの仮想GPUではmedium / large-v3-turbo / large-v3がMetal初期化後の最初の音声で不正UTF-8を返しました。[初回検証のArtifact](https://github.com/ToyB0x/voice-input/actions/runs/40084677593)に失敗ログとCPU結果を保存しています。手動診断の標準実行ではCPUを必須評価にし、Metalは`NOT TESTED`と記録します。PRでは対象workflow・Swift変更時のAFM利用可否検査のみを実行し、大モデルの診断は起動しません。[CIの実行範囲](ci.md)を参照してください。再検証する場合は手動実行の`include_experimental_metal`を有効にします。その場合もMetalが失敗すればジョブを失敗にし、エラーの置換や成功扱いは行いません。CPU推論成功とGPU推論成功は区別します。
 
 Linuxでは`run-offline-linux.py`のseccompルールがexec・子プロセスにも継承され、socket・接続・送受信・io_uringのシステムコールを`EPERM`で拒否します。ルールを読み込めない場合は起動を中止します。ネットワーク拒否と実行時間切れ時の子プロセス停止をテストしています。8Bは`--cpu-only`を明示し、Metalを未検証と記録します。
 

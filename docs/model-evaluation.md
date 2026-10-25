@@ -65,7 +65,7 @@ base/smallに加えmediumを測る場合は `--model medium` で準備する。
 
 ## CIと比較結果
 
-`Model evaluation` は PR / main で base と small を、それぞれCPU・Metalで評価する。
+`Model evaluation` は週次・手動実行で base と small を、それぞれCPU・Metalで評価する。通常のPR / main pushでは全件比較を起動しない。[CIの実行範囲](ci.md)を参照。
 手動実行の `include_medium` を有効にするとmediumも追加する。
 各プロセスツリーは `sandbox-exec (deny network*)` の中で実行し、
 localhostへのTCP接続がEPERMになることもその場で確認する。
