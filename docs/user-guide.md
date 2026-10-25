@@ -6,7 +6,7 @@
 
 ## 自分のMacでビルド・配置する
 
-macOS 27以降、Xcode 27以降（macOS 27 SDKを含む）、Node.js 26、Rust（rustup）、CMakeが必要。
+macOS 27以降、Xcode 27以降またはmacOS 27 SDKを含むCommand Line Tools、Node.js 26、Rust（rustup）、CMakeが必要。
 [開発環境の説明](../README.md#macos-で開発する) に従って導入する。
 
 ```sh
@@ -35,7 +35,7 @@ Gatekeeperが起動を止めた場合は、入手元と内容を確認し、一�
 
 ## CIで検証したアプリを使う
 
-成功したActionsのArtifact `voice-input-macos-ARM64-<試行番号>`には、Apple Silicon向けの`Voice-Input-macos.zip`と`provenance.json`を保存する。JSONのソースリビジョンとSHA-256を確認し、ZIPを展開して`Voice Input.app`を自分のApplicationsへ配置する。モデルや個人設定は含まない。Developer ID署名・公証はないため、隔離属性で起動できない場合は上記の対象アプリを「このまま開く」手順を使う。
+ビルドが完了したActionsのArtifact `voice-input-macos-ARM64-<試行番号>`には、Apple Silicon向けの`Voice-Input-macos.zip`と`provenance.json`を保存する。後続の画面テストが失敗していても保存するため、まずCI結果と画面Artifactを確認する。JSONのソースリビジョンとSHA-256を確認し、ZIPを展開して`Voice Input.app`を自分のApplicationsへ配置する。モデルや個人設定は含まない。Developer ID署名・公証はないため、隔離属性で起動できない場合は上記の対象アプリを「このまま開く」手順を使う。
 
 ## モデルを準備して設定する
 

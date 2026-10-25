@@ -65,7 +65,7 @@ base / small を固定した人間の読み上げ音声と無音で比較し、�
 ## macOS で開発する
 
 - macOS 27 以降（アプリの対象下限。アプリCIは `xcode-27` / Apple Silicon）
-- Xcode Command Line Tools: `xcode-select --install`
+- Xcode 27以降またはmacOS 27 SDKを含むCommand Line Tools（`xcrun --sdk macosx --show-sdk-version`で27以降を確認）
 - Node.js 26.12.1（`.nvmrc`）と pnpm 12.15.0（`package.json`の`packageManager`で固定）
 - CMake: `brew install cmake`（文字起こしエンジンのビルドに必要）
 - [rustup](https://rustup.rs/)（Rust は `rust-toolchain.toml` で指定）
