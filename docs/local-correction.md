@@ -84,3 +84,37 @@ Artifact `correction-evaluation-qwen3-1.7b` / `correction-evaluation-qwen3-4b` /
 この比較は、正解語彙を含む固定文脈による感度試験です。実画面のOCR精度や一般的な自然発話の性能を測ったものではありません。実画面OCRの権限・切り出し・音声認識・補正・明示コピー・子プロセスのキャンセルは、別途Macアプリのネイティブ操作CIで検証します。意味・事実・フォーマットに関する機械チェックも指定した制約の範囲に限られ、自由な文章全体の意味評価には人の判断が必要です。VM上の時間・メモリを物理Macの性能として解釈しないでください。
 
 CIの`ci-diagnostics`ビルドは、公開・合成データだけでネイティブ障害を調査する専用実行ファイルです。詳細ログを保存するため、個人の文字起こし・画面情報には使いません。製品を準備する`prepare-native-runtime.py`はこの機能を有効にしません。
+
+## 処理時間・メモリの計測
+
+補正に成功したランタイムのJSONには、既存の`elapsed_ms`に加え、数値だけの`performance`を返します。通常のアプリはこれをログやファイルへ保存しません。空の文字起こしはモデルを読み込まず`performance: null`を返し、失敗・棄却・キャンセルの時間を成功した補正の測定値として扱いません。
+
+| フィールド | 範囲 |
+|---|---|
+| `backend_ms` | Metal利用可否確認とバックエンド初期化 |
+| `model_load_ms` | 重み読込、モデル情報・GPU配置の確認 |
+| `context_ms` | 推論コンテキスト作成、プロンプト構築、トークン化 |
+| `prefill_ms` | 入力トークンの初回処理 |
+| `generation_ms` | サンプラー準備、出力生成、終了判定 |
+| `validation_ms` | 出力の復号と原文保持チェック |
+| `input_tokens` / `generated_tokens` | 入力／出力トークン数（出力は終了トークンを含まない） |
+| `peak_rss_bytes` | 補正子プロセスの出力作成直前までの最大RSS、バイト単位。取得不可ならnull |
+
+各段階は単調増加時計で区間を分け、ミリ秒未満を切り捨てます。`elapsed_ms`は検証済み入力を受け取ってから出力JSON作成直前までで、起動・標準入力の読込・出力送信・プロセス終了処理を含みません。RSSは段階ごとの増分やシステム全体の使用量ではなく、GPUメモリ全体も表しません。macOSの`getrusage`はバイト、LinuxはKiBのため、ランタイムでバイトに統一します。
+
+手動の完全CI（`CI` → `Run workflow` → `full_integration: true`）と週次の完全CIでは、実際にアプリへ同梱した通常ビルドを使って固定の合成文を3回補正します。通常のPR／pushではこのモデル読込・計測を実行しません。`macos-window-smoke-<attempt>` Artifactの`correction-performance/performance.json`と`summary.md`、およびジョブのSummaryで各段階とピークRSSを比較できます。結果には文字起こし・文脈・生成本文・ネイティブログを保存せず、モデル／バイナリのハッシュ、ソースリビジョン、実行環境などの来歴と数値だけを保存します。モデル取得は事前の明示セットアップで行い、計測時はプロセスツリー全体のネットワークを禁止します。
+
+「First observed」は最初に観測した実行であり、OSキャッシュが空のコールド起動とは限りません。特に計測前のモデルハッシュ検証がファイルを読み込みます。「Subsequent」も毎回別プロセスでモデルを読み込み、重みやKVキャッシュを再利用しません。この差から常駐化による改善量を断定できません。短文・CIのVM上での測定であり、実機の長文やMetalの速さも示しません。常駐化を検討する際は、この基準値と同じ入力・バックエンドで比較してください。
+
+ローカルで同じ計測をする場合（CPUの例、モデル準備は上記参照）:
+
+```bash
+cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked
+sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+  python3 scripts/measure_correction.py \
+  --binary crates/local-correction/target/release/local-correction \
+  --model "$HOME/Models/Qwen3-1.7B-Q8_0.gguf" \
+  --output /tmp/voice-input-correction-performance
+```
+
+Apple Silicon実機で同じ測定をGPUで行うには`--backend metal`を指定します。対応しないGPUや推論失敗をCPU成功として置き換えません。Linuxでは`python3 scripts/run-offline-linux.py python3 scripts/measure_correction.py ...`を利用できます。いずれも計測スクリプトはネットワーク禁止が確認できない環境、詳細ログ付きビルド、欠損した計測値、失敗・棄却を成功として集計せずに終了します。途中までのレポートは`complete: false`です。

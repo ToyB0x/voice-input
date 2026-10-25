@@ -41,3 +41,5 @@ gh workflow run model-capabilities.yml --ref YOUR_BRANCH
 `coverage.json`の`requested_scope`が`build-window-smoke`なら通常CI、`full-integration`なら完全テストです。要求した範囲を表す値であり、成否は各`result.json`・`interaction.json`とジョブの結果で確認します。権限・録音・OCR・入力の操作画像や詳細結果は完全テスト時に追加されます。
 
 権限の実操作は使い捨てランナー内で行います。製品の権限バイパスは追加せず、音声・取得テキストは公開・合成データだけを使います。推論時の通信禁止、原文保持、失敗時のArtifact保存、署名・公証を行わない方針を維持します。
+
+完全CIでは、アプリ同梱の補正ランタイムを固定の合成文で3回起動し、処理段階ごとの時間とプロセスのピークRSSも記録します。`correction-performance/performance.json`と`summary.md`を通常のMac Artifactに含めます。通常のPR／pushでは実行しません。各実行は新しいプロセスであり、初回／後続の差はモデル常駐化の効果を示しません。計測範囲と手元での実行方法は[最終補正の計測](local-correction.md#処理時間メモリの計測)を参照してください。

@@ -214,6 +214,7 @@ dependencies = [
 name = "local-correction"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "llama-cpp-2",
  "llama-cpp-sys-2",
  "objc2-metal",
