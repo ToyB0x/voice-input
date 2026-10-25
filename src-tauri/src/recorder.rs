@@ -333,7 +333,7 @@ impl Recorder {
     }
 
     pub(crate) fn comparison_input(&self) -> Result<ComparisonInput, String> {
-        let mut capture = self
+        let capture = self
             .capture
             .lock()
             .map_err(|_| "録音状態を確認できません。")?;
@@ -549,6 +549,7 @@ mod tests {
             insertion_ticket: None,
             context_hint: None,
             correction_hint: None,
+            comparison_hint: None,
         };
         capture.finish();
         let snapshot = capture.snapshot();

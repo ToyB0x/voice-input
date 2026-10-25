@@ -12,6 +12,10 @@ on:
         description: Run the full macOS permission/audio/OCR/insertion suite
         type: boolean
         default: true
+      release_validation:
+        description: Build installers with a disposable signing key (no publishing)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +25,13 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
+  release-validation:
+    name: Signed release packaging (explicit only)
+    if: github.event_name == 'workflow_dispatch' && inputs.release_validation
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: v0.1.1
+
   foundation:
     name: Apple model runtime
     uses: ./.github/workflows/apple-foundation.yml

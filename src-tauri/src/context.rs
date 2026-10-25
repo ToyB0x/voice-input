@@ -520,6 +520,7 @@ mod tests {
                     whisper,
                     correction,
                     ocr: false,
+                    comparison: false,
                 });
                 let asr = seed(&reader);
                 let final_stage = asr.clone();

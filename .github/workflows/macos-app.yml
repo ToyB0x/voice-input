@@ -79,6 +79,7 @@ jobs:
           path: |
             ~/.cargo/registry
             src-tauri/target
+            crates/local-transcription/target
           key: macos-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: macos-${{ runner.arch }}-app-rust-v1-
       - uses: actions/cache/restore@v4
@@ -157,6 +158,7 @@ jobs:
           path: |
             ~/.cargo/registry
             src-tauri/target
+            crates/local-transcription/target
           key: ${{ steps.rust-cache.outputs.cache-primary-key }}
       - name: Build observable native context fixture
         if: inputs.full_integration

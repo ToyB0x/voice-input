@@ -852,3 +852,78 @@ mod tests {
         assert!(sources.for_source("ocr").is_none());
     }
 }
+
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    #[test]
+    fn serial_children_receive_only_the_selected_context_never_the_reference() {
+        let root =
+            std::env::temp_dir().join(format!("voice-comparison-routing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let paths = BTreeMap::from([
+            ("base".to_owned(), Ok(root.join("speech.bin"))),
+            ("qwen3-1.7b".to_owned(), Ok(root.join("correction.gguf"))),
+        ]);
+        let sources = crate::context::Sources {
+            ax: "CONTEXT_FIXTURE".into(),
+            ocr: String::new(),
+        };
+        for route in ["none", "asr-only", "correction-only", "both"] {
+            let case = Case {
+                speech: "base".into(),
+                speech_backend: "cpu".into(),
+                correction: "qwen3-1.7b".into(),
+                correction_backend: "cpu".into(),
+                source: "ax".into(),
+                route: route.into(),
+            };
+            let expected_asr = if case.whisper_context() {
+                "CONTEXT_FIXTURE"
+            } else {
+                ""
+            };
+            let expected_correction = if case.correction_context() {
+                "CONTEXT_FIXTURE"
+            } else {
+                ""
+            };
+            let marker = root.join("asr-completed");
+            let _ = std::fs::remove_file(&marker);
+            let asr = format!(
+                "#!/usr/bin/python3\nimport sys,json,struct,os,time\nh=json.loads(sys.stdin.buffer.readline())\nb=sys.stdin.buffer.read()\nassert h=={{'samples':16000,'hint':{expected_asr:?}}}\nassert b==struct.pack('<16000f',*([0.0]*16000))\nassert b'REFERENCE_PRIVATE' not in b\nopen({marker:?},'w').write(str(os.getpid()))\ntime.sleep(0.05)\nprint(json.dumps(dict(text='raw fixture',backend='cpu',load_ms=1,elapsed_ms=2)))\n",
+                marker = marker.to_str().unwrap()
+            );
+            let correction = format!(
+                "#!/usr/bin/python3\nimport sys,json,os\np=sys.stdin.buffer.read()\nassert b'REFERENCE_PRIVATE' not in p\nassert json.loads(p)=={{'transcript':'raw fixture','context':{expected_correction:?}}}\nassert os.path.isfile({marker:?})\ntry:\n os.kill(int(open({marker:?}).read()),0)\nexcept ProcessLookupError:\n pass\nelse:\n raise AssertionError('previous helper was not reaped')\nprint(json.dumps(dict(candidate='raw fixture.',accepted=True,reason=None,backend='cpu',offloaded_layers=0)))\n",
+                marker = marker.to_str().unwrap()
+            );
+            for (name, source) in [
+                ("compare-transcription", asr),
+                ("local-correction", correction),
+            ] {
+                let path = root.join(name);
+                std::fs::write(&path, source).unwrap();
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            let row = run_case(
+                &root,
+                &case,
+                0,
+                &vec![0.0; 16000],
+                &sources,
+                &paths,
+                &Ok(()),
+                Some("REFERENCE_PRIVATE"),
+                &AtomicU64::new(1),
+                1,
+            );
+            assert_eq!(row.status, "accepted", "{route}: {}", row.message);
+            assert_eq!(row.raw.as_deref(), Some("raw fixture"));
+            assert_eq!(row.final_text.as_deref(), Some("raw fixture."));
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

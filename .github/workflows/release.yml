@@ -1,6 +1,12 @@
 name: Build and publish macOS release
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Stable version for a non-publishing build verification
+        type: string
+        default: v0.1.1
   release:
     types: [published]
   workflow_dispatch:
@@ -53,9 +59,9 @@ jobs:
           PY
       - name: Build signed update and initial installer
         env:
-          RELEASE_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RELEASE_PUBLIC_KEY: ${{ github.event_name == 'release' && vars.TAURI_UPDATER_PUBLIC_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'release' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'release' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
           PUBLISH: ${{ github.event_name == 'release' }}
           APPLE_SIGNING_IDENTITY: '-'
         run: |

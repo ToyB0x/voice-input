@@ -313,6 +313,7 @@ func verifyTranscription(root: AXUIElement, windowID: NSNumber, output: URL) thr
     try press(uiButton(root, ["Copy transcript"])!)
     try waitForUI("real system clipboard") { NSPasteboard.general.string(forType: .string) == text }
     try writeJSON(["status": "passed", "clipboardMatches": true], to: output.appendingPathComponent("copy.json"))
+    try comparisonOfRecordedAudio(root:root,output:output)
     // Reuse the loaded model for a retry; then discard while native work runs.
     guard let retry = uiButton(root, ["Transcribe recording"]) else { throw SmokeFailure(description: "Retry control missing") }
     try press(retry)
