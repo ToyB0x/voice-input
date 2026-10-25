@@ -34,7 +34,7 @@ jobs:
         with:
           name: apple-foundation-runtime
           path: ${{ runner.temp }}/foundation-runtime
-      - name: Verify helper provenance and compatibility with macOS 14
+      - name: Verify helper provenance and protocol on the current macOS
         run: |
           echo "VOICE_INPUT_FOUNDATION_RUNTIME=$RUNNER_TEMP/foundation-runtime/apple-foundation-correction" >> "$GITHUB_ENV"
           python3 - <<'PYCODE'
@@ -52,7 +52,7 @@ jobs:
           sandbox-exec -p '(version 1) (allow default) (deny network*)' \
             python3 scripts/verify-foundation-runtime.py --require-framework \
             --binary "$RUNNER_TEMP/foundation-runtime/apple-foundation-correction" \
-            --output "$RUNNER_TEMP/foundation-runtime/macos14-verification.json"
+            --output "$RUNNER_TEMP/foundation-runtime/host-verification.json"
       - name: Record requested CI scope
         env:
           VOICE_INPUT_FULL_INTEGRATION: ${{ inputs.full_integration }}
@@ -65,7 +65,7 @@ jobs:
           root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
           root.mkdir(parents=True, exist_ok=True)
           import shutil
-          shutil.copyfile(Path(os.environ['RUNNER_TEMP']) / 'foundation-runtime/macos14-verification.json', root / 'foundation-runtime.json')
+          shutil.copyfile(Path(os.environ['RUNNER_TEMP']) / 'foundation-runtime/host-verification.json', root / 'foundation-runtime.json')
           (root / 'coverage.json').write_text(json.dumps(dict(requested_scope=mode, source_revision=os.environ['GITHUB_SHA']))+'\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write(f'CI scope: **{mode}**. Full permission/audio/OCR/insertion scenarios run on the weekly schedule or explicit full dispatch.\n')
@@ -89,22 +89,22 @@ jobs:
           path: |
             ~/.cargo/registry
             src-tauri/target
-          key: macos-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos-${{ runner.arch }}-app-rust-v1-
+          key: macos26-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos26-${{ runner.arch }}-app-rust-v1-
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: correction-cache
         with:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
-          key: macos-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos-${{ runner.arch }}-correction-runtime-v2-
+          key: macos26-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos26-${{ runner.arch }}-correction-runtime-v2-
       - name: Restore previous correction target cache
         if: steps.correction-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: crates/local-correction/target
-          key: macos-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          key: macos26-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Test evaluation helpers
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Test pinned model preparation without networking
@@ -567,7 +567,7 @@ jobs:
           PYCODE
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: voice-input-macos-${{ runner.arch }}-${{ github.run_attempt }}
+          name: voice-input-macos26-${{ runner.arch }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/voice-input-app/
           retention-days: 14
           if-no-files-found: error

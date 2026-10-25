@@ -65,7 +65,7 @@ jobs:
           path: |
             ~/.cargo/registry
             crates/local-transcription/target
-          key: macos-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+          key: macos26-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Check engine formatting and Clippy
         run: |
           cargo fmt --manifest-path crates/local-transcription/Cargo.toml -- --check
