@@ -44,7 +44,7 @@ gh workflow run model-capabilities.yml --ref YOUR_BRANCH
 
 完全CIでは、アプリ同梱の補正ランタイムを固定の合成文で3回起動し、処理段階ごとの時間とプロセスのピークRSSも記録します。`correction-performance/performance.json`と`summary.md`を通常のMac Artifactに含めます。通常のPR／pushでは実行しません。各実行は新しいプロセスであり、初回／後続の差はモデル常駐化の効果を示しません。計測範囲と手元での実行方法は[最終補正の計測](local-correction.md#処理時間メモリの計測)を参照してください。
 
-通常CIにはApple Foundation Models用ヘルパーのビルドと軽いモデル不要の検証も含めます。macOS最新SDKでコンパイルしたヘルパーを、同じworkflow runのArtifact経由でmacOS 26のアプリ検証ジョブへ渡します。最低対応OSは14のまま維持し、別のmacOS 14ジョブでヘルパーの起動と非対応応答を確認します。ハッシュ・リビジョンを照合し、weak linkによる旧OS起動と利用不可の応答、実画面の選択・診断コピー、候補の共通ガードを確認します。CIで実際のAppleモデルが使えない場合は`inferenceTested: false`を記録します。詳細は[AppleモデルのCI範囲](apple-foundation-models.md#実装とciの範囲)を参照してください。
+通常CIにはApple Foundation Models用ヘルパーのビルドと軽いモデル不要の検証も含めます。macOS最新SDKでコンパイルしたヘルパーを、同じworkflow runのArtifact経由でmacOS 26のアプリ検証ジョブへ渡します。最低対応OSは14のまま維持し、任意のmacOS 14ジョブでヘルパーの起動と非対応応答を確認します。ハッシュ・リビジョンを照合し、weak linkによる旧OS起動と利用不可の応答、実画面の選択・診断コピー、候補の共通ガードを確認します。CIで実際のAppleモデルが使えない場合は`inferenceTested: false`を記録します。詳細は[AppleモデルのCI範囲](apple-foundation-models.md#実装とciの範囲)を参照してください。
 
 成功したMacジョブは、検証したアプリも `voice-input-macos-ARM64-<試行番号>` ArtifactへZIPとSHA-256・ソースリビジョン付きで保存します。モデルと個人設定は含めず、Developer ID署名・公証は行いません。実機での利用は[個人利用ガイド](user-guide.md#ciで検証したアプリを使う)を参照してください。
 
@@ -52,3 +52,5 @@ macOS 26のRust/CMakeビルドキャッシュはmacOS 14のものと分けます
 評価workflowのUbuntuランナー／ネイティブキャッシュを変更するPRでは、`Ubuntu runner compatibility`も実行します。Ubuntu 26.04で実際に補正ランタイムをビルド・テストし、通信を禁止して製品の補正ガードを検証します。モデルを取得する全件評価は起動しません。ネイティブ生成物のキャッシュはUbuntu 24.04と分離します。
 
 通常Macジョブのタイムアウトは30分です。macOSメジャー更新や空キャッシュ時のC++・Rustの初回コンパイルを完了させるための上限であり、通常実行の10分未満という目標は維持します。完全テストの60分上限とは分けています。
+
+macOS 14ランナーは[2026-11-02に提供終了予定](https://github.com/actions/runner-images/issues/13518)です。旧OSでのヘルパー起動は今回実行して成功を確認しましたが、今後の通常CIには必須にしません。廃止前は`gh workflow run ci.yml --ref YOUR_BRANCH -f full_integration=false -f legacy_macos14=true`で追加実行できます。通常CIは26上で最低対応OS 14・weak link・プロトコルを検証し、廃止後に14で実行したかのような結果は記録しません。

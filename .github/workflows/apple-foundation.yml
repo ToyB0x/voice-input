@@ -2,6 +2,11 @@ name: Apple Foundation Models runtime
 
 on:
   workflow_call:
+    inputs:
+      verify_legacy:
+        description: Optional macOS 14 startup check before runner retirement on 2026-11-02
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -50,6 +55,7 @@ jobs:
           retention-days: 14
 
   legacy:
+    if: inputs.verify_legacy
     name: Verify weak-linked Apple helper on macOS 14
     needs: foundation
     runs-on: macos-14
