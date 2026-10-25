@@ -129,6 +129,11 @@ func typePrivateCredential(_ element: AXUIElement, value: String, physicalASCII:
     guard AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
         throw SmokeFailure(description: "Could not focus CI authorization field")
     }
+    // Native authorization fields are AppKit controls, not WebKit inputs.
+    // A direct AX write avoids hosted Secure Input dropping synthetic keys.
+    // Do not read the password back; the OS authorization result verifies it.
+    let written = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, value as CFString)
+    if written == .success { return }
     try key(0, flags: .maskCommand)
     if physicalASCII {
         // Secure Input can also block Unicode events in the username field.
@@ -191,6 +196,7 @@ func authorizeCISettingsChange() throws {
     // Password values are intentionally unreadable; drain posted key events
     // before submitting, without reading or recording the secret field.
     RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+    try waitForUI("authorization submit enabled") { uiButton(dialog!, ["Modify Settings"]) != nil }
     try press(uiButton(dialog!, ["Modify Settings"])!)
     try waitForUI("admin confirmation completes", seconds: 30) { uiButton(dialog!, ["Modify Settings"]) == nil }
 }
