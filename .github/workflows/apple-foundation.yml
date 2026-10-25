@@ -58,7 +58,7 @@ jobs:
     if: inputs.verify_legacy
     name: Verify weak-linked Apple helper on macOS 14
     needs: foundation
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
