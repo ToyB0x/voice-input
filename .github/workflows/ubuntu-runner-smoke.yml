@@ -1,0 +1,49 @@
+name: Ubuntu runner compatibility
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/ubuntu-runner-smoke.yml
+      - .github/workflows/model-capabilities.yml
+      - .github/workflows/model-evaluation.yml
+      - .github/workflows/model-presets.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ubuntu-runner-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  correction:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check release ages before building any dependencies
+        run: python3 scripts/check-dependency-age.py
+      - name: Install native CPU tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libclang-dev libseccomp2
+          rustup show
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: ubuntu26-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Test evaluation helpers and CPU correction runtime
+        run: |
+          python3 -m unittest discover -s scripts/tests -v
+          cargo clippy --manifest-path crates/local-correction/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path crates/local-correction/Cargo.toml --locked
+          cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked --bin local-correction
+      - name: Verify production correction guards with networking denied
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/verify-correction-validation.py \
+            --binary crates/local-correction/target/release/local-correction

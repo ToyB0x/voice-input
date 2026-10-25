@@ -141,8 +141,8 @@ jobs:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
-          key: linux-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: linux-${{ runner.arch }}-correction-runtime-v1-
+          key: ubuntu26-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: ubuntu26-${{ runner.arch }}-correction-runtime-v1-
       - name: Prepare native CPU build tools and verify evaluation helpers
         run: |
           sudo apt-get update
