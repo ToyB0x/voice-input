@@ -19,6 +19,15 @@ type Result<T> = std::result::Result<T, &'static str>;
 const CANCELLED: &str = "モデルの準備を取り消しました。";
 const INVALID: &str = "モデルの容量またはSHA-256が一致しません。再ダウンロードしてください。";
 
+fn hex_digest(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut output, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    output
+}
+
 #[derive(Clone, Deserialize)]
 struct Identity {
     file: String,
@@ -215,7 +224,7 @@ impl Manager {
             }
             digest.update(&buffer[..count]);
         }
-        if total != model.bytes || format!("{:x}", digest.finalize()) != model.identity.sha256 {
+        if total != model.bytes || hex_digest(&digest.finalize()) != model.identity.sha256 {
             return Err(INVALID);
         }
         Ok(path)
@@ -338,7 +347,7 @@ impl Manager {
             digest.update(&buffer[..n]);
             self.progress("verifying", bytes);
         }
-        if bytes != model.bytes || format!("{:x}", digest.finalize()) != model.identity.sha256 {
+        if bytes != model.bytes || hex_digest(&digest.finalize()) != model.identity.sha256 {
             return Err(INVALID);
         }
         Ok(())
@@ -496,7 +505,8 @@ mod tests {
         let mut model = catalog().remove(0);
         model.bytes = 3;
         model.identity.bytes = 3;
-        model.identity.sha256 = format!("{:x}", Sha256::digest(b"abc"));
+        model.identity.sha256 =
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".into();
         (manager, model)
     }
     #[test]

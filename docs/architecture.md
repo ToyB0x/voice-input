@@ -17,7 +17,7 @@ macOS 向けの音声入力アプリを Rust で開発する。将来的には�
 UI は HTML / CSS / TypeScript、OS 連携・音声処理は Rust が担当する。
 Tauri は SwiftUI のようなネイティブウィジェット UI ではない。
 現段階では React などの UI フレームワークや不要なプラグインを導入せず、
-npm / Cargo のロックファイルで依存を管理する。
+pnpm / Cargo のロックファイルで依存を管理する。
 
 ## ローカル処理と画面コンテキスト
 

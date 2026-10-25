@@ -25,12 +25,17 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
+  dependency-policy:
+    name: Dependency publication dates
+    uses: ./.github/workflows/dependency-policy.yml
+
   release-validation:
     name: Signed release packaging (explicit only)
+    needs: dependency-policy
     if: github.event_name == 'workflow_dispatch' && inputs.release_validation
     uses: ./.github/workflows/release-build.yml
     with:
-      tag: v0.1.1
+      tag: v0.0.1
 
   foundation:
     name: Apple model runtime
@@ -38,23 +43,24 @@ jobs:
 
   macos:
     name: macOS app
-    needs: foundation
+    needs: [foundation, dependency-policy]
     uses: ./.github/workflows/macos-app.yml
     with:
       full_integration: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_integration) }}
 
   transcription:
     name: Offline Japanese ASR (macOS)
+    needs: dependency-policy
     runs-on: macos-14
     timeout-minutes: 25
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned Rust toolchain
         run: rustup show
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -107,7 +113,7 @@ jobs:
           done
       - name: Upload offline transcription evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: local-transcription-${{ github.run_attempt }}
           path: ${{ runner.temp }}/transcription-evidence/
@@ -119,10 +125,10 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Inspect actual default GPU features
         run: xcrun swift scripts/macos-metal-capability.swift > "$RUNNER_TEMP/metal-capability.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: metal-host-capability
           path: ${{ runner.temp }}/metal-capability.json

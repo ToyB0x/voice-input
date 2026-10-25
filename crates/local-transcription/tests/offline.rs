@@ -1,4 +1,4 @@
-use local_transcription::{Backend, Error, Transcriber, read_wav};
+use local_transcription::{Backend, Error, Transcriber, prepare_audio, read_wav};
 use std::path::Path;
 
 /// Explicit opt-in: the ordinary test suite never downloads a model.
@@ -32,6 +32,17 @@ fn japanese_and_silence_without_network() {
     // Every call creates a fresh decoder state: unrelated hints cannot persist.
     let unhinted = model.transcribe(&audio).unwrap();
     assert!(!unhinted.contains("ゼノヴァリンク"));
+    // Exercise the device-rate path too: 16 kHz WAV-only checks bypass resampling.
+    let device_audio: Vec<f32> = audio.iter().flat_map(|sample| [*sample; 3]).collect();
+    let resampled = prepare_audio(&device_audio, 48_000).unwrap();
+    assert_eq!(resampled.len(), audio.len());
+    let resampled_text = model.transcribe(&resampled).unwrap();
+    for word in ["月日", "旅"] {
+        assert!(
+            resampled_text.contains(word),
+            "resampling lost {word}: {resampled_text}"
+        );
+    }
     assert!(matches!(
         model.transcribe(&[f32::NAN; 16_000]),
         Err(Error::InvalidAudio)

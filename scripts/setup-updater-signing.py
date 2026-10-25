@@ -25,7 +25,7 @@ def main():
     key.parent.mkdir(parents=True,exist_ok=True)
     previous=os.umask(0o077)
     try:
-        result=subprocess.run(['npm','exec','tauri','signer','generate','--','--ci','--password','','--write-keys',str(key)],cwd=root,capture_output=True)
+        result=subprocess.run(['pnpm','exec','tauri','signer','generate','--ci','--password','','--write-keys',str(key)],cwd=root,capture_output=True)
         if result.returncode:
             raise RuntimeError('Tauri key generation failed; its output is intentionally hidden')
         key.chmod(0o600)

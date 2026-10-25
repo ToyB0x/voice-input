@@ -1,5 +1,6 @@
 use crate::{Error, MAX_SAMPLES, SAMPLE_RATE};
-use rubato::{FftFixedInOut, Resampler};
+use audioadapter_buffers::direct::InterleavedSlice;
+use rubato::{Fft, FixedSync, Resampler};
 
 /// Band-limited conversion from device-rate mono PCM. Sub-second clips are
 /// padded with silence to meet Whisper's minimum; input never exceeds 60 s.
@@ -15,24 +16,23 @@ pub fn prepare_audio(audio: &[f32], rate: u32) -> Result<Vec<f32>, Error> {
     let mut output = if rate == SAMPLE_RATE {
         audio.to_vec()
     } else {
-        let mut converter = FftFixedInOut::<f32>::new(rate as usize, SAMPLE_RATE as usize, 1024, 1)
+        let mut converter = Fft::<f32>::new(
+            rate as usize,
+            SAMPLE_RATE as usize,
+            1024,
+            1,
+            FixedSync::Both,
+        )
+        .map_err(|e| Error::Inference(format!("resampling: {e}")))?;
+        let input = InterleavedSlice::new(audio, 1, audio.len())
             .map_err(|e| Error::Inference(format!("resampling: {e}")))?;
-        let delay = converter.output_delay();
-        let mut converted = Vec::with_capacity(length + delay + 2048);
-        let mut offset = 0;
-        while converted.len() < length + delay {
-            let end = (offset + converter.input_frames_next()).min(audio.len());
-            let input = [audio.get(offset..end).unwrap_or(&[])];
-            let block = if offset < audio.len() {
-                converter.process_partial(Some(&input), None)
-            } else {
-                converter.process_partial::<&[f32]>(None, None)
-            }
-            .map_err(|e| Error::Inference(format!("resampling: {e}")))?;
-            converted.extend_from_slice(&block[0]);
-            offset = end;
-        }
-        converted[delay..delay + length].to_vec()
+        // rubato 5's whole-clip API drains the filter and trims its startup delay.
+        let mut converted = converter
+            .process_all(&input, audio.len(), None)
+            .map_err(|e| Error::Inference(format!("resampling: {e}")))?
+            .take_data();
+        converted.truncate(length);
+        converted
     };
     // FFT ringing can overshoot normalized input, especially at discontinuities.
     for sample in &mut output {
