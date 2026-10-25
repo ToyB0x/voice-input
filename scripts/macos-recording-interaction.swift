@@ -72,11 +72,14 @@ func recordingInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
     } catch {
         // Authentication may still be open; never capture credential-entry UI.
         if scenario == "insertion-grant" || scenario == "ocr-grant" { throw error }
-        // A hidden app exposes only its menu tree. Show it for useful OCR
-        // failure evidence after the synthetic fixture operation has stopped.
-        if scenario.hasPrefix("ocr"), visibleWindows(for:pid).isEmpty {
+        // A hidden app exposes only its menu tree. Preserve that state, then
+        // show the real app for the recorder/ASR error behind a tray warning.
+        // Credential-entry scenarios above remain excluded from all captures.
+        try? uiText(AXUIElementCreateApplication(pid)).write(
+            to: output.appendingPathComponent("failure-before-show.txt"), atomically: true, encoding: .utf8)
+        if (scenario.hasPrefix("ocr") || scenario.hasPrefix("context") || scenario == "desktop"), visibleWindows(for:pid).isEmpty {
             try? trayAction(AXUIElementCreateApplication(pid),title:"設定・認識結果を表示")
-            try? waitForUI("OCR failure window") {!visibleWindows(for:pid).isEmpty}
+            try? waitForUI("failure diagnostic window") {!visibleWindows(for:pid).isEmpty}
         }
         try? interactionScreenshot(output, name: "interaction-failure.png")
         try? uiText(AXUIElementCreateApplication(pid)).write(
