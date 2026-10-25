@@ -43,3 +43,7 @@ gh workflow run model-capabilities.yml --ref YOUR_BRANCH
 権限の実操作は使い捨てランナー内で行います。製品の権限バイパスは追加せず、音声・取得テキストは公開・合成データだけを使います。推論時の通信禁止、原文保持、失敗時のArtifact保存、署名・公証を行わない方針を維持します。
 
 完全CIでは、アプリ同梱の補正ランタイムを固定の合成文で3回起動し、処理段階ごとの時間とプロセスのピークRSSも記録します。`correction-performance/performance.json`と`summary.md`を通常のMac Artifactに含めます。通常のPR／pushでは実行しません。各実行は新しいプロセスであり、初回／後続の差はモデル常駐化の効果を示しません。計測範囲と手元での実行方法は[最終補正の計測](local-correction.md#処理時間メモリの計測)を参照してください。
+
+通常CIにはApple Foundation Models用ヘルパーのビルドと軽いモデル不要の検証も含めます。macOS最新SDKでコンパイルしたヘルパーを、同じworkflow runのArtifact経由でmacOS 14アプリへ同梱します。ハッシュ・リビジョンを照合し、weak linkによる旧OS起動と利用不可の応答、実画面の選択・診断コピー、候補の共通ガードを確認します。CIで実際のAppleモデルが使えない場合は`inferenceTested: false`を記録します。詳細は[AppleモデルのCI範囲](apple-foundation-models.md#実装とciの範囲)を参照してください。
+
+成功したMacジョブは、検証したアプリも `voice-input-macos-ARM64-<試行番号>` ArtifactへZIPとSHA-256・ソースリビジョン付きで保存します。モデルと個人設定は含めず、Developer ID署名・公証は行いません。実機での利用は[個人利用ガイド](user-guide.md#ciで検証したアプリを使う)を参照してください。

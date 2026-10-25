@@ -76,6 +76,8 @@ fn main() {
             correction::correct_transcript,
             correction::correction_status,
             correction::copy_correction,
+            correction::check_foundation_model,
+            correction::copy_foundation_diagnostics,
             insertion::request_accessibility,
         ]);
     builder

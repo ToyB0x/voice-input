@@ -42,6 +42,7 @@
     ],
     "resources": {
       "resources/local-correction": "bin/local-correction",
+      "resources/apple-foundation-correction": "bin/apple-foundation-correction",
       "resources/CORRECTION-NOTICES.txt": "CORRECTION-NOTICES.txt"
     }
   }

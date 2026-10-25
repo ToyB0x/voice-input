@@ -2,7 +2,7 @@ import "./styles.css";
 import { setupModels } from "./model-setup";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionBackend: string };
+type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
 type InsertionStatus = { enabled: boolean; trusted: boolean; state: string; message: string };
 type DesktopStatus = { preferences: Preferences; shortcutRegistered: boolean; error: string | null };
 
@@ -64,7 +64,8 @@ const insertionMessage = document.querySelector<HTMLParagraphElement>("#insertio
 const recognitionContext = document.querySelector<HTMLInputElement>("#recognition-context")!;
 const contextStatus = document.querySelector<HTMLParagraphElement>("#context-status")!;
 type ContextStatus = { enabled: boolean; message: string; ocrMessage: string; screenPermitted: boolean };
-type CorrectionStatus = { working: boolean; text: string | null; error: string | null; model: string; elapsedMs: number };
+type FoundationStatus = { availability: string; framework_imported: boolean; os_supported: boolean; os_major: number; os_minor: number; os_patch: number };
+type CorrectionStatus = { checkingFoundation: boolean; foundation: FoundationStatus | null; working: boolean; text: string | null; error: string | null; model: string; elapsedMs: number };
 let context: ContextStatus | undefined;
 let correction: CorrectionStatus | undefined;
 const ocrContext = document.querySelector<HTMLInputElement>("#ocr-context")!;
@@ -72,6 +73,12 @@ const whisperContext = document.querySelector<HTMLInputElement>("#whisper-contex
 const correctionContext = document.querySelector<HTMLInputElement>("#correction-context")!;
 const ocrStatus = document.querySelector<HTMLParagraphElement>("#ocr-status")!;
 const screenPermission = document.querySelector<HTMLButtonElement>("#screen-permission")!;
+const correctionEngine = document.querySelector<HTMLSelectElement>("#correction-engine")!;
+const foundationDiagnostics = document.querySelector<HTMLDetailsElement>("#foundation-diagnostics")!;
+const foundationCheck = document.querySelector<HTMLButtonElement>("#foundation-check")!;
+const foundationCopy = document.querySelector<HTMLButtonElement>("#foundation-copy")!;
+const foundationInfo = document.querySelector<HTMLParagraphElement>("#foundation-info")!;
+const foundationDetail = document.querySelector<HTMLPreElement>("#foundation-detail")!;
 const correctionModelPath = document.querySelector<HTMLInputElement>("#correction-model-path")!;
 const correctionBackend = document.querySelector<HTMLSelectElement>("#correction-backend")!;
 const correct = document.querySelector<HTMLButtonElement>("#correct")!;
@@ -92,7 +99,7 @@ const managedModels = setupModels(
   () => busy || !snapshot || snapshot.working || snapshot.phase === "recording" || !!correction?.working,
   (speechPath, finalModelPath) => {
     if (speechPath !== undefined) modelPath.value = speechPath;
-    if (finalModelPath !== undefined) correctionModelPath.value = finalModelPath;
+    if (finalModelPath !== undefined) { correctionModelPath.value = finalModelPath; correctionEngine.value = "qwen3"; }
     preferencesMessage.textContent = speechPath !== undefined ? "モデルを設定欄へ反映しました。保存し、音声モデルを読み込んでください。" : "補正モデルの設定を反映しました。設定を保存してください。";
     render();
   },
@@ -111,12 +118,27 @@ function render() {
   shortcut.disabled = autoInsert.disabled = recognitionContext.disabled = accessibility.disabled = busy;
   setText(contextStatus, context?.message ?? "認識補助: 無効");
   ocrContext.disabled = whisperContext.disabled = correctionContext.disabled = screenPermission.disabled = busy;
-  correctionModelPath.disabled = correctionBackend.disabled = busy;
+  const foundationSelected = correctionEngine.value === "apple-foundation";
+  correctionEngine.disabled = busy;
+  correctionModelPath.disabled = correctionBackend.disabled = busy || foundationSelected;
+  foundationCheck.disabled = busy || !!correction?.working || snapshot.working || snapshot.phase === "recording";
+  foundationCopy.disabled = busy;
+  const availabilityMessages: Record<string, string> = {
+    available: "利用できます（実際の補正の成功はプレビューで確認してください）",
+    osTooOld: "macOS 26以降が必要です", frameworkMissingFromSDK: "Xcode 26以降でヘルパーを再ビルドしてください",
+    deviceNotEligible: "Apple Intelligenceに対応していないMacです",
+    appleIntelligenceNotEnabled: "システム設定でApple Intelligenceを有効にしてください",
+    modelNotReady: "OSのモデル準備完了を待って再確認してください",
+    unsupportedLanguageOrLocale: "日本語を利用できるOS・モデルの設定を確認してください",
+  };
+  const afm = correction?.foundation;
+  setText(foundationInfo, afm ? `Appleモデル: ${availabilityMessages[afm.availability] ?? afm.availability}` : "Appleモデルの利用可否は未確認です。");
+  setText(foundationDetail, JSON.stringify({ availability: afm ?? null, lastError: correction?.error ?? null, lastElapsedMs: correction?.elapsedMs ?? 0 }, null, 2));
   setText(ocrStatus, `${context?.ocrMessage ?? "OCR: 無効"} / 画面収録${context?.screenPermitted ? "許可済み" : "未許可"}`);
-  correct.disabled = busy || snapshot.working || snapshot.phase === "recording" || !!correction?.working || !snapshot.transcript || !correctionModelPath.value.trim();
+  correct.disabled = busy || snapshot.working || snapshot.phase === "recording" || !!correction?.working || !snapshot.transcript || (!foundationSelected && !correctionModelPath.value.trim());
   copyCorrection.disabled = busy || !!correction?.working || !correction?.text;
   if (corrected.value !== (correction?.text ?? "")) corrected.value = correction?.text ?? "";
-  setText(correctionStatus, correction?.working ? "ローカル補正中…（破棄・新しい録音で取り消せます）" : correction?.error ?? (correction?.text !== null && correction?.text !== undefined ? `補正プレビュー: ${correction.model} / ${(correction.elapsedMs / 1000).toFixed(1)}秒。内容を確認してください。` : "補正は未実行です。元の文字起こしを保持します。"));
+  setText(correctionStatus, correction?.working ? (correction.checkingFoundation ? "Appleモデルの利用可否を確認中…" : "ローカル補正中…（破棄・新しい録音で取り消せます）") : correction?.error ?? (correction?.text !== null && correction?.text !== undefined ? `補正プレビュー: ${correction.model} / ${(correction.elapsedMs / 1000).toFixed(1)}秒。内容を確認してください。` : "補正は未実行です。元の文字起こしを保持します。"));
   setText(insertionStatus, !insertion?.enabled ? "直接入力: 無効" :
     `直接入力: 有効 / アクセシビリティ${insertion.trusted ? "許可済み" : "未許可"}`);
   setText(insertionMessage, insertion?.message ?? "");
@@ -195,6 +217,8 @@ async function refresh() {
         ocrContext.checked = desktop.preferences.ocrContext;
         whisperContext.checked = desktop.preferences.whisperContext;
         correctionContext.checked = desktop.preferences.correctionContext;
+        correctionEngine.value = desktop.preferences.correctionEngine;
+        if (correctionEngine.value === "apple-foundation") foundationDiagnostics.open = true;
         correctionModelPath.value = desktop.preferences.correctionModelPath;
         correctionBackend.value = desktop.preferences.correctionBackend;
         preferencesInitialized = true;
@@ -233,16 +257,22 @@ savePreferences.addEventListener("click", () => void action(async () => {
   desktop = await invoke<DesktopStatus>("save_preferences", { preferences: {
     version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
     whisperContext: whisperContext.checked, correctionContext: correctionContext.checked,
-    correctionModelPath: correctionModelPath.value, correctionBackend: correctionBackend.value,
+    correctionModelPath: correctionModelPath.value, correctionEngine: correctionEngine.value, correctionBackend: correctionBackend.value,
   } });
   preferencesMessage.textContent = "設定を保存しました。ショートカットは反映済みです。";
 }));
 accessibility.addEventListener("click", () => void action(() => invoke("request_accessibility")));
-for (const field of [modelPath, backend, shortcut, autoInsert, recognitionContext, ocrContext, whisperContext, correctionContext, correctionModelPath, correctionBackend]) {
+for (const field of [modelPath, backend, shortcut, autoInsert, recognitionContext, ocrContext, whisperContext, correctionContext, correctionEngine, correctionModelPath, correctionBackend]) {
   field.addEventListener("input", () => { preferencesMessage.textContent = "未保存の設定があります。"; });
 }
 modelPath.addEventListener("input", render);
 correctionModelPath.addEventListener("input", render);
+correctionEngine.addEventListener("change", () => {
+  if (correctionEngine.value === "apple-foundation") foundationDiagnostics.open = true;
+  render();
+});
+foundationCheck.addEventListener("click", () => void action(async () => { correction = await invoke<CorrectionStatus>("check_foundation_model"); }));
+foundationCopy.addEventListener("click", () => void action(async () => { await invoke("copy_foundation_diagnostics"); preferencesMessage.textContent = "本文を含まない診断情報をコピーしました。"; }));
 screenPermission.addEventListener("click", () => void action(() => invoke("request_screen_permission")));
 correct.addEventListener("click", () => void action(async () => { correction = await invoke<CorrectionStatus>("correct_transcript"); }));
 copyCorrection.addEventListener("click", () => void action(() => invoke("copy_correction")));

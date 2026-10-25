@@ -118,3 +118,7 @@ sandbox-exec -p '(version 1) (allow default) (deny network*)' \
 ```
 
 Apple Silicon実機で同じ測定をGPUで行うには`--backend metal`を指定します。対応しないGPUや推論失敗をCPU成功として置き換えません。Linuxでは`python3 scripts/run-offline-linux.py python3 scripts/measure_correction.py ...`を利用できます。いずれも計測スクリプトはネットワーク禁止が確認できない環境、詳細ログ付きビルド、欠損した計測値、失敗・棄却を成功として集計せずに終了します。途中までのレポートは`complete: false`です。
+
+## Appleのオンデバイスモデル（実験的）
+
+補正エンジンとしてApple Foundation Modelsも選択できます。macOS 26以降・Apple Intelligence対応と有効化・日本語対応モデルの準備が必要です。GGUFを指定せずに利用でき、生成後はQwenと共通の原文保持チェックを通します。利用不可・生成失敗・棄却でも原文を保持します。初期値はQwenのままです。[利用手順と診断方法](apple-foundation-models.md)を参照してください。

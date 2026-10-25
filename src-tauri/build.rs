@@ -21,6 +21,8 @@ fn main() {
         "correct_transcript",
         "correction_status",
         "copy_correction",
+        "check_foundation_model",
+        "copy_foundation_diagnostics",
         "request_accessibility",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))

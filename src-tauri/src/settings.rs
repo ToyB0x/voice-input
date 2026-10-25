@@ -21,11 +21,16 @@ pub struct Preferences {
     pub correction_context: bool,
     #[serde(default)]
     pub correction_model_path: String,
+    #[serde(default = "default_correction_engine")]
+    pub correction_engine: String,
     #[serde(default = "default_correction_backend")]
     pub correction_backend: String,
 }
 fn default_whisper_context() -> bool {
     true
+}
+fn default_correction_engine() -> String {
+    "qwen3".into()
 }
 fn default_correction_backend() -> String {
     "metal".into()
@@ -43,6 +48,7 @@ impl Default for Preferences {
             whisper_context: true,
             correction_context: false,
             correction_model_path: String::new(),
+            correction_engine: default_correction_engine(),
             correction_backend: "metal".into(),
         }
     }
@@ -52,6 +58,7 @@ impl Preferences {
         if self.version != 1
             || !["cpu", "metal"].contains(&self.backend.as_str())
             || !["cpu", "metal"].contains(&self.correction_backend.as_str())
+            || !["qwen3", "apple-foundation"].contains(&self.correction_engine.as_str())
         {
             return Err("設定のバージョンまたは実行方式が不正です。".into());
         }
@@ -141,7 +148,9 @@ mod tests {
         assert!(!legacy.recognition_context);
         assert!(!legacy.ocr_context && !legacy.correction_context);
         assert!(legacy.whisper_context);
+        assert_eq!(legacy.correction_engine, "qwen3");
         let settings = Preferences {
+            correction_engine: "apple-foundation".into(),
             model_path: "/tmp/日本語モデル.bin".into(),
             shortcut: String::new(),
             ..Preferences::default()
@@ -170,6 +179,10 @@ mod tests {
         };
         assert!(settings.validate().is_err());
         settings.model_path.clear();
+        settings.correction_engine = "cloud".into();
+        assert!(settings.validate().is_err());
+        settings.correction_engine = "apple-foundation".into();
+        assert!(settings.validate().is_ok());
         settings.version = 2;
         assert!(settings.validate().is_err());
     }

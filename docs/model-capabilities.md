@@ -31,3 +31,5 @@ Linuxでは`run-offline-linux.py`のseccompルールがexec・子プロセスに
 ActionsのArtifact `stronger-whisper-*`、`stronger-correction-qwen3-8b-linux-cpu`、`apple-foundation-models-availability` を確認します。Whisperの `report.json` にCER・実行モデル・重みSHA-256、`metal-coverage.json`に未実行理由、手動のMetal評価時は別のレポートを保存します。Qwenの `report.json` に各ケースの結果とMetal未実行の状態、Appleの `report.json` に利用不可理由または実際の生成結果を保存します。AppleのSDK/Xcode/OS情報とランナーのメモリ情報も保存します。
 
 モデルは公式配布の固定リビジョン・容量・SHA-256で照合します。Whisperのエンジンはlarge-v3とturboの両方を`large`と報告するため、正確なバリアントは重みのハッシュで検証します。公証・証明書の対応は引き続き先送りです。
+
+Apple Foundation Modelsを実アプリの最終補正に接続する実験実装と、実機での診断手順は[こちら](apple-foundation-models.md)です。通常CIで生成コードのコンパイルと旧OSへの同梱を検証し、利用可否の診断だけを実推論の成功として扱わない方針を維持します。

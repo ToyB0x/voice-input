@@ -23,6 +23,8 @@
     "allow-correct-transcript",
     "allow-correction-status",
     "allow-copy-correction",
+    "allow-check-foundation-model",
+    "allow-copy-foundation-diagnostics",
     "allow-request-accessibility",
     "allow-model-catalog",
     "allow-model-preparation-status",

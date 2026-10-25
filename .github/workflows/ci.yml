@@ -21,8 +21,13 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
+  foundation:
+    name: Apple model runtime
+    uses: ./.github/workflows/apple-foundation.yml
+
   macos:
     name: macOS app
+    needs: foundation
     uses: ./.github/workflows/macos-app.yml
     with:
       full_integration: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_integration) }}
