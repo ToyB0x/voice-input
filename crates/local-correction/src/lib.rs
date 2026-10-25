@@ -134,17 +134,49 @@ fn literal_boundary(c: char) -> bool {
         || "。、，．！？「」『』（）・：；…“”‘’【】［］｛｝〈〉《》".contains(c)
 }
 fn is_kana(c: char) -> bool {
-    ('ぁ'..='ゖ').contains(&c) || ('ァ'..='ヺ').contains(&c) || ('ｦ'..='ﾟ').contains(&c) || c == 'ー'
+    ('\u{3040}'..='\u{309f}').contains(&c)
+        || ('\u{30a0}'..='\u{30ff}').contains(&c)
+        || ('\u{31f0}'..='\u{31ff}').contains(&c)
+        || ('ｦ'..='ﾟ').contains(&c)
 }
 
 fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'static str> {
     let source = normalized(original);
     let candidate = normalized(candidate);
+    // Explicit copular negatives are not lexical ない. Preserve their count
+    // while allowing contracted/expanded forms of the same negation.
+    let copular_count = |text: &str, forms: &[&str]| {
+        forms
+            .iter()
+            .map(|form| text.matches(form).count())
+            .sum::<usize>()
+    };
+    if copular_count(
+        &candidate,
+        &["ではない", "じゃない", "でない", "でいない", "ではいない"],
+    ) < copular_count(&source, &["ではない", "じゃない"])
+    {
+        return Err("correction changed a negation target");
+    }
     for marker in ["ない", "ません"] {
-        // Marker counts also protect repeated negatives when a phonetic
-        // stem is too ambiguous for literal target matching.
-        let mut fragments = std::collections::BTreeSet::from([marker.to_owned()]);
+        // Bare ない can be lexical (うらない, おこないません). Do not
+        // count it independently of an identifiable stem. Keep the existing
+        // global presence check and the count of the polite ending ません.
+        let mut fragments = std::collections::BTreeSet::new();
+        if marker == "ません" {
+            fragments.insert(marker.to_owned());
+        }
         for (index, _) in original.match_indices(marker) {
+            // In 行ないません / 行ないます, ない is part of the verb's
+            // spelling before a polite ending, not another negation.
+            let tail = &original[index + marker.len()..];
+            if marker == "ない"
+                && ["ます", "ませ", "まし"]
+                    .iter()
+                    .any(|ending| tail.starts_with(ending))
+            {
+                continue;
+            }
             // Keep clause boundaries until the stem is extracted. A filler
             // before a comma is not the target of a following bare negation.
             let clause = original[..index]
@@ -171,6 +203,7 @@ fn preserve_negation_targets(original: &str, candidate: &str) -> Result<(), &'st
 
 // These are literal, bounded checks, not Japanese morphological analysis.
 // Topic extraction deliberately declines long/ambiguous fragments.
+const MAX_CONTRAST_TARGET_CHARS: usize = 40;
 fn subject_term(text: &str) -> String {
     let prefix = text.trim_end_matches(literal_boundary);
     let clause = prefix.rsplit(literal_boundary).next().unwrap_or("");
@@ -187,7 +220,7 @@ fn subject_term(text: &str) -> String {
         }
     }
     let result = normalized(value);
-    if result.chars().count() > 40 {
+    if result.chars().count() > MAX_CONTRAST_TARGET_CHARS {
         String::new()
     } else {
         result
@@ -199,21 +232,179 @@ fn canonical_contrast(text: &str) -> String {
         .replace("じゃなく", "ではなく")
         .replace("でなく", "ではなく")
 }
+fn contrast_prefixes(text: &str) -> Vec<&str> {
+    ["ではなく", "じゃなく", "でなく"]
+        .into_iter()
+        .flat_map(|marker| text.match_indices(marker).map(|(index, _)| &text[..index]))
+        .collect()
+}
+// Keep original word boundaries while locating the normalized marker. This
+// also handles formatting inside the marker (では なく) without adding slots.
+fn normalized_contrast_prefixes(text: &str) -> Vec<&str> {
+    let mut compact = String::new();
+    let mut positions = Vec::new();
+    for (index, c) in text.char_indices() {
+        if let Some(c) = significant_char(c) {
+            positions.extend(std::iter::repeat_n(index, c.len_utf8()));
+            compact.push(c);
+        }
+    }
+    let mut prefixes = Vec::new();
+    for marker in ["ではなく", "じゃなく", "でなく"] {
+        for (index, _) in compact.match_indices(marker) {
+            prefixes.push(&text[..positions[index]]);
+        }
+    }
+    prefixes
+}
+
+// A formatted name may contain spaces. Consider trailing word groups as
+// alternative spellings of ONE marker occurrence, keeping the existing bound.
+fn candidate_contrast_forms(prefix: &str) -> Vec<String> {
+    let mut forms = vec![subject_term(prefix)];
+    let clause = prefix
+        .rsplit(|c| literal_boundary(c) && !c.is_whitespace())
+        .next()
+        .unwrap_or("");
+    let mut length = 0;
+    for (index, c) in clause.char_indices().rev() {
+        if c.is_whitespace() {
+            forms.push(subject_term(&normalized(&clause[index..])));
+        } else if significant_char(c).is_some() {
+            length += 1;
+            if length > MAX_CONTRAST_TARGET_CHARS {
+                break;
+            }
+        }
+    }
+    if length <= MAX_CONTRAST_TARGET_CHARS {
+        forms.push(subject_term(&normalized(clause)));
+    }
+    forms.retain(|form| !form.is_empty());
+    forms.sort();
+    forms.dedup();
+    forms
+}
+
+fn contrast_targets(text: &str) -> Vec<String> {
+    contrast_prefixes(text)
+        .into_iter()
+        .map(subject_term)
+        .collect()
+}
+
+// Kana can become kanji without changing the intended name. Match only the
+// unchanged non-kana runs, retaining their order and any literal edge. This
+// preserves 東京 in 東京えき and 駅 in とうきょう駅, but does not verify readings.
+fn known_contrast_parts_match(source: &str, candidate: &str) -> bool {
+    let parts: Vec<_> = source
+        .split(is_kana)
+        .filter(|part| !part.is_empty())
+        .collect();
+    if parts.is_empty() {
+        return true;
+    }
+    if source.chars().next().is_some_and(|c| !is_kana(c)) && !candidate.starts_with(parts[0]) {
+        return false;
+    }
+    if source.chars().last().is_some_and(|c| !is_kana(c))
+        && !candidate.ends_with(parts[parts.len() - 1])
+    {
+        return false;
+    }
+    let mut remaining = candidate;
+    for part in parts {
+        let Some(index) = remaining.find(part) else {
+            return false;
+        };
+        remaining = &remaining[index + part.len()..];
+    }
+    true
+}
+
+// Find a distinct candidate for each constrained source target. Reassign an
+// earlier match when necessary; a greedy match can consume the only candidate
+// available to a more specific target. Inputs/targets retain the existing bounds.
+fn assign_contrast_target(
+    source: usize,
+    edges: &[Vec<usize>],
+    owners: &mut [Option<usize>],
+    seen: &mut [bool],
+) -> bool {
+    for &candidate in &edges[source] {
+        if seen[candidate] {
+            continue;
+        }
+        seen[candidate] = true;
+        let previous = owners[candidate];
+        if previous.is_none_or(|other| assign_contrast_target(other, edges, owners, seen)) {
+            owners[candidate] = Some(source);
+            return true;
+        }
+    }
+    false
+}
+
 fn preserve_contrasts(original: &str, candidate: &str) -> Result<(), &'static str> {
     let source = canonical_contrast(original);
-    let candidate = canonical_contrast(candidate);
+    let canonical_candidate = canonical_contrast(candidate);
+    // Formatting and equivalent contrast spellings retain every significant
+    // character. Raw whitespace boundaries must not turn these into rejections.
+    if source == canonical_candidate {
+        return Ok(());
+    }
+    let source_targets = contrast_targets(original);
+    let candidate_targets: Vec<_> = normalized_contrast_prefixes(candidate)
+        .into_iter()
+        .map(|prefix| (candidate_contrast_forms(prefix), normalized(prefix)))
+        .collect();
+    let candidate = canonical_candidate;
     if candidate.matches("ではなく").count() < source.matches("ではなく").count() {
         return Err("correction removed a contrast target");
     }
-    for marker in ["ではなく", "じゃなく", "でなく"] {
-        for (index, _) in original.match_indices(marker) {
-            let target = subject_term(&original[..index]);
-            if !target.is_empty() && !target.chars().all(is_kana) {
-                let fragment = format!("{target}ではなく");
-                if candidate.matches(&fragment).count() < source.matches(&fragment).count() {
-                    return Err("correction removed a contrast target");
-                }
+    let mut edges = Vec::new();
+    for target in &source_targets {
+        if target.is_empty() || target.chars().all(is_kana) {
+            continue;
+        }
+        let mixed = target.chars().any(is_kana);
+        if !mixed {
+            let fragment = format!("{target}ではなく");
+            if candidate.matches(&fragment).count() < source.matches(&fragment).count() {
+                return Err("correction removed a contrast target");
             }
+        }
+        edges.push(
+            candidate_targets
+                .iter()
+                .enumerate()
+                .filter_map(|(index, other)| {
+                    // Reserve literal targets too, so a mixed target cannot
+                    // reuse the candidate required by a known literal target.
+                    let matches = if mixed {
+                        other
+                            .0
+                            .iter()
+                            .any(|form| known_contrast_parts_match(target, form))
+                    } else {
+                        // Use the normalized prefix at this marker, not only
+                        // its last word (GitHub Actions must match GitHubActions).
+                        other.1.ends_with(target)
+                    };
+                    matches.then_some(index)
+                })
+                .collect(),
+        );
+    }
+    let mut owners = vec![None; candidate_targets.len()];
+    for target in 0..edges.len() {
+        if !assign_contrast_target(
+            target,
+            &edges,
+            &mut owners,
+            &mut vec![false; candidate_targets.len()],
+        ) {
+            return Err("correction removed a contrast target");
         }
     }
     Ok(())
@@ -305,21 +496,17 @@ fn comparison_source(text: &str) -> String {
     }
     text
 }
+fn significant_char(c: char) -> Option<char> {
+    let c = if ('！'..='～').contains(&c) {
+        char::from_u32(c as u32 - 0xfee0).unwrap_or(c)
+    } else {
+        c
+    };
+    (!c.is_whitespace() && !c.is_ascii_punctuation() && !"。、！？「」『』（）・：；…".contains(c))
+        .then_some(c)
+}
 fn significant(text: &str) -> Vec<char> {
-    text.chars()
-        .map(|c| {
-            if ('！'..='～').contains(&c) {
-                char::from_u32(c as u32 - 0xfee0).unwrap_or(c)
-            } else {
-                c
-            }
-        })
-        .filter(|c| {
-            !c.is_whitespace()
-                && !c.is_ascii_punctuation()
-                && !"。、！？「」『』（）・：；…".contains(*c)
-        })
-        .collect()
+    text.chars().filter_map(significant_char).collect()
 }
 fn edits(left: &[char], right: &[char]) -> usize {
     let mut previous: Vec<_> = (0..=right.len()).collect();
@@ -521,6 +708,185 @@ mod tests {
             .unwrap();
             assert!(
                 parse_answer(&json, original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+    }
+
+    #[test]
+    fn lexical_nai_conversion_keeps_actual_negations() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for (original, candidate) in [
+            ("うらないはしません", "占いはしません。"),
+            ("おこないません", "行いません。"),
+            ("かないません", "叶いません。"),
+            ("行ないません", "行いません。"),
+            ("行ないますが予約しません", "行いますが予約しません。"),
+            ("行ないましたが予約しません", "行いましたが予約しません。"),
+            ("今日はうらないはしません", "今日は占いはしません。"),
+            ("うらないをおこないません", "占いを行いません。"),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+        for (original, candidate) in [
+            ("予約しない。変更しない", "予約します。変更しない。"),
+            ("予約しない。変更しない", "予約しない。変更します。"),
+            ("削除しない。削除しない", "削除しない。"),
+            ("しません。しません", "しません。"),
+            ("出来ないが変更しません", "出来ますが変更しません。"),
+            (
+                "うらないはしません確認もしません",
+                "占いはします。確認もしません。",
+            ),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_err(),
+                "{original} -> {candidate}"
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_copular_negations_survive_lexical_nai_conversion() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for candidate in [
+            "静かじゃないが変更しません。",
+            "静かでないが変更しません。",
+            "静かではないが変更しません。",
+        ] {
+            assert!(parse_answer(&encode(candidate), "静かではないが変更しません").is_ok());
+        }
+        for (original, candidate) in [
+            ("静かではないが変更しません", "静かですが変更しません。"),
+            ("静かじゃないが変更しません", "静かですが変更しません。"),
+            ("静かではない。安全ではない", "静かです。安全ではない。"),
+        ] {
+            assert!(parse_answer(&encode(candidate), original).is_err());
+        }
+    }
+
+    #[test]
+    fn contrast_name_spacing_does_not_discard_valid_corrections() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for (original, candidate) in [
+            (
+                "GitHubActionsではなくGitLabCIを使用します",
+                "GitHub ActionsではなくGitLab CIを使用します。",
+            ),
+            (
+                "GitHubActionsではなくGitLabCIをしようします",
+                "GitHub ActionsではなくGitLab CIを使用します。",
+            ),
+            (
+                "東京えきではなく大阪駅です",
+                "東京 えきでは なく大阪駅です。",
+            ),
+            (
+                "GitHubActionsではなくGitLabCIをしようします",
+                "GitHub Actionsで は なくGitLab CIを使用します。",
+            ),
+            (
+                "GitHubActionsではなくGitLabCIをしようします",
+                "GitHub Actionsで、はなくGitLab CIを使用します。",
+            ),
+            (
+                "東京えきではなく大阪駅をしようします",
+                "東京 駅では なく大阪駅を使用します。",
+            ),
+            (
+                "対象 GitHubあくしょんではなくGitLabCIをしようします",
+                "対象 GitHub ActionsではなくGitLab CIを使用します。",
+            ),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+        assert!(
+            parse_answer(
+                &encode("東京 駅ではなく大阪です。大阪 空港ではなく京都です。"),
+                "東京駅ではなく大阪です。とうきょう駅ではなく京都です"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn overlapping_contrast_constraints_use_distinct_candidates() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for original in [
+            "東京えきではなく大阪です。とうきょう駅ではなく京都です",
+            "東京駅ではなく大阪です。とうきょう駅ではなく京都です",
+        ] {
+            assert!(
+                parse_answer(
+                    &encode("東京駅ではなく大阪です。大阪空港ではなく京都です。"),
+                    original
+                )
+                .is_err()
+            );
+        }
+        // Both valid targets remain when a formatter reorders whole clauses.
+        assert!(
+            parse_answer(
+                &encode("東京駅ではなく京都です。富士駅ではなく甲府です。"),
+                "ふじ駅ではなく甲府です。東京えきではなく京都です"
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn mixed_script_contrast_keeps_literal_parts() {
+        let encode = |text: &str| serde_json::to_vec(&Answer { text: text.into() }).unwrap();
+        for (original, candidate) in [
+            (
+                "とうきょう駅ではなく大阪駅です",
+                "東京駅ではなく大阪駅です。",
+            ),
+            (
+                "トウキョウ駅じゃなく大阪駅です",
+                "東京駅ではなく大阪駅です。",
+            ),
+            ("東京えきではなく大阪駅です", "東京駅ではなく大阪駅です。"),
+            (
+                "カ\u{3099}ラス駅ではなく大阪駅です",
+                "ガラス駅ではなく大阪駅です。",
+            ),
+            (
+                "東京しぶや駅ではなく大阪駅です",
+                "東京渋谷駅ではなく大阪駅です。",
+            ),
+            (
+                "とうきょう駅ではなく大阪駅です。とうきょう駅ではなく京都駅です",
+                "東京駅ではなく大阪駅です。東京駅ではなく京都駅です。",
+            ),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_ok(),
+                "{original} -> {candidate}"
+            );
+        }
+        for (original, candidate) in [
+            ("とうきょう駅ではなく大阪駅です", "東京ではなく大阪駅です。"),
+            ("東京えきではなく大阪駅です", "大阪駅ではなく東京駅です。"),
+            (
+                "東京しぶや駅ではなく大阪駅です",
+                "渋谷東京駅ではなく大阪駅です。",
+            ),
+            ("とうきょう駅ではなく大阪駅です", "東京駅です。"),
+            ("東京駅ではなく大阪駅です", "大阪駅ではなく東京駅です。"),
+            (
+                "とうきょう駅ではなく大阪駅です。とうきょう駅ではなく京都駅です",
+                "東京駅ではなく大阪駅です。東京ではなく京都駅です。",
+            ),
+        ] {
+            assert!(
+                parse_answer(&encode(candidate), original).is_err(),
                 "{original} -> {candidate}"
             );
         }
