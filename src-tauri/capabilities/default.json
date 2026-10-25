@@ -29,6 +29,17 @@
     "allow-model-catalog",
     "allow-model-preparation-status",
     "allow-prepare-models",
-    "allow-cancel-model-preparation"
+    "allow-cancel-model-preparation",
+    "allow-comparison-models",
+    "allow-comparison-plan",
+    "allow-comparison-status",
+    "allow-start-comparison",
+    "allow-cancel-comparison",
+    "allow-arm-comparison-context",
+    "allow-copy-comparison-result",
+    "allow-update-status",
+    "allow-check-updates",
+    "allow-install-update",
+    "allow-copy-comparison-report"
   ]
 }

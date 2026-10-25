@@ -12,6 +12,10 @@ on:
         description: Run the full macOS permission/audio/OCR/insertion suite
         type: boolean
         default: true
+      release_validation:
+        description: Build installers with a disposable signing key (no publishing)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +25,13 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
+  release-validation:
+    name: Signed release packaging (explicit only)
+    if: github.event_name == 'workflow_dispatch' && inputs.release_validation
+    uses: ./.github/workflows/release-build.yml
+    with:
+      tag: v0.1.1
+
   foundation:
     name: Apple model runtime
     uses: ./.github/workflows/apple-foundation.yml
@@ -81,6 +92,10 @@ jobs:
             --manifest-path crates/local-transcription/Cargo.toml --locked \
             --test offline -- --ignored --nocapture \
             2>&1 | tee "$RUNNER_TEMP/transcription-evidence/api-tests.log"
+          sandbox-exec -p "$policy" python3 scripts/verify-comparison-pcm.py \
+            --binary crates/local-transcription/target/release/compare-transcription \
+            --model "$RUNNER_TEMP/ggml-base.bin" --backend metal \
+            --output "$RUNNER_TEMP/transcription-evidence/comparison-pcm.json"
           for backend in metal cpu; do
             extra=()
             if [[ "$backend" = cpu ]]; then extra=(--cpu); fi

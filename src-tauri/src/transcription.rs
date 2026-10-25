@@ -56,6 +56,9 @@ impl Session {
 }
 
 pub(crate) enum Job {
+    Suspend {
+        reply: mpsc::Sender<()>,
+    },
     Load {
         path: String,
         backend: Backend,
@@ -154,9 +157,19 @@ pub(crate) fn worker(
     std::thread::spawn(move || {
         let mut model: Option<Transcriber> = None;
         for job in rx {
+            if let Job::Suspend { reply } = job {
+                model = None;
+                if let Ok(mut capture) = shared.lock() {
+                    capture.recognition.model_ready = false;
+                    capture.recognition.model_name.clear();
+                }
+                let _ = reply.send(());
+                continue;
+            }
             let (generation, loading) = match &job {
                 Job::Load { generation, .. } => (*generation, true),
                 Job::Recognize { generation, .. } => (*generation, false),
+                Job::Suspend { .. } => unreachable!(),
             };
             let current = shared
                 .lock()
@@ -165,6 +178,7 @@ pub(crate) fn worker(
                 Err("破棄済み".into())
             } else {
                 match job {
+                    Job::Suspend { .. } => unreachable!(),
                     Job::Load { path, backend, .. } => {
                         // Drop the old model first to bound peak memory on replacement.
                         model = None;

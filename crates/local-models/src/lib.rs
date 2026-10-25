@@ -187,6 +187,39 @@ impl Manager {
             })
             .collect()
     }
+    /// Read-only, cancellable verification for local user comparisons. No download or setup-state mutation.
+    pub fn comparison_path(&self, id: &str, cancelled: impl Fn() -> bool) -> Result<PathBuf> {
+        let model = catalog()
+            .into_iter()
+            .find(|m| m.id == id)
+            .ok_or("不明なモデルです。")?;
+        let path = model.path(&self.root);
+        if !model.exists(&self.root) {
+            return Err("モデルを先に準備してください。");
+        }
+        let mut file = File::open(&path).map_err(|_| INVALID)?;
+        let mut digest = Sha256::new();
+        let mut buffer = [0u8; 262144];
+        let mut total = 0u64;
+        loop {
+            if cancelled() {
+                return Err(CANCELLED);
+            }
+            let count = file.read(&mut buffer).map_err(|_| INVALID)?;
+            if count == 0 {
+                break;
+            }
+            total += count as u64;
+            if total > model.bytes {
+                return Err(INVALID);
+            }
+            digest.update(&buffer[..count]);
+        }
+        if total != model.bytes || format!("{:x}", digest.finalize()) != model.identity.sha256 {
+            return Err(INVALID);
+        }
+        Ok(path)
+    }
     pub fn start(&self, ids: Vec<String>, download: bool) -> Result<Status> {
         let all = catalog();
         if ids.is_empty() || ids.len() > 2 {

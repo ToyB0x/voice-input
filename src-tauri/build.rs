@@ -1,5 +1,17 @@
 fn main() {
+    println!("cargo:rerun-if-env-changed=VOICE_INPUT_UPDATER_PUBLIC_KEY");
     let manifest = tauri_build::AppManifest::new().commands(&[
+        "copy_comparison_report",
+        "comparison_models",
+        "comparison_plan",
+        "comparison_status",
+        "start_comparison",
+        "cancel_comparison",
+        "arm_comparison_context",
+        "copy_comparison_result",
+        "update_status",
+        "check_updates",
+        "install_update",
         "model_catalog",
         "model_preparation_status",
         "prepare_models",

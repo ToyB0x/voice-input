@@ -1,3 +1,5 @@
+import { setupComparison, comparisonWorking } from "./comparison";
+import { setupUpdates, updateInstalling } from "./updates";
 import "./styles.css";
 import { setupModels } from "./model-setup";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -146,7 +148,7 @@ function render() {
     ? `録音ショートカット: ${desktop.preferences.shortcut}（登録済み）`
     : "録音ショートカット: 無効または未登録。画面・メニューバーから録音できます。"));
   const recording = snapshot.phase === "recording";
-  const working = snapshot.working;
+  const working = snapshot.working || comparisonWorking() || updateInstalling();
   start.disabled = busy || working || recording || ["denied", "restricted", "unavailable"].includes(snapshot.permission);
   stop.disabled = busy || !recording;
   clear.disabled = busy || (snapshot.recognitionPhase === "discarding") ||
@@ -294,6 +296,9 @@ start.addEventListener("click", () => void action(async () => {
 stop.addEventListener("click", () => void action(() => invoke("stop_recording")));
 clear.addEventListener("click", () => void action(() => invoke("clear_recording")));
 settings.addEventListener("click", () => void action(() => invoke("open_microphone_settings")));
+
+setupComparison();
+setupUpdates();
 
 if (isTauri()) {
   void refresh();

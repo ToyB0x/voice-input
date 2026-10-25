@@ -35,7 +35,7 @@ pub struct FoundationStatus {
     protocol_version: u32,
     framework_imported: bool,
     os_supported: bool,
-    availability: String,
+    pub(crate) availability: String,
     os_major: u32,
     os_minor: u32,
     os_patch: u32,
@@ -93,7 +93,7 @@ impl Corrector {
     fn generation(&self) -> u64 {
         self.epoch.load(Ordering::Acquire)
     }
-    fn status(&self) -> Status {
+    pub(crate) fn status(&self) -> Status {
         self.state
             .lock()
             .map(|s| s.status.clone())
@@ -320,7 +320,7 @@ fn run(
     }
     Ok(report)
 }
-fn child_output(
+pub(crate) fn child_output(
     command: &mut Command,
     input: Vec<u8>,
     epoch: &AtomicU64,
@@ -399,6 +399,13 @@ pub fn correct_transcript(
 ) -> Result<Status, String> {
     // Snapshot before taking preferences or the transcript. Every invalidation
     // must still be current when start atomically publishes its generation.
+    let activity = app.state::<crate::activity::Activity>();
+    let _gate = activity.lock()?;
+    if app.state::<crate::comparison::Comparisons>().working()
+        || app.state::<crate::updater::Updates>().installing()
+    {
+        return Err("比較・更新の終了をお待ちください。".into());
+    }
     let generation = corrector.generation();
     let preferences = crate::desktop::preferences(&app)?;
     // Validate configuration before consuming the one-shot context lease.
@@ -458,7 +465,7 @@ pub fn copy_correction(corrector: tauri::State<'_, Corrector>) -> Result<(), Str
         .map_err(|_| "補正結果をコピーできません。".into())
 }
 
-fn foundation_failure(failure: &serde_json::Value) -> String {
+pub(crate) fn foundation_failure(failure: &serde_json::Value) -> String {
     let reason = failure["reason"].as_str().unwrap_or("");
     let (code, guidance) = match reason {
         "osTooOld" => ("osTooOld", "macOS 26以降が必要です。"),
@@ -512,7 +519,7 @@ fn foundation_failure(failure: &serde_json::Value) -> String {
     };
     format!("Appleモデルの補正を完了できません [{code}]。{guidance} 元の認識結果は保持しています。")
 }
-fn guard_code(reason: Option<&str>) -> &'static str {
+pub(crate) fn guard_code(reason: Option<&str>) -> &'static str {
     match reason {
         Some("correction changed numeric facts") => "guard-numbers",
         Some("correction removed a negation marker" | "correction changed a negation target") => {
@@ -529,7 +536,7 @@ fn guard_code(reason: Option<&str>) -> &'static str {
         _ => "guard-output",
     }
 }
-fn probe_foundation(
+pub(crate) fn probe_foundation(
     helper: &Path,
     epoch: &AtomicU64,
     current: u64,
@@ -571,6 +578,13 @@ pub fn check_foundation_model(
     app: tauri::AppHandle,
     corrector: tauri::State<'_, Corrector>,
 ) -> Result<Status, String> {
+    let activity = app.state::<crate::activity::Activity>();
+    let _gate = activity.lock()?;
+    if app.state::<crate::comparison::Comparisons>().working()
+        || app.state::<crate::updater::Updates>().installing()
+    {
+        return Err("比較・更新の終了をお待ちください。".into());
+    }
     let generation = corrector.generation();
     let helper = app
         .path()

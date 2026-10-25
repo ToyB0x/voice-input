@@ -12,9 +12,12 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+local-comparison = { path = "../crates/local-comparison" }
+
 
 [target.'cfg(target_os = "macos")'.dependencies]
 local-models = { path = "../crates/local-models" }
+tauri-plugin-updater = "2.14"
 tauri-plugin-global-shortcut = "2"
 core-foundation = "0.10"
 cpal = "0.18.2"
@@ -47,3 +50,6 @@ features = ["CFCGTypes"]
 [target.'cfg(target_os = "macos")'.dependencies.objc2-core-graphics]
 version = "0.3"
 features = ["CGImage"]
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }

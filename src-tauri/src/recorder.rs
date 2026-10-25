@@ -57,7 +57,7 @@ pub struct Snapshot {
     permission: &'static str,
     elapsed_ms: u64,
     level: f32,
-    sample_count: usize,
+    pub(crate) sample_count: usize,
     sample_rate: u32,
     error: Option<String>,
     #[serde(flatten)]
@@ -73,6 +73,7 @@ pub(crate) struct Capture {
     pub(crate) insertion_ticket: Option<u64>,
     pub(crate) context_hint: Option<crate::context::Hint>,
     pub(crate) correction_hint: Option<crate::context::Hint>,
+    comparison_hint: Option<crate::context::Hint>,
 }
 
 impl Capture {
@@ -122,9 +123,17 @@ struct Request {
     reply: mpsc::Sender<Result<Snapshot, String>>,
 }
 
+pub(crate) struct ComparisonInput {
+    pub audio: Vec<f32>,
+    pub rate: u32,
+    pub hint: Option<crate::context::Hint>,
+}
+
+#[derive(Clone)]
 pub struct Recorder {
     requests: mpsc::Sender<Request>,
     capture: Arc<Mutex<Capture>>,
+    jobs: mpsc::Sender<transcription::Job>,
 }
 
 impl Recorder {
@@ -132,11 +141,15 @@ impl Recorder {
         inserter: crate::insertion::Inserter,
         context: crate::context::Reader,
         corrector: crate::correction::Corrector,
+        comparisons: crate::comparison::Comparisons,
+        updates: crate::updater::Updates,
+        activity: crate::activity::Activity,
     ) -> Self {
         let (tx, rx) = mpsc::channel::<Request>();
         let capture = Arc::new(Mutex::new(Capture::default()));
         let jobs = transcription::worker(capture.clone(), inserter.clone());
         let shared = capture.clone();
+        let comparison_jobs = jobs.clone();
         std::thread::spawn(move || {
             // The stream stays on its owning thread. Audio callbacks only fill
             // bounded, preallocated memory; IPC never serializes audio samples.
@@ -168,6 +181,20 @@ impl Recorder {
                             Action::Toggle => Action::Start,
                             other => other,
                         };
+                        let gate = activity.lock();
+                        if gate.is_err() {
+                            let _ = request.reply.send(Err("処理状態を確認できません。".into()));
+                            continue;
+                        }
+                        let _gate = gate.unwrap();
+                        if !matches!(&action, Action::Clear)
+                            && (comparisons.working() || updates.installing())
+                        {
+                            let _ = request
+                                .reply
+                                .send(Err("比較または更新の終了をお待ちください。".into()));
+                            continue;
+                        }
                         let result = match action {
                             Action::Toggle => {
                                 unreachable!("toggle is resolved on the stream-owning thread")
@@ -188,10 +215,16 @@ impl Recorder {
                                     c.context_hint = None;
                                     c.correction_hint = None;
                                 }
+                                comparisons.cancel(true);
                                 inserter.cancel();
                                 let ticket = inserter.begin();
                                 context.cancel();
                                 let hint = context.capture();
+                                let comparison_hint = if comparisons.armed() {
+                                    hint.clone()
+                                } else {
+                                    None
+                                };
                                 let correction_hint = if context.retain_for_correction() {
                                     hint.clone()
                                 } else {
@@ -205,6 +238,7 @@ impl Recorder {
                                         insertion_ticket: ticket,
                                         context_hint: hint,
                                         correction_hint,
+                                        comparison_hint,
                                         ..Capture::default()
                                     };
                                 }
@@ -260,12 +294,14 @@ impl Recorder {
                                 })
                             }
                             Action::Clear => {
+                                comparisons.cancel(true);
                                 inserter.cancel();
                                 context.cancel();
                                 drop(stream.take());
                                 if let Ok(mut c) = shared.lock() {
                                     corrector.cancel();
                                     c.audio = None;
+                                    c.comparison_hint = None;
                                     c.insertion_ticket = None;
                                     c.context_hint = None;
                                     c.correction_hint = None;
@@ -292,9 +328,42 @@ impl Recorder {
         Self {
             requests: tx,
             capture,
+            jobs: comparison_jobs,
         }
     }
 
+    pub(crate) fn comparison_input(&self) -> Result<ComparisonInput, String> {
+        let capture = self
+            .capture
+            .lock()
+            .map_err(|_| "録音状態を確認できません。")?;
+        if capture.recognition.working || matches!(capture.phase, Some("recording" | "preparing")) {
+            return Err("録音と文字起こしの終了をお待ちください。".into());
+        }
+        let audio = capture
+            .audio
+            .as_ref()
+            .filter(|a| !a.samples.is_empty())
+            .ok_or("先に比較する音声を録音してください。")?;
+        Ok(ComparisonInput {
+            audio: audio.samples.clone(),
+            rate: audio.sample_rate,
+            hint: capture.comparison_hint.clone(),
+        })
+    }
+    pub(crate) fn clear_comparison_hint(&self) {
+        if let Ok(mut capture) = self.capture.lock() {
+            capture.comparison_hint = None;
+        }
+    }
+    pub(crate) fn suspend_for_comparison(&self) -> Result<(), String> {
+        let (tx, rx) = mpsc::channel();
+        self.jobs
+            .send(transcription::Job::Suspend { reply: tx })
+            .map_err(|_| "音声ワーカーを確認できません。")?;
+        rx.recv_timeout(Duration::from_secs(5))
+            .map_err(|_| "音声モデルの解放を確認できません。".into())
+    }
     pub(crate) fn correction_input(
         &self,
     ) -> Result<(String, Option<crate::context::Hint>), String> {
@@ -480,6 +549,7 @@ mod tests {
             insertion_ticket: None,
             context_hint: None,
             correction_hint: None,
+            comparison_hint: None,
         };
         capture.finish();
         let snapshot = capture.snapshot();

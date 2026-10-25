@@ -1,0 +1,46 @@
+name: Build and publish macOS release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable version to test (v0.1.1). Manual runs only upload Actions artifacts.
+        required: true
+        default: v0.1.1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/release-build.yml
+    with:
+      tag: ${{ github.event.release.tag_name || inputs.tag }}
+    secrets: inherit
+
+  publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release-${{ github.run_id }}
+          path: release-assets
+      - name: Attach installers, signatures and updater manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # Public download URLs require no token in the app. Upload uses only this job's GITHUB_TOKEN.
+          # No --clobber: an existing release must never silently replace a signed artifact.
+          gh release upload "$RELEASE_TAG" release-assets/*

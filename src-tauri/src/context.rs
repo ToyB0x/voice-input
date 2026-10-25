@@ -94,6 +94,7 @@ pub struct Config {
     pub ocr: bool,
     pub whisper: bool,
     pub correction: bool,
+    pub comparison: bool,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -102,12 +103,13 @@ impl Default for Config {
             ocr: false,
             whisper: true,
             correction: false,
+            comparison: false,
         }
     }
 }
 impl Config {
     fn enabled(self) -> bool {
-        (self.ax || self.ocr) && (self.whisper || self.correction)
+        (self.ax || self.ocr) && (self.whisper || self.correction || self.comparison)
     }
 }
 #[derive(Default)]
@@ -129,6 +131,26 @@ pub struct Reader(Arc<(Mutex<Inner>, std::sync::Condvar)>);
 struct Lease {
     epoch: u64,
     reader: Reader,
+}
+#[derive(Clone, Default)]
+pub(crate) struct Sources {
+    pub ax: String,
+    pub ocr: String,
+}
+impl Sources {
+    pub fn for_source(&self, source: &str) -> Option<String> {
+        match source {
+            "none" => Some(String::new()),
+            "ax" if !self.ax.is_empty() => Some(self.ax.clone()),
+            "ocr" if !self.ocr.is_empty() => Some(self.ocr.clone()),
+            "both" if !self.ax.is_empty() && !self.ocr.is_empty() => Some(format!(
+                "入力欄: {}\n画面OCR: {}",
+                bounded(&self.ax, 350),
+                bounded(&self.ocr, 350)
+            )),
+            _ => None,
+        }
+    }
 }
 /// Opaque shared ownership for one recording. No source text enters IPC.
 #[derive(Clone)]
@@ -194,6 +216,42 @@ impl Hint {
         state.message =
             "認識補助: 今回の認識にローカルヒントを使用しました。再試行はヒントなしです。".into();
         Some(combined)
+    }
+    pub(crate) fn comparison_sources(self) -> Sources {
+        let (lock, condition) = &*self.0.reader.0;
+        let Ok(mut state) = lock.lock() else {
+            return Sources::default();
+        };
+        if state.epoch != self.0.epoch || !state.config.comparison {
+            return Sources::default();
+        }
+        if state
+            .evidence
+            .as_ref()
+            .is_some_and(|e| e.pending && !e.sealed)
+        {
+            let Ok(waited) =
+                condition.wait_timeout_while(state, std::time::Duration::from_millis(3200), |s| {
+                    s.epoch == self.0.epoch
+                        && s.evidence.as_ref().is_some_and(|e| e.pending && !e.sealed)
+                })
+            else {
+                return Sources::default();
+            };
+            state = waited.0;
+        }
+        if state.epoch != self.0.epoch || !state.config.comparison {
+            return Sources::default();
+        }
+        let Some(evidence) = state.evidence.as_mut() else {
+            return Sources::default();
+        };
+        evidence.pending = false;
+        evidence.sealed = true;
+        Sources {
+            ax: bounded(&evidence.ax, 768),
+            ocr: bounded(&evidence.ocr, 768),
+        }
     }
     pub fn take(self) -> Option<String> {
         self.text(false)
@@ -261,6 +319,18 @@ impl Reader {
             .into();
             self.0.1.notify_all();
         }
+    }
+    pub(crate) fn set_comparison(&self, enabled: bool) {
+        let config = self
+            .0
+            .0
+            .lock()
+            .map(|state| Config {
+                comparison: enabled,
+                ..state.config
+            })
+            .unwrap_or_default();
+        self.configure(config);
     }
     pub fn cancel(&self) {
         if let Ok(mut state) = self.0.0.lock() {
@@ -406,6 +476,7 @@ mod tests {
         Config {
             ax: true,
             correction: true,
+            comparison: false,
             ..Config::default()
         }
     }
@@ -449,6 +520,7 @@ mod tests {
                     whisper,
                     correction,
                     ocr: false,
+                    comparison: false,
                 });
                 let asr = seed(&reader);
                 let final_stage = asr.clone();
