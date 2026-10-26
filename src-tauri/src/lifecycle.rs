@@ -71,12 +71,12 @@ unsafe extern "C-unwind" fn native_should_terminate(
         .unwrap_or_else(|error| error.into_inner())
         .clone();
     let Some(app) = app else { return 1 }; // NSTerminateNow after native exit.
-    if let Some(lifecycle) = app.try_state::<Lifecycle>() {
-        if lifecycle.ready() {
-            lifecycle.join_worker();
-            diagnostic("exit-ready");
-            return 1;
-        }
+    if let Some(lifecycle) = app.try_state::<Lifecycle>()
+        && lifecycle.ready()
+    {
+        lifecycle.join_worker();
+        diagnostic("exit-ready");
+        return 1;
     }
     // NSTerminateLater preserves macOS logout/shutdown semantics. Reply on the
     // main operation queue only after all native resource owners have ended.
