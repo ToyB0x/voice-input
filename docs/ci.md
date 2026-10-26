@@ -88,6 +88,6 @@ OSキャッシュ・試行順序の影響があり、一定の高速化率は要
 
 ## miseによる開発ツールの導入
 
-通常CIの `mise setup` はLinuxとmacOS 27で`.mise/config.toml`からツールを導入し、Node／pnpm／Python／CMake／Rustの実バージョンとrustfmt／clippyを検査します。導入した環境で固定ロックのpnpm依存導入・UIテスト・frontend buildも実行します。mise本体は公開後48時間以上経過した2026.10.18、ActionはコミットSHAを固定します。
+.mise/config.tomlを使い、通常CIの `mise setup (Linux)` とmacOSアプリのビルドで`.mise/config.toml`からツールを導入し、Node／pnpm／Python／CMake／Rustの実バージョンとrustfmt／clippyを検査します。導入した環境で固定ロックのpnpm依存導入・UIテスト・frontend buildも実行します。mise本体は公開後48時間以上経過した2026.10.18、ActionはコミットSHAを固定します。
 
-既存のアプリ・リリース・モデル評価CIは従来のセットアップを維持し、`.nvmrc`／`packageManager`との一致を依存ポリシーの最初に検査します。Rustはmiseも既存CIも同じ`rust-toolchain.toml`を使います。アプリの依存に対する2日の公開後待機は変更しません。
+macOSアプリCIはmiseのPython・CMake・Rustでネイティブビルドまで検証します。リリース・モデル評価CIは従来のセットアップを維持し、`.nvmrc`／`packageManager`との一致を依存ポリシーの最初に検査します。Rustはmiseも既存CIも同じ`rust-toolchain.toml`を使います。アプリの依存に対する2日の公開後待機は変更しません。
