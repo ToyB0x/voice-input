@@ -81,7 +81,7 @@ def main():
         add('利用先と追加指示を比較する',table(['取得元','利用先','指示','期待語／実行数','補正中央値ms'],route_rows[offset:offset+8])+'<p class="small">時間はこのJSONの実行環境での実測。Qwen重みの再利用は実行方式に依存し、AFM内部のロード時間はOS管理。ASRの同一入力は条件間で共有。</p>')
     # Show observed failures as first-class findings, not just aggregate scores.
     actual=[x for x in rows if x.get('engine')=='none' and x.get('source')=='none']
-    raw_examples=list(dict.fromkeys(x.get('raw','') for x in actual))
+    raw_examples=list(dict.fromkeys(x['raw'] for x in actual if isinstance(x.get('raw'),str)))
     def counts(scene,source,kind='target'):
         value=condition_counts(rows,scene,source,engine,instruction_key,route)
         return f"{value[kind]}/{value['executed']}" if value['executed'] else '未実行'
@@ -89,7 +89,7 @@ def main():
     kana_candidates=[x for x in kana if isinstance(x['result'].get('candidate'),str)]
     kana_changed=sum(x['result']['candidate'].rstrip('。')!=x['input'].rstrip('。') for x in kana_candidates)
     add('今回の実測で分かったこと',
-        '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples))+'</b>。</p>'
+        '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples) or '未取得／失敗（原文はJSONを参照）')+'</b>。</p>'
         '<p>直接テキスト＋ヒント・補正の期待語出現：台風 '+counts('storm','fixture-text')+'、キャンディ '+counts('candy','fixture-text')+'。</p>'
         '<p>画像分類ラベル＋ヒント・補正の期待語出現：台風 '+counts('storm','vision-labels')+'、キャンディ '+counts('candy','vision-labels')+'。逆の文脈での逆語出現：台風 '+counts('storm','mismatched-text','opposite')+'、キャンディ '+counts('candy','mismatched-text','opposite')+'。</p>'
         '<p>かな入力の分離試験：候補取得 '+str(len(kana_candidates))+'/'+str(len(kana))+'件、'+str(kana_changed)+'件で候補の表記が変化（末尾の句点を除く）。変化だけでは正しい漢字変換や意味保持の証明にならない。</p>')

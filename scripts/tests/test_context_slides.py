@@ -46,3 +46,7 @@ class ConclusionsTests(unittest.TestCase):
             source.write_text(json.dumps(report))
             with patch('sys.argv',['slides','--report',str(source),'--output',str(root/'output')]): slides.main()
             self.assertIn('未実行',(root/'output/slides.html').read_text())
+            report['rows']=[dict(scene='storm',source='none',engine='none',instruction='none',route='none',repeat=0,status='error',raw=None,finalText=None)]
+            source.write_text(json.dumps(report))
+            with patch('sys.argv',['slides','--report',str(source),'--output',str(root/'output')]): slides.main()
+            self.assertIn('未取得／失敗',(root/'output/slides.html').read_text())
