@@ -21,7 +21,7 @@ func foundationInteraction(pid: pid_t, output: URL) throws {
     try waitForUI("real Apple helper status", seconds: 20) {
         uiText(root).contains(expectedReason) && uiText(root).contains("framework_imported")
     }
-    try press(uiButton(root, ["Copy Apple model diagnostics"])!)
+    try press(uiButton(root, ["Copy processing diagnostics"])!)
     var diagnostics: [String: Any] = [:]
     try waitForUI("diagnostics copied") {
         guard let value = NSPasteboard.general.string(forType: .string),
@@ -33,7 +33,9 @@ func foundationInteraction(pid: pid_t, output: URL) throws {
     guard let availability = diagnostics["availability"] as? [String: Any],
           NSDictionary(dictionary: availability).isEqual(NSDictionary(dictionary: expected)),
           availability["framework_imported"] as? Bool == true,
-          Set(diagnostics.keys) == Set(["app_version", "diagnostic_version", "selected_engine", "availability", "working", "checking_availability", "last_elapsed_ms", "last_error"]),
+          Set(diagnostics.keys) == Set(["app_version", "diagnostic_version", "selected_engine", "availability", "working", "checking_availability", "last_elapsed_ms", "last_error", "timings", "reuse_model_enabled", "recognition_ms"]),
+          diagnostics["diagnostic_version"] as? Int == 2,
+          diagnostics["reuse_model_enabled"] as? Bool == false,
           resultText(root) == original else { throw SmokeFailure(description: "Unsafe or incomplete Apple model diagnostics") }
     try writeJSON(diagnostics, to: output.appendingPathComponent("diagnostics.json"))
     try interactionScreenshot(output, name: "diagnostics.png")
@@ -41,8 +43,8 @@ func foundationInteraction(pid: pid_t, output: URL) throws {
     try chooseModelOption(root, label: "Correction engine", title: "Qwen3（ローカルGGUF）")
     try press(uiButton(root, ["Save preferences"])!)
     try waitForUI("Qwen engine restored") { uiText(root).contains("設定を保存しました") }
-    try waitForUI("diagnostic controls ready after restore") { uiButton(root, ["Copy Apple model diagnostics"]) != nil }
-    try press(uiButton(root, ["Copy Apple model diagnostics"])!)
+    try waitForUI("diagnostic controls ready after restore") { uiButton(root, ["Copy processing diagnostics"]) != nil }
+    try press(uiButton(root, ["Copy processing diagnostics"])!)
     try waitForUI("Qwen preference actually restored") {
         guard let value = NSPasteboard.general.string(forType: .string), let data = value.data(using: .utf8),
               let current = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }

@@ -11,7 +11,7 @@ use local_correction::{
 };
 use std::{
     ffi::{CStr, c_char, c_void},
-    io::{Read, Write},
+    io::{BufRead, Read, Write},
     num::NonZeroU32,
     sync::atomic::{AtomicU8, AtomicU32, Ordering},
     time::Instant,
@@ -124,8 +124,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::to_writer(std::io::stdout(), &serde_json::json!({"text": text}))?;
         return Ok(());
     }
+    let serving = args.len() == 3 && args[2] == "--serve";
     let comparison = args.len() == 3 && args[2] == "--compare";
-    if !(args.len() == 2 || comparison) || !["cpu", "metal"].contains(&args[1].as_str()) {
+    if !(args.len() == 2 || comparison || serving) || !["cpu", "metal"].contains(&args[1].as_str())
+    {
         return Err(
             "usage: local-correction /absolute/model.gguf cpu|metal (JSON on stdin)".into(),
         );
@@ -134,18 +136,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if !std::path::Path::new(&args[0]).is_absolute() {
         return Err("absolute model path required".into());
     }
-    let mut input = Vec::new();
-    std::io::stdin()
-        .take(MAX_INPUT as u64 + 1)
-        .read_to_end(&mut input)?;
-    if input.len() > MAX_INPUT {
-        return Err("correction input exceeds limit".into());
-    }
-    let request: Request =
-        serde_json::from_slice(&input).map_err(|_| "invalid correction request")?;
-    request.validate()?;
+    let mut input = std::io::stdin().lock();
+    let first = read_request(&mut input, serving)?.ok_or("missing correction request")?;
     let started = Instant::now();
-    if request.transcript.trim().is_empty() {
+    if first.transcript.trim().is_empty() {
         serde_json::to_writer(
             std::io::stdout(),
             &Report {
@@ -155,6 +149,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 offloaded_layers: 0,
                 elapsed_ms: 0,
                 performance: None,
+                model_reused: false,
             },
         )?;
         return Ok(());
@@ -191,6 +186,85 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err(SafeRuntimeError("gpu-offload-mismatch").into());
     }
     performance.model_load_ms = phase_started.elapsed().as_millis() as u64;
+    let mut request = first;
+    let mut reused = false;
+    loop {
+        // Context, KV cache, batch, sampler and request strings are scoped to one
+        // call. Only the backend and model weights survive between requests.
+        let result = infer(
+            &backend,
+            &model,
+            &name,
+            layers,
+            metal,
+            &request,
+            if reused { Instant::now() } else { started },
+            performance,
+            comparison,
+            reused,
+        )?;
+        let mut output = std::io::stdout().lock();
+        serde_json::to_writer(&mut output, &result)?;
+        output.write_all(b"\n")?;
+        output.flush()?;
+        drop(output);
+        drop(result);
+        drop(request);
+        if !serving {
+            break;
+        }
+        let Some(next) = read_request(&mut input, true)? else {
+            break;
+        };
+        request = next;
+        performance = Performance::default();
+        reused = true;
+    }
+    Ok(())
+}
+fn read_request(
+    input: &mut impl BufRead,
+    serving: bool,
+) -> Result<Option<Request>, Box<dyn std::error::Error>> {
+    PHASE.store(0, Ordering::Relaxed);
+    let mut bytes = Vec::new();
+    if serving {
+        input
+            .take(MAX_INPUT as u64 + 1)
+            .read_until(b'\n', &mut bytes)?;
+        if bytes.is_empty() {
+            return Ok(None);
+        }
+        if bytes.last() != Some(&b'\n') {
+            return Err("unterminated request".into());
+        }
+    } else {
+        input.take(MAX_INPUT as u64 + 1).read_to_end(&mut bytes)?;
+    }
+    if bytes.len() > MAX_INPUT {
+        return Err("correction input exceeds limit".into());
+    }
+    let request: Request =
+        serde_json::from_slice(&bytes).map_err(|_| "invalid correction request")?;
+    request.validate()?;
+    if serving && request.transcript.trim().is_empty() {
+        return Err("empty correction request".into());
+    }
+    Ok(Some(request))
+}
+#[allow(clippy::too_many_arguments)]
+fn infer(
+    backend: &LlamaBackend,
+    model: &LlamaModel,
+    name: &str,
+    layers: u32,
+    metal: bool,
+    request: &Request,
+    started: Instant,
+    mut performance: Performance,
+    comparison: bool,
+    reused: bool,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let phase_started = Instant::now();
     PHASE.store(3, Ordering::Relaxed);
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4)) as i32;
@@ -202,7 +276,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .with_n_ubatch(if metal { 64 } else { 128 })
         .with_n_threads(threads)
         .with_n_threads_batch(threads);
-    let mut context = model.new_context(&backend, params)?;
+    let mut context = model.new_context(backend, params)?;
     let vocab = model.vocab();
     let tokens = vocab.tokenize(request.prompt()?.as_bytes(), true, true);
     if tokens.is_empty() || tokens.len() > 3500 {
@@ -227,7 +301,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let generation_started = Instant::now();
     const GRAMMAR: &str = "root ::= \"{\" ws \"\\\"text\\\"\" ws \":\" ws string ws \"}\"\nws ::= [ \\t\\n\\r]*\nstring ::= \"\\\"\" char* \"\\\"\"\nchar ::= [^\"\\\\\\x00-\\x1F] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])";
     let mut sampler = LlamaSampler::chain_simple([
-        LlamaSampler::grammar(&model, GRAMMAR, "root")?,
+        LlamaSampler::grammar(model, GRAMMAR, "root")?,
         LlamaSampler::greedy(),
     ]);
     let mut generated = Vec::new();
@@ -274,15 +348,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         if candidate.len() > MAX_OUTPUT || candidate.contains('\0') {
             return Err("invalid comparison candidate".into());
         }
-        serde_json::to_writer(
-            std::io::stdout(),
-            &serde_json::json!({
-                "candidate": candidate, "accepted": result.is_ok(), "reason": result.err(),
-                "backend": args[1], "offloaded_layers": layers,
-                "elapsed_ms": started.elapsed().as_millis() as u64,
-            }),
-        )?;
-        return Ok(());
+        return Ok(serde_json::json!({
+            "candidate": candidate, "accepted": result.is_ok(), "reason": result.err(),
+            "backend": if metal { "metal" } else { "cpu" }, "offloaded_layers": layers,
+            "elapsed_ms": started.elapsed().as_millis() as u64,
+        }));
     }
     let text = result.map_err(Rejection)?;
     performance.validation_ms = phase_started.elapsed().as_millis() as u64;
@@ -290,17 +360,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     PHASE.store(7, Ordering::Relaxed);
     let report = Report {
         text,
-        model: name,
-        backend: args[1].clone(),
+        model: name.to_owned(),
+        backend: if metal { "metal".into() } else { "cpu".into() },
         offloaded_layers: layers,
         elapsed_ms: started.elapsed().as_millis() as u64,
         performance: Some(performance),
+        model_reused: reused,
     };
-    let mut output = std::io::stdout().lock();
-    serde_json::to_writer(&mut output, &report)?;
-    output.write_all(b"\n")?;
-    Ok(())
+    Ok(serde_json::to_value(report)?)
 }
+
 #[cfg(feature = "ci-diagnostics")]
 fn main() {
     // Keep native exception diagnostics observable for public CI fixtures.
@@ -344,5 +413,29 @@ fn main() {
             "Local correction failed. Check model, backend and input limits; the original transcript is unchanged."
         );
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn framed_requests_are_bounded_and_independent() {
+        let mut input = std::io::Cursor::new(
+            b"{\"transcript\":\"first\",\"context\":\"old\"}\n{\"transcript\":\"second\"}\n",
+        );
+        let first = read_request(&mut input, true).unwrap().unwrap();
+        assert_eq!(first.context, "old");
+        let second = read_request(&mut input, true).unwrap().unwrap();
+        assert_eq!(second.transcript, "second");
+        assert!(second.context.is_empty());
+        assert!(read_request(&mut input, true).unwrap().is_none());
+        for bytes in [
+            b"{\"transcript\":\"missing newline\"}".to_vec(),
+            vec![b'x'; MAX_INPUT + 1],
+            b"{\"transcript\":\"\"}\n".to_vec(),
+        ] {
+            assert!(read_request(&mut std::io::Cursor::new(bytes), true).is_err());
+        }
     }
 }

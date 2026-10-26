@@ -347,7 +347,7 @@ impl Recorder {
                             }
                             Action::LoadModel(path, backend) => {
                                 shared.lock().map_err(|e| e.to_string()).and_then(|mut c| {
-                                    corrector.cancel();
+                                    corrector.cancel_and_release_model();
                                     transcription::load(&mut c.recognition, path, &backend, &jobs)
                                 })
                             }
@@ -368,7 +368,7 @@ impl Recorder {
                                 context.cancel();
                                 drop(stream.take());
                                 if let Ok(mut c) = shared.lock() {
-                                    corrector.cancel();
+                                    corrector.cancel_and_release_model();
                                     c.audio = None;
                                     c.input_device = None;
                                     c.comparison_hint = None;
@@ -481,6 +481,7 @@ impl Recorder {
         }
     }
     pub(crate) fn suspend_for_comparison(&self) -> Result<(), String> {
+        self.corrector.release_model();
         let (tx, rx) = mpsc::channel();
         self.jobs
             .send(transcription::Job::Suspend { reply: tx })

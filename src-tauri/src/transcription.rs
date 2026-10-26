@@ -15,6 +15,7 @@ use std::{
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Session {
     pub model_ready: bool,
+    pub recognition_ms: Option<u64>,
     pub model_path: String,
     pub model_name: String,
     pub model_bytes: u64,
@@ -33,6 +34,7 @@ impl Session {
     pub fn clear_result(&mut self) {
         self.generation += 1;
         self.transcript = None;
+        self.recognition_ms = None;
         self.final_text = None;
         self.final_source.clear();
         self.recognition_error = None;
@@ -243,6 +245,7 @@ pub(crate) fn worker(
                 .lock()
                 .is_ok_and(|c| c.recognition.generation == generation);
             let mut automatic = None;
+            let recognition_started = std::time::Instant::now();
             let result = if !current {
                 Err("破棄済み".into())
             } else {
@@ -289,6 +292,13 @@ pub(crate) fn worker(
                     .is_ok_and(|c| c.recognition.generation != generation)
             {
                 model = None;
+            }
+            if !loading
+                && let Ok(mut capture) = shared.lock()
+                && capture.recognition.generation == generation
+            {
+                capture.recognition.recognition_ms =
+                    Some(recognition_started.elapsed().as_millis() as u64);
             }
             finish_recognition(
                 &shared, &inserter, &corrector, &closing, generation, result, loading, automatic,
@@ -445,6 +455,7 @@ print(json.dumps(dict(text=p['transcript']+'。',model='fixture',backend='cpu',o
         std::fs::write(&runtime, script).unwrap();
         std::fs::set_permissions(&runtime, std::fs::Permissions::from_mode(0o700)).unwrap();
         let config = crate::correction::AutomaticConfig {
+            reuse_model: false,
             runtime,
             model: root.join("model.gguf").to_string_lossy().into(),
             backend: "cpu".into(),
