@@ -22,6 +22,8 @@ pub(crate) struct Session {
     pub working: bool,
     pub recognition_phase: String,
     pub transcript: Option<String>,
+    pub final_text: Option<String>,
+    pub final_source: String,
     pub recognition_error: Option<String>,
     #[serde(skip)]
     generation: u64,
@@ -31,10 +33,42 @@ impl Session {
     pub fn clear_result(&mut self) {
         self.generation += 1;
         self.transcript = None;
+        self.final_text = None;
+        self.final_source.clear();
         self.recognition_error = None;
         // In-flight native work cannot be safely killed. Keep controls locked
         // until it releases its PCM; its obsolete result will never be published.
         self.recognition_phase = if self.working { "discarding" } else { "idle" }.into();
+    }
+    pub(crate) fn cancel_automatic(&mut self) {
+        if self.final_source == "correcting" {
+            self.final_source = "cancelled".into();
+            self.final_text = self.transcript.clone();
+        }
+    }
+    // Called while holding Capture, the same lock used by discard/new recording.
+    fn complete_automatic(
+        &mut self,
+        generation: u64,
+        raw: &str,
+        result: Result<String, String>,
+        deliver: impl FnOnce(&str),
+    ) {
+        if generation != self.generation || self.final_source != "correcting" {
+            return;
+        }
+        let text = match result {
+            Ok(text) => {
+                self.final_source = "correction".into();
+                text
+            }
+            Err(_) => {
+                self.final_source = "fallback".into();
+                raw.into()
+            }
+        };
+        self.final_text = Some(text.clone());
+        deliver(&text);
     }
     fn begin(&mut self, phase: &str) -> u64 {
         self.clear_result();
@@ -49,7 +83,11 @@ impl Session {
             return;
         }
         match result {
-            Ok(text) if !loading => self.transcript = Some(text),
+            Ok(text) if !loading => {
+                self.final_text = Some(text.clone());
+                self.final_source = "whisper".into();
+                self.transcript = Some(text);
+            }
             Ok(name) => {
                 self.model_ready = true;
                 self.model_name = name;
@@ -59,6 +97,11 @@ impl Session {
     }
 }
 
+pub(crate) struct AutomaticRequest {
+    config: crate::correction::AutomaticConfig,
+    generation: u64,
+    hint: Option<crate::context::Hint>,
+}
 pub(crate) enum Job {
     Shutdown,
     Suspend {
@@ -74,6 +117,7 @@ pub(crate) enum Job {
         hint: Option<crate::context::Hint>,
         rate: u32,
         generation: u64,
+        automatic: Option<AutomaticRequest>,
     },
 }
 
@@ -115,7 +159,12 @@ pub(crate) fn load(
     )
 }
 
-pub(crate) fn recognize(capture: &mut Capture, tx: &mpsc::Sender<Job>) -> Result<(), String> {
+pub(crate) fn recognize(
+    capture: &mut Capture,
+    tx: &mpsc::Sender<Job>,
+    config: Option<crate::correction::AutomaticConfig>,
+    corrector: &crate::correction::Corrector,
+) -> Result<(), String> {
     if capture.recognition.working {
         return Err("処理が終わるまでお待ちください。".into());
     }
@@ -130,6 +179,11 @@ pub(crate) fn recognize(capture: &mut Capture, tx: &mpsc::Sender<Job>) -> Result
     let (audio, rate) = (audio.samples.clone(), audio.sample_rate);
     let generation = capture.recognition.begin("transcribing");
     let hint = capture.context_hint.take();
+    let automatic = config.map(|config| AutomaticRequest {
+        config,
+        generation: corrector.generation(),
+        hint: capture.correction_hint.take(),
+    });
     send(
         &mut capture.recognition,
         tx,
@@ -138,6 +192,7 @@ pub(crate) fn recognize(capture: &mut Capture, tx: &mpsc::Sender<Job>) -> Result
             hint,
             rate,
             generation,
+            automatic,
         },
     )
 }
@@ -158,6 +213,7 @@ pub(crate) fn worker(
     shared: Arc<Mutex<Capture>>,
     inserter: crate::insertion::Inserter,
     closing: Arc<AtomicBool>,
+    corrector: crate::correction::Corrector,
 ) -> (mpsc::Sender<Job>, std::thread::JoinHandle<()>) {
     let (tx, rx) = mpsc::channel();
     let handle = std::thread::spawn(move || {
@@ -183,6 +239,7 @@ pub(crate) fn worker(
             let current = shared
                 .lock()
                 .is_ok_and(|c| c.recognition.generation == generation);
+            let mut automatic = None;
             let result = if !current {
                 Err("破棄済み".into())
             } else {
@@ -204,45 +261,278 @@ pub(crate) fn worker(
                         }
                     }
                     Job::Recognize {
-                        audio, rate, hint, ..
-                    } => prepare_audio(&audio, rate)
-                        .and_then(|pcm| {
-                            let hint = hint.and_then(|hint| hint.take());
-                            model
-                                .as_ref()
-                                .expect("model readiness is worker-owned")
-                                .transcribe_with_hint(&pcm, hint.as_deref())
-                        })
-                        .map_err(|e| format!("文字起こしに失敗しました: {e}")),
-                }
-            };
-            if let Ok(mut capture) = shared.lock() {
-                if loading && capture.recognition.generation != generation {
-                    model = None;
-                }
-                if !loading && let Some(ticket) = capture.insertion_ticket.take() {
-                    if capture.recognition.generation == generation
-                        && let Ok(text) = &result
-                    {
-                        // Serialize with discard: no detached or retried AX write.
-                        inserter.apply(ticket, text);
-                    } else {
-                        inserter.cancel();
+                        audio,
+                        rate,
+                        hint,
+                        automatic: request,
+                        ..
+                    } => {
+                        automatic = request;
+                        prepare_audio(&audio, rate)
+                            .and_then(|pcm| {
+                                let hint = hint.and_then(|hint| hint.take());
+                                model
+                                    .as_ref()
+                                    .expect("model readiness is worker-owned")
+                                    .transcribe_with_hint(&pcm, hint.as_deref())
+                            })
+                            .map_err(|e| format!("文字起こしに失敗しました: {e}"))
                     }
                 }
-                if !loading && !result.as_ref().is_ok_and(|text| !text.trim().is_empty()) {
-                    capture.correction_hint = None;
-                }
-                capture.recognition.finish(generation, result, loading);
+            };
+            if loading
+                && shared
+                    .lock()
+                    .is_ok_and(|c| c.recognition.generation != generation)
+            {
+                model = None;
             }
+            finish_recognition(
+                &shared, &inserter, &corrector, &closing, generation, result, loading, automatic,
+            );
         }
     });
     (tx, handle)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn finish_recognition(
+    shared: &Arc<Mutex<Capture>>,
+    inserter: &crate::insertion::Inserter,
+    corrector: &crate::correction::Corrector,
+    closing: &Arc<AtomicBool>,
+    generation: u64,
+    result: Result<String, String>,
+    loading: bool,
+    automatic: Option<AutomaticRequest>,
+) {
+    let Ok(mut capture) = shared.lock() else {
+        return;
+    };
+    let current = capture.recognition.generation == generation && !closing.load(Ordering::Acquire);
+    let ticket = if !loading {
+        capture.insertion_ticket.take()
+    } else {
+        None
+    };
+    if !loading && !result.as_ref().is_ok_and(|text| !text.trim().is_empty()) {
+        capture.correction_hint = None;
+    }
+    capture
+        .recognition
+        .finish(generation, result.clone(), loading);
+    if !current || loading {
+        return;
+    }
+    let Ok(raw) = result else {
+        inserter.cancel();
+        return;
+    };
+    if let Some(request) = automatic.filter(|_| !raw.trim().is_empty()) {
+        capture.recognition.final_text = None;
+        capture.recognition.final_source = "correcting".into();
+        let target = shared.clone();
+        let delivery = inserter.clone();
+        let stopping = closing.clone();
+        let fallback = raw.clone();
+        let validity = corrector.clone();
+        let expected = request.generation.wrapping_add(1);
+        if let Err(error) = corrector.start_automatic(
+            request.config,
+            raw,
+            request.hint,
+            request.generation,
+            move |result| {
+                if let Ok(mut capture) = target.lock()
+                    && !stopping.load(Ordering::Acquire)
+                    && validity.generation() == expected
+                {
+                    capture
+                        .recognition
+                        .complete_automatic(generation, &fallback, result, |text| {
+                            if let Some(ticket) = ticket {
+                                delivery.apply(ticket, text);
+                            }
+                        });
+                }
+            },
+        ) {
+            capture.recognition.cancel_automatic();
+            capture.recognition.recognition_error = Some(error);
+            inserter.cancel();
+        }
+    } else if let Some(ticket) = ticket {
+        inserter.apply(ticket, &raw);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn final_delivery_is_once_and_invalidations_never_fall_back_to_insertion() {
+        for success in [true, false] {
+            let mut session = Session::default();
+            let generation = session.begin("transcribing");
+            session.finish(generation, Ok("raw".into()), false);
+            session.final_source = "correcting".into();
+            session.final_text = None;
+            let mut writes = Vec::new();
+            session.complete_automatic(
+                generation,
+                "raw",
+                if success {
+                    Ok("corrected".into())
+                } else {
+                    Err("guard rejected".into())
+                },
+                |text| writes.push(text.to_owned()),
+            );
+            session.complete_automatic(generation, "raw", Ok("duplicate".into()), |text| {
+                writes.push(text.to_owned())
+            });
+            assert_eq!(writes, vec![if success { "corrected" } else { "raw" }]);
+            assert_eq!(session.transcript.as_deref(), Some("raw"));
+        }
+        for discard in [true, false] {
+            let mut session = Session::default();
+            let generation = session.begin("transcribing");
+            session.finish(generation, Ok("raw".into()), false);
+            session.final_source = "correcting".into();
+            if discard {
+                session.clear_result();
+            } else {
+                session.cancel_automatic();
+            }
+            session.complete_automatic(generation, "raw", Err("late failure".into()), |_| {
+                panic!("cancelled result was inserted")
+            });
+            assert_ne!(session.final_source, "fallback");
+        }
+    }
+    #[test]
+    fn automatic_worker_waits_preserves_raw_and_cancels_delayed_helpers() {
+        use std::{
+            os::unix::fs::PermissionsExt,
+            time::{Duration, Instant},
+        };
+        let root =
+            std::env::temp_dir().join(format!("voice-automatic-pipeline-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let runtime = root.join("local-correction");
+        let started = root.join("started");
+        let release = root.join("release");
+        let script = format!(
+            r#"#!/usr/bin/python3
+import json,sys,time,os
+from pathlib import Path
+p=json.load(sys.stdin)
+assert p['context']==''
+Path({started:?}).write_text(str(os.getpid()))
+while not Path({release:?}).exists():time.sleep(0.01)
+if p['transcript']=='reject':
+ print(json.dumps(dict(error='rejected')))
+ sys.exit(1)
+print(json.dumps(dict(text=p['transcript']+'。',model='fixture',backend='cpu',offloaded_layers=0,elapsed_ms=1)))
+"#,
+            started = started.to_str().unwrap(),
+            release = release.to_str().unwrap()
+        );
+        std::fs::write(&runtime, script).unwrap();
+        std::fs::set_permissions(&runtime, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let config = crate::correction::AutomaticConfig {
+            runtime,
+            model: root.join("model.gguf").to_string_lossy().into(),
+            backend: "cpu".into(),
+        };
+        let corrector = crate::correction::Corrector::new();
+        let inserter = crate::insertion::Inserter::new();
+        let closing = Arc::new(AtomicBool::new(false));
+        let shared = Arc::new(Mutex::new(Capture::default()));
+        let wait = |ready: &dyn Fn() -> bool| {
+            let start = Instant::now();
+            while !ready() && start.elapsed() < Duration::from_secs(5) {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(ready());
+        };
+        for (raw, mode) in [
+            ("accepted", "success"),
+            ("reject", "fallback"),
+            ("old", "discard"),
+            ("settings", "settings"),
+            ("exit", "exit"),
+        ] {
+            let _ = std::fs::remove_file(&started);
+            let _ = std::fs::remove_file(&release);
+            let generation = shared.lock().unwrap().recognition.begin("transcribing");
+            let request = AutomaticRequest {
+                config: config.clone(),
+                generation: corrector.generation(),
+                hint: None,
+            };
+            finish_recognition(
+                &shared,
+                &inserter,
+                &corrector,
+                &closing,
+                generation,
+                Ok(raw.into()),
+                false,
+                Some(request),
+            );
+            wait(&|| {
+                std::fs::read_to_string(&started)
+                    .ok()
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .is_some()
+            });
+            {
+                let capture = shared.lock().unwrap();
+                assert_eq!(capture.recognition.transcript.as_deref(), Some(raw));
+                assert!(capture.recognition.final_text.is_none());
+            }
+            if mode == "discard" {
+                let mut c = shared.lock().unwrap();
+                corrector.cancel();
+                c.recognition.clear_result();
+            }
+            if mode == "settings" {
+                let mut c = shared.lock().unwrap();
+                corrector.cancel();
+                c.recognition.cancel_automatic();
+            }
+            if mode == "exit" {
+                closing.store(true, Ordering::Release);
+                corrector.cancel();
+            }
+            std::fs::write(&release, "ready").unwrap();
+            wait(&|| !corrector.status().working);
+            let capture = shared.lock().unwrap();
+            match mode {
+                "success" => {
+                    assert_eq!(
+                        capture.recognition.final_text.as_deref(),
+                        Some("accepted。")
+                    );
+                    assert_eq!(capture.recognition.final_source, "correction");
+                }
+                "fallback" => {
+                    assert_eq!(capture.recognition.final_text.as_deref(), Some("reject"));
+                    assert_eq!(capture.recognition.final_source, "fallback");
+                }
+                "discard" => assert!(
+                    capture.recognition.transcript.is_none()
+                        && capture.recognition.final_text.is_none()
+                ),
+                "settings" => assert_eq!(capture.recognition.final_source, "cancelled"),
+                _ => assert!(capture.recognition.final_text.is_none()),
+            }
+        }
+        corrector.shutdown();
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn discard_drops_stale_text_and_locks_until_worker_finishes() {
         let mut session = Session {

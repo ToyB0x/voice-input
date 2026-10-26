@@ -159,6 +159,9 @@ pub struct Recorder {
     jobs: mpsc::Sender<transcription::Job>,
     closing: Arc<AtomicBool>,
     workers: Arc<Mutex<Option<Workers>>>,
+    automatic_config: Arc<Mutex<Option<crate::correction::AutomaticConfig>>>,
+    corrector: crate::correction::Corrector,
+    inserter: crate::insertion::Inserter,
 }
 struct Workers {
     recording: std::thread::JoinHandle<()>,
@@ -175,10 +178,18 @@ impl Recorder {
         activity: crate::activity::Activity,
     ) -> Self {
         let (tx, rx) = mpsc::channel::<Request>();
+        let automatic_config = Arc::new(Mutex::new(None));
+        let worker_config = automatic_config.clone();
+        let owner_corrector = corrector.clone();
+        let owner_inserter = inserter.clone();
         let capture = Arc::new(Mutex::new(Capture::default()));
         let closing = Arc::new(AtomicBool::new(false));
-        let (jobs, transcription_worker) =
-            transcription::worker(capture.clone(), inserter.clone(), closing.clone());
+        let (jobs, transcription_worker) = transcription::worker(
+            capture.clone(),
+            inserter.clone(),
+            closing.clone(),
+            corrector.clone(),
+        );
         let shared = capture.clone();
         let comparison_jobs = jobs.clone();
         let worker_closing = closing.clone();
@@ -201,7 +212,12 @@ impl Recorder {
                             && c.phase == Some("recorded")
                             && c.recognition.model_ready
                         {
-                            let _ = transcription::recognize(&mut c, &jobs);
+                            let _ = transcription::recognize(
+                                &mut c,
+                                &jobs,
+                                worker_config.lock().ok().and_then(|config| config.clone()),
+                                &corrector,
+                            );
                         } else if c.phase == Some("error") {
                             context.cancel();
                             c.context_hint = None;
@@ -303,7 +319,15 @@ impl Recorder {
                                         c.finish();
                                         if c.phase == Some("recorded") && c.recognition.model_ready
                                         {
-                                            let _ = transcription::recognize(&mut c, &jobs);
+                                            let _ = transcription::recognize(
+                                                &mut c,
+                                                &jobs,
+                                                worker_config
+                                                    .lock()
+                                                    .ok()
+                                                    .and_then(|config| config.clone()),
+                                                &corrector,
+                                            );
                                         } else if c.phase == Some("error") {
                                             context.cancel();
                                             c.context_hint = None;
@@ -325,7 +349,12 @@ impl Recorder {
                             Action::Transcribe => {
                                 shared.lock().map_err(|e| e.to_string()).and_then(|mut c| {
                                     corrector.cancel();
-                                    transcription::recognize(&mut c, &jobs)
+                                    transcription::recognize(
+                                        &mut c,
+                                        &jobs,
+                                        worker_config.lock().ok().and_then(|config| config.clone()),
+                                        &corrector,
+                                    )
                                 })
                             }
                             Action::Clear => {
@@ -363,6 +392,9 @@ impl Recorder {
         });
         Self {
             requests: tx,
+            automatic_config,
+            corrector: owner_corrector,
+            inserter: owner_inserter,
             capture,
             jobs: comparison_jobs,
             closing,
@@ -399,6 +431,16 @@ impl Recorder {
         crate::lifecycle::diagnostic("audio-workers-stopped");
     }
 
+    pub(crate) fn configure_automatic(&self, config: Option<crate::correction::AutomaticConfig>) {
+        if let Ok(mut capture) = self.capture.lock() {
+            self.corrector.cancel();
+            self.inserter.cancel();
+            capture.recognition.cancel_automatic();
+            if let Ok(mut stored) = self.automatic_config.lock() {
+                *stored = config;
+            }
+        }
+    }
     pub(crate) fn ensure_comparison_idle(&self) -> Result<(), String> {
         let capture = self
             .capture
@@ -724,4 +766,24 @@ pub fn copy_transcript(recorder: tauri::State<'_, Recorder>) -> Result<(), Strin
     arboard::Clipboard::new()
         .and_then(|mut clipboard| clipboard.set_text(text))
         .map_err(|e| format!("コピーできませんでした: {e}"))
+}
+
+#[tauri::command]
+pub fn copy_final_transcript(recorder: tauri::State<'_, Recorder>) -> Result<(), String> {
+    let capture = recorder
+        .capture
+        .lock()
+        .map_err(|_| "認識状態を確認できません。")?;
+    if capture.recognition.working || capture.recognition.final_source == "correcting" {
+        return Err("最終結果の確定をお待ちください。".into());
+    }
+    let text = capture
+        .recognition
+        .final_text
+        .as_deref()
+        .filter(|text| !text.is_empty())
+        .ok_or("コピーできる最終結果がありません。")?;
+    arboard::Clipboard::new()
+        .and_then(|mut clipboard| clipboard.set_text(text))
+        .map_err(|_| "最終結果をコピーできません。".into())
 }

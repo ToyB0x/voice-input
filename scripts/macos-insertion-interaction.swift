@@ -8,6 +8,8 @@ func insertionCheckbox(_ root: AXUIElement) -> AXUIElement? {
 func configureInsertion(_ root: AXUIElement) throws {
     try waitForUI("restored model", seconds: 120) { uiText(root).contains("モデル準備完了") }
     try typeField(root, label: "Recording shortcut", value: "Control+Alt+KeyV")
+    if let automatic = axElements(root).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Automatic correction after transcription") }),
+       (axValue(automatic,kAXValueAttribute) as? NSNumber)?.intValue == 1 {try press(automatic)}
     if let context = contextCheckbox(root), (axValue(context, kAXValueAttribute) as? NSNumber)?.intValue == 1 {
         try press(context)
     }
@@ -262,6 +264,18 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
     if scenario == "insertion-grant" { try grantInsertionPermission(voice, output: output); return }
     let shouldBeTrusted = scenario == "insertion"
     try waitForUI("product accessibility trust") { uiText(voice).contains(shouldBeTrusted ? "アクセシビリティ許可済み" : "アクセシビリティ未許可") }
+    var originalCorrectionPath = ""
+    if !shouldBeTrusted {
+        guard let automatic = axElements(voice).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Automatic correction after transcription") }),
+              let pathField = axElements(voice).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXTextField" && axText($0).contains("Correction model path") })
+        else {throw SmokeFailure(description:"Automatic correction controls missing")}
+        originalCorrectionPath = axValue(pathField,kAXValueAttribute) as? String ?? ""
+        try chooseModelOption(voice,label:"Correction engine",title:"Qwen3（ローカルGGUF）")
+        try typeField(voice,label:"Correction model path",value:"/missing/voice-input-auto-correction.gguf")
+        try press(automatic)
+        try press(uiButton(voice,["Save preferences"])!)
+        try waitForUI("automatic correction saved") {uiText(voice).contains("設定を保存しました")}
+    }
     try hideInsertionWindow(voice)
     if !shouldBeTrusted {
         let (_, field) = try openTextTarget(output, name: "denied-target", text: "denied-sentinel")
@@ -271,10 +285,17 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
         guard axValue(field, kAXValueAttribute) as? String == "denied-sentinel", uiText(voice).contains("アクセシビリティが未許可") else {
             throw SmokeFailure(description: "Untrusted product wrote to target or did not explain denial")
         }
+        try waitForUI("automatic correction failure keeps original final output") {uiText(voice).contains("補正が失敗・棄却されたためWhisper原文を使用")}
+        guard let final = axElements(voice).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXTextArea" && axText($0).contains("Final text") }),
+              axValue(final,kAXValueAttribute) as? String == resultText(voice)
+        else {throw SmokeFailure(description:"Automatic fallback lost the raw transcript")}
+        try typeField(voice,label:"Correction model path",value:originalCorrectionPath)
+        if let automatic = axElements(voice).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Automatic correction after transcription") }) {try press(automatic)}
+        try press(uiButton(voice,["Save preferences"])!)
         // Register the product in System Settings through its real prompt API.
         try press(uiButton(voice, ["Request accessibility permission"])!)
         try interactionScreenshot(output, name: "accessibility-request.png")
-        try writeJSON(["status": "passed", "productTrusted": false, "targetUnchanged": true, "resultRetained": true], to: output.appendingPathComponent("interaction.json"))
+        try writeJSON(["status": "passed", "productTrusted": false, "targetUnchanged": true, "resultRetained": true, "automaticCorrectionFallback":true], to: output.appendingPathComponent("interaction.json"))
         return
     }
     var passed = [String]()

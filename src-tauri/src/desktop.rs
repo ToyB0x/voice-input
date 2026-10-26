@@ -172,6 +172,7 @@ pub fn save_preferences(
     preferences.shortcut = preferences.shortcut.trim().into();
     preferences.validate()?;
     let new = parse_shortcut(&preferences.shortcut)?;
+    let automatic = crate::correction::AutomaticConfig::from_preferences(&app, &preferences)?;
     let mut inner = desktop.inner.lock().map_err(|e| e.to_string())?;
     let old = inner.registered;
     if new != old
@@ -203,13 +204,8 @@ pub fn save_preferences(
     context_config.comparison = app.state::<crate::comparison::Comparisons>().armed();
     app.state::<crate::context::Reader>()
         .configure(context_config);
-    if inner.preferences.correction_model_path != preferences.correction_model_path
-        || inner.preferences.correction_engine != preferences.correction_engine
-        || inner.preferences.correction_backend != preferences.correction_backend
-        || inner.preferences.context_config() != preferences.context_config()
-    {
-        app.state::<crate::correction::Corrector>().cancel();
-    }
+    // Serialize invalidation with final delivery, even when saving unchanged settings.
+    app.state::<Recorder>().configure_automatic(automatic);
     inner.preferences = preferences;
     inner.registered = new;
     inner.error = None;
@@ -263,6 +259,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .configure(preferences.auto_insert);
     app.state::<crate::context::Reader>()
         .configure(preferences.context_config());
+    app.state::<Recorder>().configure_automatic(
+        crate::correction::AutomaticConfig::from_preferences(app.handle(), &preferences)?,
+    );
     let state = MenuItem::with_id(app, "voice-state", "待機", false, None::<&str>)?;
     let toggle_item =
         MenuItem::with_id(app, "voice-toggle", "録音を開始 / 停止", true, None::<&str>)?;
@@ -293,10 +292,13 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             if let Ok(snapshot) = handle.state::<Recorder>().status() {
                 let label = if snapshot.phase == "recording" {
                     "録音中"
-                } else if snapshot.recognition.working {
+                } else if snapshot.recognition.working
+                    || snapshot.recognition.final_source == "correcting"
+                {
                     "処理中"
                 } else if snapshot.phase == "error"
                     || snapshot.recognition.recognition_error.is_some()
+                    || snapshot.recognition.final_source == "fallback"
                     || {
                         let status = handle.state::<crate::insertion::Inserter>().status();
                         status.enabled && status.state == "blocked"

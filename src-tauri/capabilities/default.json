@@ -16,6 +16,7 @@
     "allow-load-model",
     "allow-transcribe-recording",
     "allow-copy-transcript",
+    "allow-copy-final-transcript",
     "allow-desktop-status",
     "allow-save-preferences",
     "allow-insertion-status",

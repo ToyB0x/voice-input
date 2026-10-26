@@ -118,6 +118,7 @@ fn main() {
             recorder::load_model,
             recorder::transcribe_recording,
             recorder::copy_transcript,
+            recorder::copy_final_transcript,
             desktop::desktop_status,
             desktop::save_preferences,
             insertion::insertion_status,

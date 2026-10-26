@@ -1,4 +1,4 @@
-//! Explicit local preview. Raw ASR is never overwritten or automatically inserted.
+//! Local correction: explicit preview or an opt-in automatic completion. Raw ASR is retained.
 use serde::{Deserialize, Serialize};
 use std::{
     io::{Read, Write},
@@ -39,6 +39,35 @@ pub struct FoundationStatus {
     os_major: u32,
     os_minor: u32,
     os_patch: u32,
+}
+#[derive(Clone)]
+pub(crate) struct AutomaticConfig {
+    pub runtime: std::path::PathBuf,
+    pub model: String,
+    pub backend: String,
+}
+impl AutomaticConfig {
+    pub fn from_preferences(
+        app: &tauri::AppHandle,
+        preferences: &crate::settings::Preferences,
+    ) -> Result<Option<Self>, String> {
+        if !preferences.auto_correction {
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            runtime: app
+                .path()
+                .resource_dir()
+                .map_err(|_| "補正ヘルパーを確認できません。")?
+                .join("bin/local-correction"),
+            model: preferences.correction_model_path.clone(),
+            backend: if preferences.correction_engine == "apple-foundation" {
+                "foundation".into()
+            } else {
+                preferences.correction_backend.clone()
+            },
+        }))
+    }
 }
 enum Outcome {
     Correction(Report),
@@ -90,7 +119,7 @@ impl Corrector {
             let _ = handle.join();
         }
     }
-    fn generation(&self) -> u64 {
+    pub(crate) fn generation(&self) -> u64 {
         self.epoch.load(Ordering::Acquire)
     }
     pub(crate) fn status(&self) -> Status {
@@ -133,6 +162,40 @@ impl Corrector {
                 epoch,
             )
             .map(Outcome::Correction)
+        })
+    }
+    pub(crate) fn start_automatic(
+        &self,
+        config: AutomaticConfig,
+        raw: String,
+        hint: Option<crate::context::Hint>,
+        generation: u64,
+        completion: impl FnOnce(Result<String, String>) + Send + 'static,
+    ) -> Result<Status, String> {
+        // Reserve the existing cancellable worker before any fallible model operation.
+        // A cancelled/busy reservation never falls back to insertion.
+        self.start_job(generation, false, move |owner, epoch| {
+            let context = hint.and_then(|hint| hint.correction()).unwrap_or_default();
+            let result = run(
+                &config.runtime,
+                &config.model,
+                &config.backend,
+                &raw,
+                &context,
+                &owner.epoch,
+                epoch,
+            );
+            if owner.epoch.load(Ordering::Acquire) == epoch
+                && !owner.closing.load(Ordering::Acquire)
+            {
+                completion(
+                    result
+                        .as_ref()
+                        .map(|report| report.text.clone())
+                        .map_err(Clone::clone),
+                );
+            }
+            result.map(Outcome::Correction)
         })
     }
     fn start_job(
@@ -276,7 +339,8 @@ fn run(
         ));
     }
     let report: Report = serde_json::from_slice(&output).map_err(|_| failed())?;
-    if report.text.len() > 8192
+    if report.text.trim().is_empty()
+        || report.text.len() > 8192
         || report.text.contains('\0')
         || report.backend != backend
         || (backend == "metal" && report.offloaded_layers == 0)
