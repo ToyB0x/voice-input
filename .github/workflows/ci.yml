@@ -4,14 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron: '7 18 * * 0'
   workflow_dispatch:
     inputs:
       full_integration:
         description: Run the full macOS permission/audio/OCR/insertion suite
         type: boolean
-        default: true
+        default: false
       release_validation:
         description: Build installers with a disposable signing key (no publishing)
         type: boolean
@@ -46,7 +44,7 @@ jobs:
     needs: [foundation, dependency-policy]
     uses: ./.github/workflows/macos-app.yml
     with:
-      full_integration: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_integration) }}
+      full_integration: ${{ github.event_name == 'workflow_dispatch' && inputs.full_integration }}
 
   transcription:
     name: Offline Japanese ASR (macOS)
