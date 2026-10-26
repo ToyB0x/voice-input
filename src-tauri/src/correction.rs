@@ -74,6 +74,7 @@ pub(crate) struct AutomaticConfig {
     pub model: String,
     pub backend: String,
     pub reuse_model: bool,
+    pub instruction: String,
 }
 impl AutomaticConfig {
     pub fn from_preferences(
@@ -91,6 +92,7 @@ impl AutomaticConfig {
                 .join("bin/local-correction"),
             model: preferences.correction_model_path.clone(),
             reuse_model: preferences.reuse_correction_model,
+            instruction: preferences.correction_instruction.clone(),
             backend: if preferences.correction_engine == "apple-foundation" {
                 "foundation".into()
             } else {
@@ -181,6 +183,7 @@ impl Corrector {
         hint: Option<crate::context::Hint>,
         generation: u64,
         reuse_model: bool,
+        instruction: String,
     ) -> Result<Status, String> {
         if backend != "foundation"
             && (model.is_empty()
@@ -204,6 +207,7 @@ impl Corrector {
                 &backend,
                 &raw,
                 &context,
+                &instruction,
                 &worker.epoch,
                 epoch,
             );
@@ -232,6 +236,7 @@ impl Corrector {
                 &config.backend,
                 &raw,
                 &context,
+                &config.instruction,
                 &owner.epoch,
                 epoch,
             );
@@ -344,7 +349,9 @@ fn run(
     epoch: &AtomicU64,
     current: u64,
 ) -> Result<Report, String> {
-    run_with_pool(None, runtime, model, backend, raw, context, epoch, current)
+    run_with_pool(
+        None, runtime, model, backend, raw, context, "", epoch, current,
+    )
 }
 #[allow(clippy::too_many_arguments)]
 fn run_with_pool(
@@ -354,14 +361,18 @@ fn run_with_pool(
     backend: &str,
     raw: &str,
     context: &str,
+    instruction: &str,
     epoch: &AtomicU64,
     current: u64,
 ) -> Result<Report, String> {
     let failed = || {
         "ローカル補正に失敗しました。モデル・実行方式・入力上限を確認してください。元の認識結果は保持しています。".to_owned()
     };
-    let input = serde_json::to_vec(&serde_json::json!({"transcript":raw,"context":context}))
-        .map_err(|_| failed())?;
+    let mut payload = serde_json::json!({"transcript":raw,"context":context});
+    if !instruction.is_empty() {
+        payload["instruction"] = instruction.into();
+    }
+    let input = serde_json::to_vec(&payload).map_err(|_| failed())?;
     if input.len() > 24_576 {
         return Err("補正入力が上限を超えました。元の認識結果は保持しています。".into());
     }
@@ -611,6 +622,7 @@ pub fn correct_transcript(
         hint,
         generation,
         preferences.reuse_correction_model,
+        preferences.correction_instruction,
     )
 }
 #[tauri::command]
@@ -807,6 +819,7 @@ mod tests {
                     None,
                     generation,
                     false,
+                    String::new(),
                 )
                 .is_err()
         );
@@ -848,6 +861,7 @@ for count, line in enumerate(sys.stdin, 1):
                 model: runtime.to_string_lossy().into_owned(),
                 backend: "cpu".into(),
                 reuse_model: true,
+                instruction: String::new(),
             };
             let (tx, rx) = std::sync::mpsc::channel();
             corrector
@@ -913,6 +927,7 @@ time.sleep(30)
             model: runtime.to_string_lossy().into_owned(),
             backend: "cpu".into(),
             reuse_model: true,
+            instruction: String::new(),
         };
         let (tx, rx) = std::sync::mpsc::channel();
         corrector

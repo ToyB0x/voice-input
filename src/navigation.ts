@@ -40,7 +40,7 @@ const saveBar = document.querySelector<HTMLElement>('.save-bar')!;
 const preferenceMessage = document.querySelector<HTMLElement>('#preferences-message')!;
 const unsaved = document.querySelector<HTMLElement>('#unsaved-status')!;
 let dirty = false;
-const preferenceFields = new Set(['model-path', 'backend', 'shortcut', 'auto-insert', 'auto-correction', 'reuse-correction-model', 'show-overlay', 'recognition-context', 'ocr-context', 'whisper-context', 'correction-context', 'correction-engine', 'correction-model-path', 'correction-backend']);
+const preferenceFields = new Set(['model-path', 'backend', 'shortcut', 'auto-insert', 'auto-correction', 'reuse-correction-model', 'show-overlay', 'recognition-context', 'ocr-context', 'whisper-context', 'correction-context', 'correction-instruction', 'correction-engine', 'correction-model-path', 'correction-backend']);
 function updateSaveBar() {
   saveBar.hidden = !dirty && !['models', 'settings'].includes(current);
   unsaved.textContent = dirty ? '未保存の変更があります。' : '';

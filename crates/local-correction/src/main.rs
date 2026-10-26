@@ -113,6 +113,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let request: Validation =
             serde_json::from_slice(&input).map_err(|_| "invalid validation request")?;
         Request {
+            instruction: String::new(),
             transcript: request.transcript.clone(),
             context: String::new(),
         }
@@ -124,8 +125,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::to_writer(std::io::stdout(), &serde_json::json!({"text": text}))?;
         return Ok(());
     }
-    let serving = args.len() == 3 && args[2] == "--serve";
-    let comparison = args.len() == 3 && args[2] == "--compare";
+    let serving = args.len() == 3 && ["--serve", "--serve-compare"].contains(&args[2].as_str());
+    let comparison =
+        args.len() == 3 && ["--compare", "--serve-compare"].contains(&args[2].as_str());
     if !(args.len() == 2 || comparison || serving) || !["cpu", "metal"].contains(&args[1].as_str())
     {
         return Err(
@@ -350,6 +352,7 @@ fn infer(
         }
         return Ok(serde_json::json!({
             "candidate": candidate, "accepted": result.is_ok(), "reason": result.err(),
+            "model_reused": reused,
             "backend": if metal { "metal" } else { "cpu" }, "offloaded_layers": layers,
             "elapsed_ms": started.elapsed().as_millis() as u64,
         }));

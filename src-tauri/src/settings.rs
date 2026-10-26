@@ -27,6 +27,8 @@ pub struct Preferences {
     pub correction_context: bool,
     #[serde(default)]
     pub correction_model_path: String,
+    #[serde(default)]
+    pub correction_instruction: String,
     #[serde(default = "default_correction_engine")]
     pub correction_engine: String,
     #[serde(default = "default_correction_backend")]
@@ -57,6 +59,7 @@ impl Default for Preferences {
             whisper_context: true,
             correction_context: false,
             correction_model_path: String::new(),
+            correction_instruction: String::new(),
             correction_engine: default_correction_engine(),
             correction_backend: "metal".into(),
         }
@@ -70,6 +73,9 @@ impl Preferences {
             || !["qwen3", "apple-foundation"].contains(&self.correction_engine.as_str())
         {
             return Err("設定のバージョンまたは実行方式が不正です。".into());
+        }
+        if self.correction_instruction.len() > 1536 || self.correction_instruction.contains('\0') {
+            return Err("補正の追加指示はUTF-8で1536バイト以内・NULなしにしてください。".into());
         }
         if self.correction_model_path.len() > 4096
             || (!self.correction_model_path.is_empty()
@@ -164,6 +170,7 @@ mod tests {
         assert_eq!(legacy.correction_engine, "qwen3");
         let settings = Preferences {
             correction_engine: "apple-foundation".into(),
+            correction_instruction: "自然な漢字表記にしてください。".into(),
             auto_correction: true,
             reuse_correction_model: true,
             show_overlay: true,

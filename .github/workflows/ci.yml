@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      context_evidence:
+        description: Measure Japanese homophone context and generate slides (explicit only)
+        type: boolean
+        default: false
       full_integration:
         description: Run the full macOS permission/audio/OCR/insertion suite
         type: boolean
@@ -27,6 +31,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
+  context-evidence:
+    name: Japanese context evidence (explicit only)
+    if: github.event_name == 'workflow_dispatch' && inputs.context_evidence
+    uses: ./.github/workflows/context-evidence.yml
+
   dependency-policy:
     name: Dependency publication dates
     uses: ./.github/workflows/dependency-policy.yml
