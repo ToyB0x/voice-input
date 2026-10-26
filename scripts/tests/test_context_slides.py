@@ -50,3 +50,36 @@ class ConclusionsTests(unittest.TestCase):
             source.write_text(json.dumps(report))
             with patch('sys.argv',['slides','--report',str(source),'--output',str(root/'output')]): slides.main()
             self.assertIn('未取得／失敗',(root/'output/slides.html').read_text())
+
+    def test_device_snapshot_matches_original_diagnostics_and_keeps_interpretation_scoped(self):
+        import json, hashlib, tempfile
+        from unittest.mock import patch
+        root=Path(__file__).resolve().parents[2]/'evaluation/context-evidence/device-afm-v0.0.2'
+        report=json.loads((root/'results.json').read_text())
+        original=json.loads((root/'diagnostic.json').read_text())
+        proof=json.loads((root/'provenance.json').read_text())
+        self.assertEqual(hashlib.sha256((root/'results.json').read_bytes()).hexdigest(),proof['reportSha256'])
+        self.assertEqual(hashlib.sha256((root/'diagnostic.json').read_bytes()).hexdigest(),proof['originalDiagnosticSha256'])
+        self.assertEqual(report['reportId'],original['reportId'])
+        self.assertEqual(len(report['rows']),original['totalRows'])
+        for key in ['appVersion','binaries','sourceRevision','foundation','models','fixture']:
+            self.assertEqual(report[key],original[key])
+        text_keys={'raw','candidate','finalText','context','candidateExcerpt','candidateTruncated'}
+        for row,before in zip(report['rows'],original['rows']):
+            self.assertEqual({k:v for k,v in row.items() if k not in text_keys},{k:v for k,v in before.items() if k not in text_keys})
+            if row.get('candidateTruncated'):
+                self.assertIsNone(row['candidate'])
+                self.assertTrue(row['candidateExcerpt'])
+            if row.get('finalText') is not None:
+                expected=row['expected'] in row['finalText'];opposite=row['opposite'] in row['finalText']
+                judgment='target' if expected and not opposite else 'opposite' if opposite and not expected else 'undetermined'
+                self.assertEqual(row['judgment'],judgment)
+        with tempfile.TemporaryDirectory() as temp:
+            with patch('sys.argv',['slides','--report',str(root/'results.json'),'--output',temp]): slides.main()
+            html=(Path(temp)/'slides.html').read_text()
+            self.assertIn('音声・Whisperなし',html)
+            self.assertNotIn('文脈なしのWhisper原文',html)
+            self.assertNotIn('全候補・棄却・時間は同梱',html)
+            self.assertIn('元の全文JSONや省略部分を再構成したものではない',html)
+            self.assertIn('期待語の一致と、意味・文体の保持は別',html)
+            self.assertIn('長い候補の抜粋 2件',html)

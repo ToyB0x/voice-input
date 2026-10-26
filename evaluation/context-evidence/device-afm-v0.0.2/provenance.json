@@ -1,0 +1,10 @@
+{
+  "reportSha256": "fca743c6ff94925316b5a540a17485ef209ebdec93378aac73b2d7fac29ac03c",
+  "sourceRevision": "e396a5c2b5ebfdb7a1e2b6495dee77513a3c2780",
+  "runUrl": "利用者のMac実機 / v0.0.2 / 同一reportIdの診断JSONと本文付き共有",
+  "measurementOrigin": "user-provided",
+  "derived": true,
+  "reportId": "device-18e2364919fedba0-1",
+  "originalDiagnosticSha256": "10056c37d4903669c5b69c1001ae3ebe8087d2ae45ddb9fb1a2ffa412d1df821",
+  "note": "Metadata/timings/judgments retained from the user-uploaded text-free JSON. Short text/context/control outputs transcribed from the same reportId full-text follow-up. Long rejected candidates are labelled excerpts with candidate:null, never reconstructed from repetition counts. This file is an analysis snapshot, not the original full export."
+}

@@ -1,0 +1,1419 @@
+{
+  "appVersion": "0.0.2",
+  "binaries": {
+    "apple-foundation-correction": "a910b31d50e1ea8158095702ca5778a485ae1e551f023ad22c2ae6a9b55ca0b8",
+    "compare-transcription": "a303c9333db6b121eafed753e6dd857909a34a59caf3ed9b040be38e901c657a",
+    "context-lab-native": "499ecebbe579f4c229c003becc41559682793bc1d79e34cc1a26060a237d6317",
+    "local-correction": "17afa8c3459dc705e2a2f7dcc21514afe36d6d7e64eec740366a78e0fdaf9741"
+  },
+  "captures": {
+    "candy": {
+      "ax": {
+        "reason": "accessibility-not-trusted",
+        "status": "unavailable",
+        "text": ""
+      },
+      "imageOCR": {
+        "attempts": [
+          {
+            "cpuOnly": false,
+            "status": "completed"
+          }
+        ],
+        "elapsedMs": 32,
+        "status": "completed",
+        "text": ""
+      },
+      "ocr": {
+        "attempts": [
+          {
+            "cpuOnly": false,
+            "status": "completed"
+          }
+        ],
+        "elapsedMs": 311,
+        "status": "completed",
+        "text": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を\n紹介します。"
+      },
+      "renderMethod": "Controlled AppKit window bitmap; no ScreenCaptureKit or other app capture",
+      "scene": "candy",
+      "vision": {
+        "elapsedMs": 29,
+        "labels": [
+          {
+            "confidence": 0.96142578125,
+            "label": "candy"
+          },
+          {
+            "confidence": 0.96142578125,
+            "label": "food"
+          },
+          {
+            "confidence": 0.96142578125,
+            "label": "lollipop"
+          },
+          {
+            "confidence": 0.0126953125,
+            "label": "candy_other"
+          },
+          {
+            "confidence": 0.005903036333620548,
+            "label": "celebration"
+          },
+          {
+            "confidence": 0.005859375,
+            "label": "candy_cane"
+          },
+          {
+            "confidence": 0.004080111626535654,
+            "label": "dessert"
+          },
+          {
+            "confidence": 0.0036667303647845984,
+            "label": "baked_goods"
+          }
+        ],
+        "status": "completed"
+      },
+      "fixtureText": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。"
+    },
+    "storm": {
+      "ax": {
+        "reason": "accessibility-not-trusted",
+        "status": "unavailable",
+        "text": ""
+      },
+      "imageOCR": {
+        "attempts": [
+          {
+            "cpuOnly": false,
+            "status": "completed"
+          }
+        ],
+        "elapsedMs": 32,
+        "status": "completed",
+        "text": ""
+      },
+      "ocr": {
+        "attempts": [
+          {
+            "cpuOnly": false,
+            "status": "completed"
+          }
+        ],
+        "elapsedMs": 21739,
+        "status": "completed",
+        "text": "気象情報。大型の台風が接近中。強い雨と風、降水量の増\n加に注意してください。"
+      },
+      "renderMethod": "Controlled AppKit window bitmap; no ScreenCaptureKit or other app capture",
+      "scene": "storm",
+      "vision": {
+        "elapsedMs": 36,
+        "labels": [
+          {
+            "confidence": 0.31103846430778503,
+            "label": "liquid"
+          },
+          {
+            "confidence": 0.31103846430778503,
+            "label": "water"
+          },
+          {
+            "confidence": 0.31103515625,
+            "label": "ocean"
+          },
+          {
+            "confidence": 0.31103515625,
+            "label": "water_body"
+          },
+          {
+            "confidence": 0.052030421793460846,
+            "label": "outdoor"
+          },
+          {
+            "confidence": 0.052029192447662354,
+            "label": "sky"
+          },
+          {
+            "confidence": 0.051025390625,
+            "label": "cloudy"
+          },
+          {
+            "confidence": 0.027099609375,
+            "label": "blue_sky"
+          }
+        ],
+        "status": "completed"
+      },
+      "fixtureText": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。"
+    }
+  },
+  "completed": true,
+  "execution": "local-app",
+  "fixture": {
+    "assetHashes": {
+      "candy.png": "82c365294bddf58f9262b9d419fb01991fcba61c7fdbe07968b2f7ac29eaf043",
+      "storm.png": "2ceb1b888d56a31b8c68b56267085fa7df89a7393828995e2b05a031a3a49e4e"
+    },
+    "audioHashFormat": "f32le-16000-mono",
+    "audioMs": 0,
+    "audioSha256": null,
+    "hashes": {},
+    "origin": "text",
+    "utterance": "あめがすごいですね",
+    "voice": "音声なし"
+  },
+  "foundation": {
+    "availability": "available",
+    "framework_imported": true,
+    "os_major": 27,
+    "os_minor": 0,
+    "os_patch": 1,
+    "os_supported": true,
+    "protocol_version": 1
+  },
+  "includesText": true,
+  "inputKind": "text",
+  "instructions": {
+    "custom": "発話の意味を保ち、参考文脈に合う一般的な漢字表記へ整えてください。参考文脈にある内容を本文へ追加せず、数字・人名・否定の意味を保持してください。",
+    "default": ""
+  },
+  "kanaControls": [
+    {
+      "engine": "apple-foundation",
+      "input": "あめがすごいですね",
+      "instruction": "default",
+      "scene": "storm",
+      "result": {
+        "accepted": false,
+        "candidate": null,
+        "candidateExcerpt": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。」} 支援者: Apple。質問には回答しません。質問には回答しません。",
+        "candidateTruncated": true,
+        "elapsed_ms": 8758,
+        "reason": "guard-content-loss",
+        "status": "rejected"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "あめがすごいですね",
+      "instruction": "default",
+      "scene": "candy",
+      "result": {
+        "accepted": false,
+        "candidate": null,
+        "candidateExcerpt": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。あめがすごいですね。」} 支援者: Apple。 支援者: Apple。",
+        "candidateTruncated": true,
+        "elapsed_ms": 8699,
+        "reason": "guard-content-loss",
+        "status": "rejected"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "あめがすごいですね",
+      "instruction": "custom",
+      "scene": "storm",
+      "result": {
+        "accepted": true,
+        "candidate": "雨が強いです",
+        "elapsed_ms": 792,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "あめがすごいですね",
+      "instruction": "custom",
+      "scene": "candy",
+      "result": {
+        "accepted": true,
+        "candidate": "飴がすごいですね",
+        "elapsed_ms": 748,
+        "reason": "",
+        "status": "accepted"
+      }
+    }
+  ],
+  "kind": "device-context-lab",
+  "limits": [
+    "Controlled built-in scenes; not other-app screen capture or a direct-image VLM.",
+    "One audio reused across both scenes; repeats are not independent speech samples.",
+    "Expected-word selection and guard acceptance do not guarantee meaning preservation.",
+    "Inference uses local model APIs; app-mode does not install a process network sandbox.",
+    "No audio, image bytes, device name or model paths are included in copied JSON.",
+    "This is an analysis snapshot from user-provided evidence, not an independently rerun experiment. Long rejected candidates retain labelled excerpts only.",
+    "Text-only correction: no audio, Whisper, ASR accuracy or hint-versus-correction comparison was measured.",
+    "One repeat per condition on one Mac; cold/warm timing and instruction order are not controlled."
+  ],
+  "machine": "aarch64",
+  "models": {
+    "afmSessionReuse": false,
+    "correction": "Apple Foundation Models",
+    "qwenBackend": "metal",
+    "qwenModelReuse": false,
+    "qwenSha256": null,
+    "speech": "なし（かな原文）",
+    "speechBackend": "none",
+    "speechSha256": null
+  },
+  "networkDenied": false,
+  "partCount": 3,
+  "partIndex": null,
+  "phase": "done",
+  "platform": "macos",
+  "presentationEngine": "apple-foundation",
+  "presentationInstruction": "custom",
+  "preservationControls": [
+    {
+      "engine": "apple-foundation",
+      "input": "明日の午後3時に会議室Bで10人の会議をします",
+      "instruction": "default",
+      "finalText": "明日の午後3時に会議室Bで10人の会議をします",
+      "result": {
+        "accepted": true,
+        "candidate": "明日の午後3時に会議室Bで10人の会議をします",
+        "elapsed_ms": 772,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "この変更は本番には適用しないでください",
+      "instruction": "default",
+      "finalText": "この変更は本番には適用しないでください",
+      "result": {
+        "accepted": true,
+        "candidate": "この変更は本番には適用しないでください",
+        "elapsed_ms": 772,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "金曜日ではなく木曜日にお願いします",
+      "instruction": "default",
+      "finalText": "金曜日ではなく木曜日にお願いします",
+      "result": {
+        "accepted": true,
+        "candidate": "金曜日ではなく木曜日にお願いします",
+        "elapsed_ms": 746,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "田中さんへ資料を送ります",
+      "instruction": "default",
+      "finalText": "田中さんへ資料を送ります",
+      "result": {
+        "accepted": true,
+        "candidate": "田中さんへ資料を送ります",
+        "elapsed_ms": 712,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "えーまず資料を確認して次に田中さんへ連絡します",
+      "instruction": "default",
+      "finalText": "まず資料を確認して次に田中さんへ連絡します",
+      "result": {
+        "accepted": true,
+        "candidate": "まず資料を確認して次に田中さんへ連絡します",
+        "elapsed_ms": 786,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "持ち物はパソコンと充電器と社員証です",
+      "instruction": "default",
+      "finalText": "持ち物はパソコンと充電器と社員証です",
+      "result": {
+        "accepted": true,
+        "candidate": "持ち物はパソコンと充電器と社員証です",
+        "elapsed_ms": 750,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "明日の午後3時に会議室Bで10人の会議をします",
+      "instruction": "custom",
+      "finalText": "明日の午後3時に会議室Bで10人の会議をします",
+      "result": {
+        "accepted": false,
+        "candidate": "明日の午後三時に会議室Bで十人の会議をします",
+        "elapsed_ms": 883,
+        "reason": "guard-numbers",
+        "status": "rejected"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "この変更は本番には適用しないでください",
+      "instruction": "custom",
+      "finalText": "この変更は本番には適用しないでください",
+      "result": {
+        "accepted": true,
+        "candidate": "この変更は本番には適用しないでください",
+        "elapsed_ms": 825,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "金曜日ではなく木曜日にお願いします",
+      "instruction": "custom",
+      "finalText": "金曜日ではなく木曜日にお願いします",
+      "result": {
+        "accepted": true,
+        "candidate": "金曜日ではなく木曜日にお願いします",
+        "elapsed_ms": 772,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "田中さんへ資料を送ります",
+      "instruction": "custom",
+      "finalText": "田中さんへ資料を送ります",
+      "result": {
+        "accepted": true,
+        "candidate": "田中さんへ資料を送ります",
+        "elapsed_ms": 735,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "えーまず資料を確認して次に田中さんへ連絡します",
+      "instruction": "custom",
+      "finalText": "まず資料を確認して次に田中さんへ連絡します",
+      "result": {
+        "accepted": true,
+        "candidate": "まず資料を確認して次に田中さんへ連絡します",
+        "elapsed_ms": 766,
+        "reason": "",
+        "status": "accepted"
+      }
+    },
+    {
+      "engine": "apple-foundation",
+      "input": "持ち物はパソコンと充電器と社員証です",
+      "instruction": "custom",
+      "finalText": "持ち物はパソコンと充電器と社員証です",
+      "result": {
+        "accepted": true,
+        "candidate": "持ち物はパソコンと充電器と社員証です",
+        "elapsed_ms": 845,
+        "reason": "",
+        "status": "accepted"
+      }
+    }
+  ],
+  "reportId": "device-18e2364919fedba0-1",
+  "rowOffset": 0,
+  "rows": [
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "雨",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "none",
+      "scene": "storm",
+      "source": "none",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 1571,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "none",
+      "scene": "storm",
+      "source": "none",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "あめがすごいですね",
+      "context": "",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 710,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "custom",
+      "judgment": "target",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "none",
+      "scene": "storm",
+      "source": "none",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "雨がすごいですね",
+      "context": "",
+      "finalText": "雨がすごいですね"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "雨",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "fixture-text",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": false,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 8780,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "guard-content-loss",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "fixture-text",
+      "status": "rejected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。",
+      "finalText": "あめがすごいですね",
+      "candidateExcerpt": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。」} 支援者: Apple。質問には回答しません。質問には回答しません。",
+      "candidateTruncated": true
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 794,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "custom",
+      "judgment": "target",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "fixture-text",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "雨が強いです",
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。",
+      "finalText": "雨が強いです"
+    },
+    {
+      "audioSha256": null,
+      "engine": "none",
+      "expected": "雨",
+      "instruction": "none",
+      "opposite": "飴",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "ax",
+      "status": "unavailable"
+    },
+    {
+      "audioSha256": null,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "default",
+      "opposite": "飴",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "ax",
+      "status": "unavailable"
+    },
+    {
+      "audioSha256": null,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "custom",
+      "opposite": "飴",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "ax",
+      "status": "unavailable"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "雨",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "ocr",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増\n加に注意してください。",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": false,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 8764,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "guard-content-loss",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "ocr",
+      "status": "rejected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増\n加に注意してください。",
+      "finalText": "あめがすごいですね",
+      "candidateExcerpt": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。」} 支援者: Apple。 支援者: Apple。",
+      "candidateTruncated": true
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 793,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "custom",
+      "judgment": "target",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "ocr",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "雨が強いです",
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増\n加に注意してください。",
+      "finalText": "雨が強いです"
+    },
+    {
+      "audioSha256": null,
+      "engine": "none",
+      "expected": "雨",
+      "instruction": "none",
+      "opposite": "飴",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "image-ocr",
+      "status": "unavailable"
+    },
+    {
+      "audioSha256": null,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "default",
+      "opposite": "飴",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "image-ocr",
+      "status": "unavailable"
+    },
+    {
+      "audioSha256": null,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "custom",
+      "opposite": "飴",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "image-ocr",
+      "status": "unavailable"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "雨",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "vision-labels",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "liquid (0.311)\nwater (0.311)\nocean (0.311)\nwater_body (0.311)\noutdoor (0.052)\nsky (0.052)\ncloudy (0.051)\nblue_sky (0.027)",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 666,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "vision-labels",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "あめがすごいですね",
+      "context": "liquid (0.311)\nwater (0.311)\nocean (0.311)\nwater_body (0.311)\noutdoor (0.052)\nsky (0.052)\ncloudy (0.051)\nblue_sky (0.027)",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 831,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "custom",
+      "judgment": "target",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "vision-labels",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "雨がすごいですね",
+      "context": "liquid (0.311)\nwater (0.311)\nocean (0.311)\nwater_body (0.311)\noutdoor (0.052)\nsky (0.052)\ncloudy (0.051)\nblue_sky (0.027)",
+      "finalText": "雨がすごいですね"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "雨",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "mismatched-text",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": false,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 8642,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "飴",
+      "reason": "guard-content-loss",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "mismatched-text",
+      "status": "rejected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
+      "finalText": "あめがすごいですね",
+      "candidateExcerpt": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。あめがすごいですね。」} 支援者: Apple。 支援者: Apple。",
+      "candidateTruncated": true
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 767,
+      "engine": "apple-foundation",
+      "expected": "雨",
+      "instruction": "custom",
+      "judgment": "opposite",
+      "opposite": "飴",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "storm",
+      "source": "mismatched-text",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "飴がすごいですね",
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
+      "finalText": "飴がすごいですね"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "飴",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "none",
+      "scene": "candy",
+      "source": "none",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 624,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "none",
+      "scene": "candy",
+      "source": "none",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "あめがすごいですね",
+      "context": "",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 700,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "custom",
+      "judgment": "opposite",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "none",
+      "scene": "candy",
+      "source": "none",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "雨がすごいですね",
+      "context": "",
+      "finalText": "雨がすごいですね"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "飴",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "fixture-text",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": false,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 8621,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "guard-content-loss",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "fixture-text",
+      "status": "rejected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
+      "finalText": "あめがすごいですね",
+      "candidateExcerpt": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。あめがすごいですね。」} 支援者: Apple。 支援者: Apple。",
+      "candidateTruncated": true
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 740,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "custom",
+      "judgment": "target",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "fixture-text",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "飴がすごいですね",
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
+      "finalText": "飴がすごいですね"
+    },
+    {
+      "audioSha256": null,
+      "engine": "none",
+      "expected": "飴",
+      "instruction": "none",
+      "opposite": "雨",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "ax",
+      "status": "unavailable"
+    },
+    {
+      "audioSha256": null,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "default",
+      "opposite": "雨",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "ax",
+      "status": "unavailable"
+    },
+    {
+      "audioSha256": null,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "custom",
+      "opposite": "雨",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "ax",
+      "status": "unavailable"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "飴",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "ocr",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を\n紹介します。",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": false,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 8728,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "guard-numbers",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "ocr",
+      "status": "rejected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を\n紹介します。",
+      "finalText": "あめがすごいですね",
+      "candidateExcerpt": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。」} 2024-07-18 12:00:00 -- 修正済。 -- 修正済。",
+      "candidateTruncated": true
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 747,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "custom",
+      "judgment": "target",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "ocr",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "飴がすごいですね",
+      "context": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を\n紹介します。",
+      "finalText": "飴がすごいですね"
+    },
+    {
+      "audioSha256": null,
+      "engine": "none",
+      "expected": "飴",
+      "instruction": "none",
+      "opposite": "雨",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "image-ocr",
+      "status": "unavailable"
+    },
+    {
+      "audioSha256": null,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "default",
+      "opposite": "雨",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "image-ocr",
+      "status": "unavailable"
+    },
+    {
+      "audioSha256": null,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "custom",
+      "opposite": "雨",
+      "reason": "context-unavailable",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "image-ocr",
+      "status": "unavailable"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "飴",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "vision-labels",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "candy (0.961)\nfood (0.961)\nlollipop (0.961)\ncandy_other (0.013)\ncelebration (0.006)\ncandy_cane (0.006)\ndessert (0.004)\nbaked_goods (0.004)",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 643,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "vision-labels",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "あめがすごいですね",
+      "context": "candy (0.961)\nfood (0.961)\nlollipop (0.961)\ncandy_other (0.013)\ncelebration (0.006)\ncandy_cane (0.006)\ndessert (0.004)\nbaked_goods (0.004)",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 801,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "custom",
+      "judgment": "target",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "vision-labels",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "飴がすごいですね",
+      "context": "candy (0.961)\nfood (0.961)\nlollipop (0.961)\ncandy_other (0.013)\ncelebration (0.006)\ncandy_cane (0.006)\ndessert (0.004)\nbaked_goods (0.004)",
+      "finalText": "飴がすごいですね"
+    },
+    {
+      "accepted": null,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": null,
+      "engine": "none",
+      "expected": "飴",
+      "instruction": "none",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "mismatched-text",
+      "status": "uncorrected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。",
+      "finalText": "あめがすごいですね"
+    },
+    {
+      "accepted": false,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 8775,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "default",
+      "judgment": "undetermined",
+      "opposite": "雨",
+      "reason": "guard-content-loss",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "mismatched-text",
+      "status": "rejected",
+      "raw": "あめがすごいですね",
+      "candidate": null,
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。",
+      "finalText": "あめがすごいですね",
+      "candidateExcerpt": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。」} 支援者: Apple。質問には回答しません。質問には回答しません。",
+      "candidateTruncated": true
+    },
+    {
+      "accepted": true,
+      "asrLoadMs": null,
+      "asrMs": null,
+      "asrShared": false,
+      "audioSha256": null,
+      "correctionMs": 790,
+      "engine": "apple-foundation",
+      "expected": "飴",
+      "instruction": "custom",
+      "judgment": "opposite",
+      "opposite": "雨",
+      "reason": "",
+      "repeat": 0,
+      "route": "correction",
+      "scene": "candy",
+      "source": "mismatched-text",
+      "status": "accepted",
+      "raw": "あめがすごいですね",
+      "candidate": "雨が強いです",
+      "context": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。",
+      "finalText": "雨が強いです"
+    }
+  ],
+  "runMessage": "比較が完了しました。通常の音声入力を再開する場合は音声モデルを再読み込みしてください。",
+  "sampleSetVersion": 1,
+  "schemaVersion": 1,
+  "sourceRevision": "e396a5c2b5ebfdb7a1e2b6495dee77513a3c2780",
+  "totalRows": 42,
+  "evidenceOrigin": "User-shared on-device run; full-text follow-up in chat",
+  "analysisSnapshot": {
+    "derived": true,
+    "description": "Metadata/timings/judgments retained from the user-uploaded text-free JSON. Short text/context/control outputs transcribed from the same reportId full-text follow-up. Long rejected candidates are labelled excerpts with candidate:null, never reconstructed from repetition counts. This file is an analysis snapshot, not the original full export.",
+    "originalDiagnosticSha256": "10056c37d4903669c5b69c1001ae3ebe8087d2ae45ddb9fb1a2ffa412d1df821",
+    "longRejectedCandidatePolicy": "candidateExcerpt is a literal prefix, candidateTruncated:true; remainder not archived",
+    "reportId": "device-18e2364919fedba0-1"
+  },
+  "presentationSlides": [
+    {
+      "title": "画像の効き方は、キャンディ側で見る",
+      "headers": [
+        "条件",
+        "台風側の出力",
+        "キャンディ側の出力"
+      ],
+      "rows": [
+        [
+          "追加指示・文脈なし",
+          "雨がすごいですね",
+          "雨がすごいですね"
+        ],
+        [
+          "追加指示・Vision分類",
+          "雨がすごいですね",
+          "飴がすごいですね"
+        ],
+        [
+          "追加指示・逆のテキスト",
+          "飴がすごいですね",
+          "雨が強いです"
+        ]
+      ],
+      "paragraphs": [
+        "文脈なしでも「雨」を選択。台風側の正答だけでは画像の効果を示せない。キャンディ側で「雨 → 飴」へ変わったことが、文脈利用を示す観測。",
+        "逆の文脈では両方とも逆語を選択。文脈は正解を保証する情報ではない。"
+      ]
+    },
+    {
+      "title": "標準指示で起きた異常も隠さない",
+      "paragraphs": [
+        "標準指示の主試験10件のうち6件で、文脈の転載と無関係な反復が候補に入った。ガードが全6件を棄却し、最終出力は原文を保持した。",
+        "候補の先頭抜粋：気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。」} 支援者: Apple。質問には回答しません。…",
+        "追加指示の主試験10件ではこの反復は見られなかった。ただし指示内容・構造化出力・OSモデルとの相性など、原因は未特定。一般的なモデル性能と切り分ける。"
+      ]
+    },
+    {
+      "title": "期待語の一致と、意味・文体の保持は別",
+      "headers": [
+        "原文",
+        "実際の候補",
+        "条件と判定"
+      ],
+      "rows": [
+        [
+          "あめがすごいですね",
+          "雨が強いです",
+          "直接テキスト / ガード採用"
+        ],
+        [
+          "あめがすごいですね",
+          "雨が強いです",
+          "文字OCR / ガード採用"
+        ]
+      ],
+      "paragraphs": [
+        "「あめ」を「雨」にするだけでなく、「すごいですね」が「強いです」に変わった。期待語が出ても、語調と表現をそのまま保持したとは言えない。",
+        "主試験の追加指示10件はすべて採用されたが、「意味保持100%」の指標にはしない。"
+      ]
+    },
+    {
+      "title": "処理時間：最初のOCRは21.7秒",
+      "headers": [
+        "シーン",
+        "文字OCR ms",
+        "画像OCR ms",
+        "画像分類 ms"
+      ],
+      "rows": [
+        [
+          "storm",
+          21739,
+          32,
+          36
+        ],
+        [
+          "candy",
+          311,
+          32,
+          29
+        ]
+      ],
+      "paragraphs": [
+        "文字なし画像OCRは両方とも処理成功・空文字。画像分類ラベルからは文脈が得られた。AXはアクセシビリティ未許可で未取得。",
+        "AFM主試験の補正中央値：標準8631.5 ms、追加指示778.5 ms。異常な長文生成・初回準備・実行順を分離していないため、単純な速度改善率へ換算しない。"
+      ]
+    },
+    {
+      "title": "数字の表記変更をガードが止めた",
+      "headers": [
+        "項目",
+        "観測"
+      ],
+      "rows": [
+        [
+          "数字",
+          "3時・10人 → 三時・十人の候補を棄却、原文を保持"
+        ],
+        [
+          "否定・曜日対比・人名",
+          "標準／追加指示の固定例で維持"
+        ],
+        [
+          "フィラー",
+          "「えー」を除去し、「まず」と人名を維持"
+        ],
+        [
+          "箇条書き整形",
+          "文のまま。リスト形式への変化はなかった"
+        ]
+      ],
+      "paragraphs": [
+        "漢数字化は値の変更とは限らない。今回の棄却は数字表記の厳密一致による保守的な動作。意味保持の成功率や数字誤りとして数えない。"
+      ]
+    }
+  ]
+}
