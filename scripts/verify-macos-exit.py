@@ -29,7 +29,7 @@ def main():
         for backend in ['none', 'cpu', 'metal']:
             root = args.output / backend
             root.mkdir()
-            profile.write_text(json.dumps(dict(version=1, backend=backend if backend != 'none' else 'metal',
+            profile.write_text(json.dumps(dict(version=1, shortcut='Command+Shift+Space', backend=backend if backend != 'none' else 'metal',
                                               modelPath=str(args.model.resolve()) if backend != 'none' else '')))
             profile.chmod(0o600)
             started = time.time()
