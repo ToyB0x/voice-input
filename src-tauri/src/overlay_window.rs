@@ -210,7 +210,7 @@ pub(crate) fn render(status: &Status) -> Result<(), String> {
             ));
         if !panel.window.isVisible() {
             panel.position()?;
-            panel.window.orderFrontRegardless();
+            panel.window.orderFront(None);
         }
         panel.root.displayIfNeeded();
         Ok(())

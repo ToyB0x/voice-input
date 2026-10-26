@@ -134,6 +134,21 @@ mod probe {
                 std::thread::sleep(Duration::from_millis(250));
                 on_main(app, move |app| {
                     inspect(app, visible)?;
+                    let before_capture = front_pid();
+                    if before_capture != pid {
+                        let (own_active, target_active) = unsafe {
+                            let own: *mut AnyObject =
+                                msg_send![class!(NSApplication), sharedApplication];
+                            let target: *mut AnyObject = msg_send![class!(NSRunningApplication),runningApplicationWithProcessIdentifier:pid];
+                            let own_active: Bool = msg_send![own, isActive];
+                            let target_active: Bool = msg_send![target, isActive];
+                            (own_active.as_bool(), target_active.as_bool())
+                        };
+                        return Err(format!(
+                            "foreground changed before capture: visible={visible},expected={pid},actual={before_capture},probe={},ownActive={own_active},targetActive={target_active}",
+                            std::process::id()
+                        ));
+                    }
                     if visible && let Some(root) = std::env::var_os("VOICE_INPUT_OVERLAY_EVIDENCE")
                     {
                         let path = std::path::PathBuf::from(root).join(if index == 0 {
