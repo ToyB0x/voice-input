@@ -41,6 +41,22 @@ impl Options {
         Ok(())
     }
 }
+fn validate_model_paths(
+    preferences: &crate::settings::Preferences,
+    options: &Options,
+) -> Result<(), String> {
+    if options.input != "text" {
+        custom_path(&preferences.model_path).map_err(|_| {
+            "保存済みのWhisperモデルが見つかりません。「モデル」で準備・検証し、設定欄へ反映して「設定を保存」してください。音声なしで試す場合は「かな原文のみ」を選べます。".to_string()
+        })?;
+    }
+    if options.qwen {
+        custom_path(&preferences.correction_model_path).map_err(|_| {
+            "保存済みのQwenモデルが見つかりません。「モデル」でQwenを準備・検証し、設定欄へ反映して「設定を保存」してください。ダウンロードだけでは利用できません。AFMのみで試す場合はQwenのチェックを外してください。".to_string()
+        })?;
+    }
+    Ok(())
+}
 pub(super) struct Session {
     pub report: Value,
 }
@@ -100,12 +116,7 @@ impl Comparisons {
         options.validate()?;
         recorder.ensure_comparison_idle()?;
         let preferences = crate::desktop::preferences(&app)?;
-        if options.input != "text" {
-            custom_path(&preferences.model_path)?;
-        }
-        if options.qwen {
-            custom_path(&preferences.correction_model_path)?;
-        }
+        validate_model_paths(&preferences, &options)?;
         let recorded = if options.input == "recorded" {
             Some(recorder.comparison_input()?)
         } else {
@@ -976,6 +987,45 @@ pub fn copy_context_lab_report(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn missing_models_identify_qwen_or_whisper_and_text_mode_does_not_need_whisper() {
+        let mut prefs = crate::settings::Preferences::default();
+        let mut options = Options {
+            input: "text".into(),
+            apple: true,
+            qwen: false,
+            ax: false,
+            repeats: 1,
+            compare_instruction: true,
+            instruction: String::new(),
+        };
+        assert!(validate_model_paths(&prefs, &options).is_ok());
+        options.qwen = true;
+        let error = validate_model_paths(&prefs, &options).unwrap_err();
+        assert!(error.contains("Qwen"));
+        assert!(error.contains("設定を保存"));
+        let path = std::env::temp_dir().join(now_id(0));
+        std::fs::write(&path, b"path-check-fixture").unwrap();
+        prefs.correction_model_path = path.to_str().unwrap().into();
+        prefs.correction_engine = "apple-foundation".into();
+        // Model availability is independent of the ordinary correction engine.
+        assert!(validate_model_paths(&prefs, &options).is_ok());
+        options.input = "bundled".into();
+        assert!(
+            validate_model_paths(&prefs, &options)
+                .unwrap_err()
+                .contains("Whisper")
+        );
+        prefs.model_path = path.to_str().unwrap().into();
+        assert!(validate_model_paths(&prefs, &options).is_ok());
+        std::fs::remove_file(path).unwrap();
+        options.input = "text".into();
+        assert!(
+            validate_model_paths(&prefs, &options)
+                .unwrap_err()
+                .contains("Qwen")
+        );
+    }
     #[test]
     fn context_free_asr_uses_the_none_source_and_retained_labs_block_updates() {
         let prefs = crate::settings::Preferences::default();

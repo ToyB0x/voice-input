@@ -8,6 +8,9 @@ const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 let state:LabStatus|undefined;
 let cursor=0,part=0;
 let reading=false,acting=false;
+let message="";
+let modelChoices:{id:string;available:boolean}[]=[];
+function setMessage(value:string){message=value;setText("lab-message",value);}
 function setText(id:string,value:string){const node=el(id);if(node.textContent!==value)node.textContent=value;}
 const append=(row:LabRow)=>{
   const tr=el<HTMLTableSectionElement>("lab-rows").insertRow();
@@ -22,26 +25,43 @@ function render(){
   el<HTMLButtonElement>("lab-copy-part").disabled = busy || !state?.runId || !state.parts || !!state.more;
   el<HTMLButtonElement>("lab-clear").disabled = acting || !state?.runId;
   for(const id of ["lab-input","lab-apple","lab-qwen","lab-ax","lab-repeats","lab-instruction","lab-compare-instruction"]) (el(id) as HTMLInputElement).disabled=busy;
+  const qwen=el<HTMLInputElement>("lab-qwen").checked;
+  const speech=el<HTMLSelectElement>("lab-input").value!=="text";
+  const ready=(id:string)=>modelChoices.find(x=>x.id===id)?.available===true;
+  setText("lab-model-readiness",[
+    speech?`Whisper: ${ready("current-speech")?"保存済みモデルあり":"未準備／保存済みパスの参照先なし"}`:"Whisper: 不要（かな原文のみ）",
+    qwen?`Qwen: ${ready("current-correction")?"保存済みモデルあり":"未準備／保存済みパスの参照先なし。「モデル」で準備・検証 → 設定欄へ反映 → 設定を保存"}`:"Qwen: 比較しない",
+  ].join("\n"));
+  setText("lab-message",message);
   setText("lab-progress",state?`${state.phase}: ${state.completed}/${state.planned}\n${state.message}\nAFM: ${state.foundation?.status?.availability??state.foundation?.error??"未確認"}`:"未実行。実行ボタンを押すまで取得・推論は行いません。");
   setText("lab-copy-part",`分割JSONをコピー（${part+1}/${Math.max(1,state?.parts??1)}）`);
 }
 async function refresh(){
   if(reading||!isTauri())return;reading=true;
   try{
-    const next=await invoke<LabStatus>("context_lab_status",{runId:state?.runId??null,after:cursor});
+    const [next,models]=await Promise.all([
+      invoke<LabStatus>("context_lab_status",{runId:state?.runId??null,after:cursor}),
+      invoke<{id:string;available:boolean}[]>("comparison_models"),
+    ]);
+    modelChoices=models;
     if(state?.runId!==next.runId){cursor=0;part=0;el<HTMLInputElement>("lab-include-text").checked=false;el("lab-rows").replaceChildren();el<HTMLTextAreaElement>("lab-json").value="";}
     state=next;for(const row of next.rows)append(row);cursor=next.next;render();
-  }catch(error){el("lab-message").textContent=String(error);}
+  }catch(error){setMessage(String(error));}
   finally{reading=false;}
 }
-async function action(fn:()=>Promise<unknown>){if(acting)return;acting=true;render();el("lab-message").textContent="";try{await fn();}catch(error){el("lab-message").textContent=String(error);}finally{acting=false;await refresh();render();}}
+async function action(fn:()=>Promise<unknown>){
+  if(acting)return;acting=true;setMessage("操作を確認中…");render();
+  try{await fn();if(message==="操作を確認中…")setMessage("");}
+  catch(error){setMessage(String(error));}
+  finally{acting=false;await refresh();render();}
+}
 async function copy(partial:boolean){
   if(!state?.runId)return;
   const params={runId:state.runId,includeText:el<HTMLInputElement>("lab-include-text").checked,part:partial?part:null};
   const report=await invoke<string>("context_lab_report",params);
   el<HTMLTextAreaElement>("lab-json").value=report;
   await invoke("copy_context_lab_report",params);
-  el("lab-message").textContent=partial?`分割 ${part+1}/${state.parts} をコピーしました。続きも順番にコピーしてください。`:"JSONをコピーしました。解析用には本文・文脈を含める選択が必要です。";
+  setMessage(partial?`分割 ${part+1}/${state.parts} をコピーしました。続きも順番にコピーしてください。`:"JSONをコピーしました。解析用には本文・文脈を含める選択が必要です。");
   if(partial)part=(part+1)%Math.max(1,state.parts);
 }
 export function setupContextLab(){
@@ -56,5 +76,6 @@ export function setupContextLab(){
   el("lab-copy").addEventListener("click",()=>void action(()=>copy(false)));
   el("lab-copy-part").addEventListener("click",()=>void action(()=>copy(true)));
   el("lab-include-text").addEventListener("change",()=>{part=0;el<HTMLTextAreaElement>("lab-json").value="";render();});
+  for(const id of ["lab-input","lab-qwen"])el(id).addEventListener("change",()=>{render();void refresh();});
   render();if(isTauri()){void refresh();window.setInterval(()=>void refresh(),500);}
 }
