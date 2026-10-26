@@ -164,21 +164,6 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
       - name: Test local audio processing
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
-      - name: Verify native overlay preserves another app's focus without GUI rendering
-        timeout-minutes: 3
-        env:
-          VOICE_INPUT_OVERLAY_FOCUS_TARGET: ${{ runner.temp }}/Overlay Focus Fixture.app
-        run: |
-          fixture="$VOICE_INPUT_OVERLAY_FOCUS_TARGET"
-          mkdir -p "$fixture/Contents/MacOS"
-          xcrun swiftc scripts/macos-overlay-focus-target.swift -o "$fixture/Contents/MacOS/overlay-focus-fixture"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.overlayfocusfixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string overlay-focus-fixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Overlay Focus Fixture' "$fixture/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
-          codesign --force --sign - "$fixture"
-          cargo test --manifest-path src-tauri/Cargo.toml --locked --test overlay-window -- --nocapture \
-            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/overlay-native-window.log"
       - name: Build unsigned macOS app
         run: pnpm run tauri build --bundles app --ci -- --locked
         env:
@@ -220,6 +205,21 @@ jobs:
           path: ${{ runner.temp }}/voice-input-app/
           retention-days: 14
           if-no-files-found: error
+      - name: Verify native overlay preserves another app's focus without GUI rendering
+        timeout-minutes: 3
+        env:
+          VOICE_INPUT_OVERLAY_FOCUS_TARGET: ${{ runner.temp }}/Overlay Focus Fixture.app
+        run: |
+          fixture="$VOICE_INPUT_OVERLAY_FOCUS_TARGET"
+          mkdir -p "$fixture/Contents/MacOS"
+          xcrun swiftc scripts/macos-overlay-focus-target.swift -o "$fixture/Contents/MacOS/overlay-focus-fixture"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.overlayfocusfixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string overlay-focus-fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Overlay Focus Fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
+          codesign --force --sign - "$fixture"
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --test overlay-window -- --nocapture \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/overlay-native-window.log"
       - name: Verify clean exit before the Preview window check
         timeout-minutes: 6
         run: |

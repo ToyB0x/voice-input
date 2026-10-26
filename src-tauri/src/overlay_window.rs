@@ -7,7 +7,7 @@ pub(crate) fn configure(window: &WebviewWindow) -> tauri::Result<()> {
     window.set_ignore_cursor_events(true)?;
     Ok(())
 }
-pub(crate) fn show(window: &WebviewWindow) -> tauri::Result<()> {
+pub(crate) fn position(window: &WebviewWindow) -> tauri::Result<()> {
     let monitor = window
         .primary_monitor()?
         .ok_or_else(|| tauri::Error::AssetNotFound("primary monitor".into()))?;
@@ -18,6 +18,10 @@ pub(crate) fn show(window: &WebviewWindow) -> tauri::Result<()> {
     let top = i64::from(area.position.y)
         + (i64::from(area.size.height) - i64::from(size.height) - 24).max(0);
     window.set_position(tauri::PhysicalPosition::new(left as i32, top as i32))?;
+    Ok(())
+}
+pub(crate) fn show(window: &WebviewWindow) -> tauri::Result<()> {
+    position(window)?;
     // SAFETY: callers dispatch to AppKit's main thread; Tauri owns this NSWindow.
     // orderFrontRegardless displays an inactive application's window without
     // makeKeyAndOrderFront / activateIgnoringOtherApps (Tao's ordinary show path).

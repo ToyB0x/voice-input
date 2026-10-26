@@ -106,6 +106,36 @@ mod probe {
                 }
                 std::thread::sleep(Duration::from_millis(50));
             }
+            // Separate startup/fixture focus settling and positioning from ordering.
+            // Never reactivate the fixture after an overlay operation.
+            for _ in 0..3 {
+                std::thread::sleep(Duration::from_millis(200));
+                on_main(app, move |_| {
+                    let actual = front_pid();
+                    if actual != pid {
+                        return Err(format!(
+                            "foreground changed before overlay: expected={pid},actual={actual},probe={}",
+                            std::process::id()
+                        ));
+                    }
+                    Ok(())
+                })?;
+            }
+            on_main(app, |app| {
+                let window = app.get_webview_window("overlay").ok_or("overlay missing")?;
+                super::overlay_window::position(&window).map_err(|error| error.to_string())
+            })?;
+            std::thread::sleep(Duration::from_millis(250));
+            on_main(app, move |_| {
+                let actual = front_pid();
+                if actual != pid {
+                    return Err(format!(
+                        "positioning changed foreground: expected={pid},actual={actual},probe={}",
+                        std::process::id()
+                    ));
+                }
+                Ok(())
+            })?;
             for visible in [true, false, true, false] {
                 on_main(app, move |app| {
                     let window = app.get_webview_window("overlay").ok_or("overlay missing")?;
@@ -120,7 +150,11 @@ mod probe {
                 on_main(app, move |app| {
                     inspect(app, visible)?;
                     if front_pid() != pid {
-                        return Err("overlay changed the frontmost application".into());
+                        return Err(format!(
+                            "ordering changed foreground at visible={visible}: expected={pid},actual={},probe={}",
+                            front_pid(),
+                            std::process::id()
+                        ));
                     }
                     Ok(())
                 })?;
