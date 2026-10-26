@@ -3,7 +3,11 @@ use crate::transcription::{self, Session};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use objc2_av_foundation::{AVCaptureDevice, AVMediaTypeAudio};
 use serde::Serialize;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
 use std::time::{Duration, Instant};
 
 fn permission_name(status: isize) -> &'static str {
@@ -153,6 +157,12 @@ pub struct Recorder {
     requests: mpsc::Sender<Request>,
     capture: Arc<Mutex<Capture>>,
     jobs: mpsc::Sender<transcription::Job>,
+    closing: Arc<AtomicBool>,
+    workers: Arc<Mutex<Option<Workers>>>,
+}
+struct Workers {
+    recording: std::thread::JoinHandle<()>,
+    transcription: std::thread::JoinHandle<()>,
 }
 
 impl Recorder {
@@ -166,14 +176,17 @@ impl Recorder {
     ) -> Self {
         let (tx, rx) = mpsc::channel::<Request>();
         let capture = Arc::new(Mutex::new(Capture::default()));
-        let jobs = transcription::worker(capture.clone(), inserter.clone());
+        let closing = Arc::new(AtomicBool::new(false));
+        let (jobs, transcription_worker) =
+            transcription::worker(capture.clone(), inserter.clone(), closing.clone());
         let shared = capture.clone();
         let comparison_jobs = jobs.clone();
-        std::thread::spawn(move || {
+        let worker_closing = closing.clone();
+        let recording_worker = std::thread::spawn(move || {
             // The stream stays on its owning thread. Audio callbacks only fill
             // bounded, preallocated memory; IPC never serializes audio samples.
             let mut stream: Option<(cpal::Stream, Instant)> = None;
-            loop {
+            while !worker_closing.load(Ordering::Acquire) {
                 let should_stop = stream.as_ref().is_some_and(|(_, started)| {
                     started.elapsed().as_secs() >= u64::from(MAX_SECONDS)
                         || shared.lock().map_or(true, |c| {
@@ -184,7 +197,10 @@ impl Recorder {
                     drop(stream.take());
                     if let Ok(mut c) = shared.lock() {
                         c.finish();
-                        if c.phase == Some("recorded") && c.recognition.model_ready {
+                        if !worker_closing.load(Ordering::Acquire)
+                            && c.phase == Some("recorded")
+                            && c.recognition.model_ready
+                        {
                             let _ = transcription::recognize(&mut c, &jobs);
                         } else if c.phase == Some("error") {
                             context.cancel();
@@ -349,7 +365,38 @@ impl Recorder {
             requests: tx,
             capture,
             jobs: comparison_jobs,
+            closing,
+            workers: Arc::new(Mutex::new(Some(Workers {
+                recording: recording_worker,
+                transcription: transcription_worker,
+            }))),
         }
+    }
+
+    /// Release CoreAudio and Whisper/Metal on the threads that own them before
+    /// AppKit and process-global native resources begin their teardown.
+    pub(crate) fn shutdown(&self) {
+        self.closing.store(true, Ordering::Release);
+        if let Ok(mut capture) = self.capture.lock() {
+            capture.recognition.clear_result();
+        }
+        let workers = self
+            .workers
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        if let Some(workers) = workers {
+            let _ = workers.recording.join();
+            let _ = self.jobs.send(transcription::Job::Shutdown);
+            let _ = workers.transcription.join();
+        }
+        if let Ok(mut capture) = self.capture.lock() {
+            capture.audio = None;
+            capture.input_device = None;
+            capture.recognition = Session::default();
+            capture.phase = None;
+        }
+        crate::lifecycle::diagnostic("audio-workers-stopped");
     }
 
     pub(crate) fn comparison_input(&self) -> Result<ComparisonInput, String> {
@@ -551,6 +598,22 @@ pub fn open_microphone_settings() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shutdown_wakes_idle_audio_workers_and_can_be_repeated() {
+        let recorder = Recorder::new(
+            crate::insertion::Inserter::new(),
+            crate::context::Reader::new(),
+            crate::correction::Corrector::new(),
+            crate::comparison::Comparisons::new(),
+            crate::updater::Updates::new(),
+            crate::activity::Activity::default(),
+        );
+        recorder.shutdown();
+        recorder.shutdown();
+        assert!(recorder.closing.load(Ordering::Acquire));
+        assert!(recorder.workers.lock().unwrap().is_none());
+        assert!(recorder.jobs.send(transcription::Job::Shutdown).is_err());
+    }
     #[test]
     fn permission_states_preserve_denied_and_restricted() {
         assert_eq!(permission_name(0), "not_determined");

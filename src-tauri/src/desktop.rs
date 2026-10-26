@@ -29,6 +29,21 @@ pub struct Desktop {
     inner: Mutex<Inner>,
     toggling: AtomicBool,
     shortcut_armed: AtomicBool,
+    closing: std::sync::Arc<AtomicBool>,
+    worker: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+impl Desktop {
+    pub fn shutdown(&self) {
+        self.closing.store(true, Ordering::Release);
+        if let Some(worker) = self
+            .worker
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take()
+        {
+            let _ = worker.join();
+        }
+    }
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -231,6 +246,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             None
         }
     };
+    let closing = std::sync::Arc::new(AtomicBool::new(false));
     app.manage(Desktop {
         path,
         inner: Mutex::new(Inner {
@@ -240,6 +256,8 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }),
         toggling: AtomicBool::new(false),
         shortcut_armed: AtomicBool::new(false),
+        closing: closing.clone(),
+        worker: Mutex::new(None),
     });
     app.state::<crate::insertion::Inserter>()
         .configure(preferences.auto_insert);
@@ -269,9 +287,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         })
         .build(app)?;
     let handle = app.handle().clone();
-    std::thread::spawn(move || {
+    let worker = std::thread::spawn(move || {
         let mut previous = String::new();
-        loop {
+        while !closing.load(Ordering::Acquire) {
             if let Ok(snapshot) = handle.state::<Recorder>().status() {
                 let label = if snapshot.phase == "recording" {
                     "録音中"
@@ -304,13 +322,22 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             std::thread::sleep(Duration::from_millis(250));
         }
     });
+    *app.state::<Desktop>()
+        .worker
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Some(worker);
     if !preferences.model_path.is_empty() {
         let handle = app.handle().clone();
+        let activity = app.state::<crate::activity::Activity>().inner().clone();
         tauri::async_runtime::spawn(async move {
+            if activity.is_closing() {
+                return;
+            }
             if let Err(error) = handle
                 .state::<Recorder>()
                 .restore_model(preferences.model_path, preferences.backend)
                 .await
+                && !activity.is_closing()
                 && let Ok(mut inner) = handle.state::<Desktop>().inner.lock()
             {
                 inner.error = Some(error);

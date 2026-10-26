@@ -29,7 +29,7 @@ def main():
         for backend in ['none', 'cpu', 'metal']:
             root = args.output / backend
             root.mkdir()
-            profile.write_text(json.dumps(dict(version=1, backend=backend if backend != 'none' else 'metal',
+            profile.write_text(json.dumps(dict(version=1, shortcut='Command+Shift+Space', backend=backend if backend != 'none' else 'metal',
                                               modelPath=str(args.model.resolve()) if backend != 'none' else '')))
             profile.chmod(0o600)
             started = time.time()
@@ -57,6 +57,14 @@ def main():
                     report['status'] = 'passed' if report['returnCode'] == 0 else 'failed'
                     if report['returnCode'] != 0:
                         raise RuntimeError('App crashed or returned nonzero during quit')
+                    if 'panicked at' in log.read_text(errors='replace'):
+                        raise RuntimeError('A Rust worker panicked during app exit')
+                    stages = log.read_text(errors='replace')
+                    report['audioWorkersStopped'] = 'voice-input:lifecycle:audio-workers-stopped' in stages
+                    report['cleanupCompleted'] = 'voice-input:lifecycle:exit-cleanup-completed' in stages
+                    report['exitReady'] = 'voice-input:lifecycle:exit-ready' in stages
+                    if not all(report[key] for key in ['audioWorkersStopped', 'cleanupCompleted', 'exitReady']):
+                        raise RuntimeError('Clean native resource shutdown was not observed')
             except Exception as error:
                 report['status'] = 'failed'
                 report['error'] = str(error)

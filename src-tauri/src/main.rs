@@ -75,6 +75,7 @@ fn main() {
         .manage(comparisons)
         .manage(updates)
         .manage(activity)
+        .manage(lifecycle::Lifecycle::default())
         .manage(context)
         .manage(corrector)
         .manage(inserter)
@@ -136,17 +137,8 @@ fn main() {
                 desktop::show(app);
             }
             #[cfg(target_os = "macos")]
-            if matches!(
-                event,
-                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
-            ) {
-                lifecycle::diagnostic("exit-cleanup-started");
-                use tauri::Manager;
-                app.state::<comparison::Comparisons>().shutdown();
-                app.state::<local_models::Manager>().shutdown();
-                app.state::<context::Reader>().cancel();
-                app.state::<correction::Corrector>().shutdown();
-                lifecycle::diagnostic("exit-cleanup-completed");
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                lifecycle::request_exit(app, api, code);
             }
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);

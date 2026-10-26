@@ -4,7 +4,11 @@ use local_transcription::{Backend, Transcriber, prepare_audio};
 use serde::Serialize;
 use std::{
     path::Path,
-    sync::{Arc, Mutex, mpsc},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
 };
 
 #[derive(Clone, Default, Serialize)]
@@ -56,6 +60,7 @@ impl Session {
 }
 
 pub(crate) enum Job {
+    Shutdown,
     Suspend {
         reply: mpsc::Sender<()>,
     },
@@ -152,11 +157,15 @@ fn send(session: &mut Session, tx: &mpsc::Sender<Job>, job: Job) -> Result<(), S
 pub(crate) fn worker(
     shared: Arc<Mutex<Capture>>,
     inserter: crate::insertion::Inserter,
-) -> mpsc::Sender<Job> {
+    closing: Arc<AtomicBool>,
+) -> (mpsc::Sender<Job>, std::thread::JoinHandle<()>) {
     let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
+    let handle = std::thread::spawn(move || {
         let mut model: Option<Transcriber> = None;
         for job in rx {
+            if closing.load(Ordering::Acquire) || matches!(job, Job::Shutdown) {
+                break;
+            }
             if let Job::Suspend { reply } = job {
                 model = None;
                 if let Ok(mut capture) = shared.lock() {
@@ -169,7 +178,7 @@ pub(crate) fn worker(
             let (generation, loading) = match &job {
                 Job::Load { generation, .. } => (*generation, true),
                 Job::Recognize { generation, .. } => (*generation, false),
-                Job::Suspend { .. } => unreachable!(),
+                Job::Suspend { .. } | Job::Shutdown => unreachable!(),
             };
             let current = shared
                 .lock()
@@ -178,7 +187,7 @@ pub(crate) fn worker(
                 Err("破棄済み".into())
             } else {
                 match job {
-                    Job::Suspend { .. } => unreachable!(),
+                    Job::Suspend { .. } | Job::Shutdown => unreachable!(),
                     Job::Load { path, backend, .. } => {
                         // Drop the old model first to bound peak memory on replacement.
                         model = None;
@@ -228,7 +237,7 @@ pub(crate) fn worker(
             }
         }
     });
-    tx
+    (tx, handle)
 }
 
 #[cfg(test)]
