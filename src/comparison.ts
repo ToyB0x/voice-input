@@ -2,9 +2,9 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 
 type Choice = { id: string; name: string; kind: string; available: boolean };
 type Score = { cer: number | null; edits: number; referenceChars: number; silenceFalsePositive: boolean | null };
-type Row = { index: number; case: {speech: string; speechBackend: string; correction: string; correctionBackend: string; source: string; route: string}; status: string; message: string; raw: string | null; candidate: string | null; finalText: string | null; asrMs: number | null; asrLoadMs: number | null; correctionMs: number | null; totalMs: number; asrScore: Score | null; candidateScore: Score | null; finalScore: Score | null };
+type Row = { index: number; sampleId: string | null; case: {speech: string; speechBackend: string; correction: string; correctionBackend: string; source: string; route: string}; status: string; message: string; raw: string | null; candidate: string | null; finalText: string | null; asrMs: number | null; asrLoadMs: number | null; correctionMs: number | null; totalMs: number; asrScore: Score | null; candidateScore: Score | null; finalScore: Score | null };
 type FoundationDiagnostic = {status: {availability: string; os_major: number; os_minor: number; os_patch: number; framework_imported: boolean} | null; error: string | null; elapsedMs: number};
-type Status = {generation: number; working: boolean; armed: boolean; phase: string; message: string; total: number; completed: number; audioMs: number; axCharacters: number; ocrCharacters: number; hasReference: boolean; foundation: FoundationDiagnostic | null; rows: Row[]; next: number; more: boolean};
+type Status = {generation: number; mode: string; working: boolean; armed: boolean; phase: string; message: string; total: number; completed: number; audioMs: number; axCharacters: number; ocrCharacters: number; hasReference: boolean; foundation: FoundationDiagnostic | null; rows: Row[]; next: number; more: boolean};
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let state: Status | undefined;
 let generation = 0;
@@ -32,14 +32,15 @@ function cell(row: HTMLTableRowElement, text: string) {
 }
 function append(result: Row) {
   const tr = el<HTMLTableSectionElement>("compare-rows").insertRow();
-  cell(tr, `${result.index+1}: ${result.case.speech} / ${result.case.speechBackend}\n${result.case.correction} / ${result.case.correctionBackend}\n${result.case.source} → ${result.case.route}`);
-  cell(tr, `${result.status}\n${result.message}${["error", "unavailable", "rejected"].includes(result.status) && result.raw !== null ? "\nWhisper原文を保持しています。" : ""}`);
-  cell(tr, `ASR ${seconds(result.asrMs)} (load ${seconds(result.asrLoadMs)})\n補正 ${seconds(result.correctionMs)}\n合計 ${seconds(result.totalMs)}`);
-  cell(tr, `ASR ${metric(result.asrScore)}\n候補 ${metric(result.candidateScore)}\n最終 ${metric(result.finalScore)}`);
+  const original = result.sampleId ? "固定の入力原文" : "Whisper原文";
+  cell(tr, `${result.index+1}: ${result.sampleId ?? result.case.speech} / ${result.case.speechBackend}\n${result.case.correction} / ${result.case.correctionBackend}\n${result.case.source} → ${result.case.route}`);
+  cell(tr, `${result.status}\n${result.message}${["error", "unavailable", "rejected"].includes(result.status) && result.raw !== null ? `\n${original}を保持しています。` : ""}`);
+  cell(tr, `${result.sampleId ? "音声認識なし" : `ASR ${seconds(result.asrMs)} (load ${seconds(result.asrLoadMs)})`}\n補正 ${seconds(result.correctionMs)}\n合計 ${seconds(result.totalMs)}`);
+  cell(tr, result.sampleId ? "固定サンプル：意味・整形は本文で確認" : `ASR ${metric(result.asrScore)}\n候補 ${metric(result.candidateScore)}\n最終 ${metric(result.finalScore)}`);
   const td = cell(tr, "");
   const details = document.createElement("details");
   const summary = document.createElement("summary"); summary.textContent = "認識・候補・最終出力"; details.append(summary);
-  for (const [name, text] of [["Whisper",result.raw], ["補正候補（棄却も含む）",result.candidate], ["最終出力（棄却時はWhisper原文）",result.finalText]]) {
+  for (const [name, text] of [[original,result.raw], ["補正候補（棄却も含む）",result.candidate], [`最終出力（棄却時は${original}）`,result.finalText]]) {
     const label = document.createElement("p");label.textContent = name;
     const content = document.createElement("pre");content.textContent = text ?? "—";details.append(label,content);
   }
@@ -58,14 +59,15 @@ async function refresh() {
     cursor=next.next;
     el<HTMLInputElement>("compare-arm").checked=next.armed;
     el<HTMLButtonElement>("compare-start").disabled=acting || next.working;
+    for (const id of ["compare-selftest-apple", "compare-selftest-both"]) el<HTMLButtonElement>(id).disabled=acting || next.working;
     el<HTMLButtonElement>("compare-cancel").disabled=acting || !next.working;
     el<HTMLInputElement>("compare-arm").disabled=acting || next.working;
     el<HTMLButtonElement>("compare-copy-report").disabled=acting || next.working || next.completed===0 || next.more;
     const diagnostic = next.foundation;
     el("compare-foundation").textContent = diagnostic
       ? `Apple FM: ${diagnostic.status?.availability ?? diagnostic.error ?? "未確認"} / 確認 ${seconds(diagnostic.elapsedMs)}${diagnostic.status ? ` / macOS ${diagnostic.status.os_major}.${diagnostic.status.os_minor}.${diagnostic.status.os_patch}` : ""}。利用可否は比較開始時点の結果で、生成成功の保証ではありません。`
-      : "Apple FM: この比較では未確認。Apple比較プリセットを選び、録音済み音声で比較を開始してください。";
-    el("compare-progress").textContent = `${next.phase}: ${next.completed}/${next.total} / 音声 ${seconds(next.audioMs)} / AX ${next.axCharacters}文字、OCR ${next.ocrCharacters}文字\n${next.message}`;
+      : "Apple FM: この比較では未確認。固定サンプル診断、または録音済み音声のApple比較を開始してください。";
+    el("compare-progress").textContent = `${next.mode === "fixed-correction" ? "固定サンプル補正" : "録音比較"} / ${next.phase}: ${next.completed}/${next.total}${next.mode === "fixed-correction" ? " / 音声・画面情報は使用しません" : ` / 音声 ${seconds(next.audioMs)} / AX ${next.axCharacters}文字、OCR ${next.ocrCharacters}文字`}\n${next.message}`;
   } catch (error) { message(String(error)); }
   finally { reading=false; }
 }
@@ -108,6 +110,8 @@ function preset(correction: string) {
 }
 export function setupComparison() {
   el("compare-open").addEventListener("click",()=>{const panel=el<HTMLDetailsElement>("comparison-panel");panel.open=!panel.open;});
+  el("compare-selftest-apple").addEventListener("click",()=>void action(()=>invoke("start_correction_selftest",{includeQwen:false})));
+  el("compare-selftest-both").addEventListener("click",()=>void action(()=>invoke("start_correction_selftest",{includeQwen:true})));
   el("compare-start").addEventListener("click",()=>void action(()=>invoke("start_comparison",{selection:selection()})));
   el("compare-cancel").addEventListener("click",()=>void action(()=>invoke("cancel_comparison",{clear:false})));
   el("compare-clear").addEventListener("click",()=>void action(()=>invoke("cancel_comparison",{clear:true})));

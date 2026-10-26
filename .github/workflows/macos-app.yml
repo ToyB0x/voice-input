@@ -314,9 +314,9 @@ jobs:
           "$RUNNER_TEMP/voice-input-smoke-runner" \
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/foundation" foundation
-      - name: Verify comparison screen, full condition plan and safe empty-recording rejection
+      - name: Verify comparison screen, fixed correction and safe empty-recording rejection
         if: inputs.run_ui || inputs.full_integration
-        timeout-minutes: 3
+        timeout-minutes: 15
         run: |
           "$RUNNER_TEMP/voice-input-smoke-runner" \
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \

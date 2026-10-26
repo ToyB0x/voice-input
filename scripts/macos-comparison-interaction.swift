@@ -18,7 +18,8 @@ func comparisonInteraction(pid: pid_t, output: URL) throws {
     try waitForUI("development updater reports missing signing configuration") {uiText(root).contains("更新署名キー未設定")}
     try interactionScreenshot(output,name:"comparison.png")
     try uiText(root).write(to:output.appendingPathComponent("comparison-state.txt"),atomically:true,encoding:.utf8)
-    try writeJSON(["status":"passed","fullMatrixCount":1128,"guidedPresetCount":6,"emptyAudioRejected":true,"unsignedUpdaterDisabled":true,"inferenceTested":false],to:output.appendingPathComponent("interaction.json"))
+    let selftestInferenceTested = try fixedCorrectionInteraction(root:root,output:output)
+    try writeJSON(["status":"passed","fullMatrixCount":1128,"guidedPresetCount":6,"emptyAudioRejected":true,"unsignedUpdaterDisabled":true,"fixedSampleCount":5,"inferenceTested":selftestInferenceTested],to:output.appendingPathComponent("interaction.json"))
 }
 
 func comparisonOfRecordedAudio(root: AXUIElement, output: URL) throws {
@@ -49,4 +50,25 @@ func comparisonOfRecordedAudio(root: AXUIElement, output: URL) throws {
     // Comparison released the ordinary model; restore it before the pre-existing cancellation check.
     try press(uiButton(root,["Load local model"])!)
     try waitForUI("ordinary model restored",seconds:90) {uiText(root).contains("モデル準備完了") && uiButton(root,["Transcribe recording"]) != nil}
+}
+
+// No microphone, screen-consent or Accessibility grant to the product is required.
+func fixedCorrectionInteraction(root: AXUIElement, output: URL) throws -> Bool {
+    try press(uiButton(root,["Appleモデルの固定サンプル診断"])!)
+    try waitForUI("fixed correction without recording",seconds:840) {uiText(root).contains("固定サンプル補正 / done: 5/5")}
+    NSPasteboard.general.clearContents()
+    try press(uiButton(root,["比較レポートJSONをコピー"])!)
+    var report:[String:Any]=[:]
+    try waitForUI("fixed correction report") {
+        guard let text=NSPasteboard.general.string(forType:.string),let data=text.data(using:.utf8),let parsed=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else{return false}
+        report=parsed;return parsed["mode"] as? String == "fixed-correction"
+    }
+    guard report["sampleSetVersion"] as? Int == 1,report["includesText"] as? Bool == false,
+          report["audioMs"] as? Int == 0,report["axCharacters"] as? Int == 0,report["ocrCharacters"] as? Int == 0,
+          let rows=report["rows"] as? [[String:Any]],rows.count==5,
+          rows.allSatisfy({$0["sampleId"] is String && $0["asrMs"] is NSNull && $0["raw"]==nil && $0["candidate"]==nil && $0["finalText"]==nil})
+        else {throw SmokeFailure(description:"Fixed correction used unexpected inputs or leaked report body")}
+    try writeJSON(report,to:output.appendingPathComponent("fixed-correction-report.json"))
+    try interactionScreenshot(output,name:"fixed-correction.png")
+    return rows.contains { ["accepted","rejected"].contains($0["status"] as? String ?? "") }
 }

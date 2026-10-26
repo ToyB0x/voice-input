@@ -35,6 +35,7 @@
     "allow-comparison-plan",
     "allow-comparison-status",
     "allow-start-comparison",
+    "allow-start-correction-selftest",
     "allow-cancel-comparison",
     "allow-arm-comparison-context",
     "allow-copy-comparison-result",

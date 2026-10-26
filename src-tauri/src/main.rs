@@ -97,6 +97,7 @@ fn main() {
             comparison::comparison_plan,
             comparison::comparison_status,
             comparison::start_comparison,
+            comparison::start_correction_selftest,
             comparison::cancel_comparison,
             comparison::arm_comparison_context,
             comparison::copy_comparison_result,

@@ -17,6 +17,7 @@ use tauri::Manager;
 #[serde(rename_all = "camelCase")]
 pub struct Row {
     pub index: usize,
+    pub sample_id: Option<String>,
     pub case: Case,
     pub status: String,
     pub message: String,
@@ -36,6 +37,7 @@ impl Row {
     fn new(index: usize, case: Case) -> Self {
         Self {
             index,
+            sample_id: None,
             case,
             status: "unavailable".into(),
             message: String::new(),
@@ -64,6 +66,7 @@ pub struct FoundationDiagnostic {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub generation: u64,
+    pub mode: String,
     pub working: bool,
     pub armed: bool,
     pub phase: String,
@@ -83,6 +86,7 @@ impl Default for Status {
     fn default() -> Self {
         Self {
             generation: 0,
+            mode: "recording".into(),
             working: false,
             armed: false,
             phase: "idle".into(),
@@ -170,6 +174,7 @@ impl Comparisons {
         let original = &state.status;
         let mut status = Status {
             generation: original.generation,
+            mode: original.mode.clone(),
             working: original.working,
             armed: self.armed(),
             phase: original.phase.clone(),
@@ -243,6 +248,94 @@ impl Comparisons {
                 owner.run(&app, &recorder, &selection, &cases, input, epoch)
             }))
             .unwrap_or_else(|_| Err("比較ワーカーが終了しました。".into()));
+            owner.finish(epoch, result.err());
+        }));
+        Ok(self.status(0, 0))
+    }
+    // Reserved under Activity, sharing cancellation and busy state with recorded comparisons.
+    fn start_fixed(
+        &self,
+        app: tauri::AppHandle,
+        recorder: crate::recorder::Recorder,
+        include_qwen: bool,
+    ) -> Result<Status, String> {
+        recorder.ensure_comparison_idle()?;
+        let preferences = crate::desktop::preferences(&app)?;
+        let mut handle = self
+            .worker
+            .lock()
+            .map_err(|_| "比較ワーカーを確認できません。")?;
+        if self.closing.load(Ordering::Acquire) || self.working() {
+            return Err("比較処理の終了をお待ちください。".into());
+        }
+        if let Some(previous) = handle.take() {
+            let _ = previous.join();
+        }
+        let epoch = self.epoch.fetch_add(1, Ordering::AcqRel) + 1;
+        {
+            let mut state = self
+                .inner
+                .lock()
+                .map_err(|_| "比較状態を確認できません。")?;
+            state.active = Some(epoch);
+            state.status = Status {
+                generation: epoch,
+                mode: "fixed-correction".into(),
+                working: true,
+                phase: "preparing".into(),
+                total: FIXED_SAMPLES.len() * if include_qwen { 2 } else { 1 },
+                ..Status::default()
+            };
+        }
+        let owner = self.clone();
+        *handle = Some(std::thread::spawn(move || {
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), String> {
+                    // Release retained ASR weights without reading audio, transcript or context.
+                    recorder.suspend_for_comparison()?;
+                    if !owner.current(epoch) {
+                        return Ok(());
+                    }
+                    let resources = app
+                        .path()
+                        .resource_dir()
+                        .map_err(|_| "補正ヘルパーを確認できません。")?
+                        .join("bin");
+                    let paths = if include_qwen {
+                        BTreeMap::from([(
+                            "current-correction".into(),
+                            custom_path(&preferences.correction_model_path),
+                        )])
+                    } else {
+                        BTreeMap::new()
+                    };
+                    let apple = owner.foundation_check(&resources, epoch);
+                    owner.message(
+                        epoch,
+                        "running",
+                        "固定サンプルを直列で補正中。録音・画面情報は使用しません。",
+                    );
+                    run_fixed_samples(
+                        &resources,
+                        include_qwen,
+                        &preferences.correction_backend,
+                        &paths,
+                        &apple,
+                        &owner.epoch,
+                        epoch,
+                        |row| {
+                            if let Ok(mut state) = owner.inner.lock()
+                                && state.active == Some(epoch)
+                                && owner.current(epoch)
+                            {
+                                state.status.completed = row.index + 1;
+                                state.status.rows.push(row);
+                            }
+                        },
+                    );
+                    Ok(())
+                }))
+                .unwrap_or_else(|_| Err("自己診断ワーカーが終了しました。".into()));
             owner.finish(epoch, result.err());
         }));
         Ok(self.status(0, 0))
@@ -330,11 +423,52 @@ impl Comparisons {
             };
             paths.insert(id.clone(), path);
         }
-        let mut apple = Ok(());
-        if selection
+        let apple = if selection
             .corrections
             .iter()
             .any(|id| id == "apple-foundation")
+        {
+            self.foundation_check(&resources, epoch)
+        } else {
+            Ok(())
+        };
+        for (index, case) in cases.iter().enumerate() {
+            if !self.current(epoch) {
+                break;
+            }
+            self.message(
+                epoch,
+                "running",
+                &format!(
+                    "{}/{} を直列実行中。録音・本文・文脈は送信しません。",
+                    index + 1,
+                    cases.len()
+                ),
+            );
+            let row = run_case(
+                &resources,
+                case,
+                index,
+                &audio,
+                &sources,
+                &paths,
+                &apple,
+                selection.reference.as_deref(),
+                &self.epoch,
+                epoch,
+            );
+            if self.current(epoch)
+                && let Ok(mut state) = self.inner.lock()
+                && state.active == Some(epoch)
+            {
+                state.status.rows.push(row);
+                state.status.completed = index + 1;
+            }
+        }
+        Ok(())
+    }
+    fn foundation_check(&self, resources: &Path, epoch: u64) -> Result<(), String> {
+        let mut apple = Ok(());
         {
             self.message(
                 epoch,
@@ -374,40 +508,7 @@ impl Comparisons {
                 state.status.foundation = Some(diagnostic);
             }
         }
-        for (index, case) in cases.iter().enumerate() {
-            if !self.current(epoch) {
-                break;
-            }
-            self.message(
-                epoch,
-                "running",
-                &format!(
-                    "{}/{} を直列実行中。録音・本文・文脈は送信しません。",
-                    index + 1,
-                    cases.len()
-                ),
-            );
-            let row = run_case(
-                &resources,
-                case,
-                index,
-                &audio,
-                &sources,
-                &paths,
-                &apple,
-                selection.reference.as_deref(),
-                &self.epoch,
-                epoch,
-            );
-            if self.current(epoch)
-                && let Ok(mut state) = self.inner.lock()
-                && state.active == Some(epoch)
-            {
-                state.status.rows.push(row);
-                state.status.completed = index + 1;
-            }
-        }
-        Ok(())
+        apple
     }
     fn message(&self, epoch: u64, phase: &str, message: &str) {
         if let Ok(mut state) = self.inner.lock()
@@ -426,6 +527,86 @@ fn custom_path(value: &str) -> Result<PathBuf, String> {
     } else {
         Ok(path)
     }
+}
+// Public synthetic text only. Versioned IDs make reports comparable across app builds.
+const FIXED_SAMPLES: [(&str, &str); 5] = [
+    ("numbers", "明日の午後3時に会議室Bで10人の会議をします"),
+    ("negation", "この変更は本番には適用しないでください"),
+    ("self-repair", "金曜日、ではなく木曜日にお願いします"),
+    (
+        "filler-punctuation",
+        "えーまず資料を確認して次に田中さんへ連絡します",
+    ),
+    ("list-format", "持ち物はパソコンと充電器と社員証です"),
+];
+#[allow(clippy::too_many_arguments)]
+fn run_fixed_samples(
+    resources: &Path,
+    include_qwen: bool,
+    backend: &str,
+    paths: &BTreeMap<String, Result<PathBuf, String>>,
+    apple: &Result<(), String>,
+    epoch: &AtomicU64,
+    current: u64,
+    mut publish: impl FnMut(Row),
+) {
+    for (sample_index, sample) in FIXED_SAMPLES.iter().enumerate() {
+        for engine in if include_qwen {
+            &["apple-foundation", "current-correction"][..]
+        } else {
+            &["apple-foundation"][..]
+        } {
+            if epoch.load(Ordering::Acquire) != current {
+                return;
+            }
+            let index = sample_index * if include_qwen { 2 } else { 1 }
+                + usize::from(*engine == "current-correction");
+            let row = run_fixed_sample(
+                resources, sample, index, engine, backend, paths, apple, epoch, current,
+            );
+            if epoch.load(Ordering::Acquire) != current {
+                return;
+            }
+            publish(row);
+        }
+    }
+}
+#[allow(clippy::too_many_arguments)]
+fn run_fixed_sample(
+    resources: &Path,
+    sample: &(&str, &str),
+    index: usize,
+    engine: &str,
+    backend: &str,
+    paths: &BTreeMap<String, Result<PathBuf, String>>,
+    apple: &Result<(), String>,
+    epoch: &AtomicU64,
+    current: u64,
+) -> Row {
+    let case = Case {
+        speech: "fixed-text".into(),
+        speech_backend: "none".into(),
+        correction: engine.into(),
+        correction_backend: if engine == "apple-foundation" {
+            "system".into()
+        } else {
+            backend.into()
+        },
+        source: "none".into(),
+        route: "none".into(),
+    };
+    let mut row = Row::new(index, case.clone());
+    row.sample_id = Some(sample.0.into());
+    row.raw = Some(sample.1.into());
+    row.final_text = row.raw.clone();
+    let started = Instant::now();
+    if let Err(error) = correct_text(
+        resources, &case, &mut row, sample.1, "", paths, apple, epoch, current,
+    ) {
+        record_error(&mut row, error);
+    }
+    row.total_ms = started.elapsed().as_millis() as u64;
+    row
 }
 #[derive(Deserialize)]
 struct AsrReport {
@@ -471,7 +652,6 @@ fn run_case(
         return row;
     };
     let started = Instant::now();
-    let mut correction_started = None;
     let outcome = (|| -> Result<(), String> {
         let hint = local_transcription::recognition_hint(if case.whisper_context() {
             context.as_str()
@@ -519,8 +699,42 @@ fn run_case(
         row.asr_load_ms = Some(asr.load_ms);
         row.raw = Some(asr.text.clone());
         row.final_text = Some(asr.text.clone());
-        if case.correction == "none" || asr.text.trim().is_empty() {
-            row.final_text = Some(asr.text);
+        correct_text(
+            resources, case, &mut row, &asr.text, &context, paths, apple, epoch, current,
+        )
+    })();
+    row.total_ms = started.elapsed().as_millis() as u64;
+    if let Err(error) = outcome {
+        record_error(&mut row, error);
+    }
+    // The reference is used only here, never sent to either model.
+    row.asr_score = row.raw.as_deref().and_then(|text| score(reference, text));
+    row.candidate_score = row
+        .candidate
+        .as_deref()
+        .and_then(|text| score(reference, text));
+    row.final_score = row
+        .final_text
+        .as_deref()
+        .and_then(|text| score(reference, text));
+    row
+}
+#[allow(clippy::too_many_arguments)]
+fn correct_text(
+    resources: &Path,
+    case: &Case,
+    row: &mut Row,
+    transcript: &str,
+    context: &str,
+    paths: &BTreeMap<String, Result<PathBuf, String>>,
+    apple: &Result<(), String>,
+    epoch: &AtomicU64,
+    current: u64,
+) -> Result<(), String> {
+    let mut correction_started = None;
+    let outcome = (|| -> Result<(), String> {
+        if case.correction == "none" || transcript.trim().is_empty() {
+            row.final_text = Some(transcript.to_owned());
             row.status = "uncorrected".into();
             row.accepted = None;
             return Ok(());
@@ -536,7 +750,7 @@ fn run_case(
             return Err("correction-model-missing".into());
         }
         correction_started = Some(Instant::now());
-        let payload=serde_json::to_vec(&serde_json::json!({"transcript":asr.text,"context":if case.correction_context(){context.as_str()}else{""}})).map_err(|_|"input-failed")?;
+        let payload=serde_json::to_vec(&serde_json::json!({"transcript":transcript,"context":if case.correction_context(){context}else{""}})).map_err(|_|"input-failed")?;
         let candidate = if case.correction == "apple-foundation" {
             let output = crate::correction::child_output(
                 Command::new(resources.join("apple-foundation-correction")).arg("--correct"),
@@ -559,7 +773,7 @@ fn run_case(
                 return Err("invalid-correction-report".into());
             }
             let validation = serde_json::to_vec(
-                &serde_json::json!({"transcript":asr.text,"candidate":apple.text}),
+                &serde_json::json!({"transcript":transcript,"candidate":apple.text}),
             )
             .map_err(|_| "input-failed")?;
             let result = crate::correction::child_output(
@@ -631,7 +845,7 @@ fn run_case(
         row.final_text = Some(if candidate.accepted {
             candidate.candidate.clone()
         } else {
-            asr.text
+            transcript.to_owned()
         });
         row.status = if candidate.accepted {
             "accepted"
@@ -650,30 +864,19 @@ fn run_case(
         Ok(())
     })();
     row.correction_ms = correction_started.map(|time| time.elapsed().as_millis() as u64);
-    row.total_ms = started.elapsed().as_millis() as u64;
-    if let Err(error) = outcome {
-        row.status = if error == "metal-unavailable"
-            || error.starts_with("Apple FM: ")
-            || error == "correction-model-missing"
-        {
-            "unavailable"
-        } else {
-            "error"
-        }
-        .into();
-        row.message = error;
+    outcome
+}
+fn record_error(row: &mut Row, error: String) {
+    row.status = if error == "metal-unavailable"
+        || error.starts_with("Apple FM: ")
+        || error == "correction-model-missing"
+    {
+        "unavailable"
+    } else {
+        "error"
     }
-    // The reference is used only here, never sent to either model.
-    row.asr_score = row.raw.as_deref().and_then(|text| score(reference, text));
-    row.candidate_score = row
-        .candidate
-        .as_deref()
-        .and_then(|text| score(reference, text));
-    row.final_score = row
-        .final_text
-        .as_deref()
-        .and_then(|text| score(reference, text));
-    row
+    .into();
+    row.message = error;
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -737,6 +940,16 @@ pub fn comparison_status(
 ) -> Status {
     comparisons.status(generation, after)
 }
+fn ensure_comparison_available(app: &tauri::AppHandle) -> Result<(), String> {
+    if app.state::<crate::updater::Updates>().working()
+        || app.state::<crate::correction::Corrector>().status().working
+        || ["starting", "downloading", "verifying"]
+            .contains(&app.state::<local_models::Manager>().status().phase.as_str())
+    {
+        return Err("他の処理の終了をお待ちください。".into());
+    }
+    Ok(())
+}
 #[tauri::command]
 pub fn start_comparison(
     app: tauri::AppHandle,
@@ -746,14 +959,20 @@ pub fn start_comparison(
 ) -> Result<Status, String> {
     let activity = app.state::<crate::activity::Activity>();
     let _gate = activity.lock()?;
-    if app.state::<crate::updater::Updates>().working()
-        || app.state::<crate::correction::Corrector>().status().working
-        || ["starting", "downloading", "verifying"]
-            .contains(&app.state::<local_models::Manager>().status().phase.as_str())
-    {
-        return Err("他の処理の終了をお待ちください。".into());
-    }
+    ensure_comparison_available(&app)?;
     comparisons.start(app.clone(), selection, recorder.inner().clone())
+}
+#[tauri::command]
+pub fn start_correction_selftest(
+    app: tauri::AppHandle,
+    comparisons: tauri::State<'_, Comparisons>,
+    recorder: tauri::State<'_, crate::recorder::Recorder>,
+    include_qwen: bool,
+) -> Result<Status, String> {
+    let activity = app.state::<crate::activity::Activity>();
+    let _gate = activity.lock()?;
+    ensure_comparison_available(&app)?;
+    comparisons.start_fixed(app.clone(), recorder.inner().clone(), include_qwen)
 }
 #[tauri::command]
 pub fn cancel_comparison(comparisons: tauri::State<'_, Comparisons>, clear: bool) {
@@ -850,6 +1069,7 @@ fn comparison_report(status: &Status, include_text: bool) -> Result<String, Stri
     serde_json::to_string_pretty(&serde_json::json!({
         "schemaVersion":1, "appVersion":env!("CARGO_PKG_VERSION"),
         "platform":std::env::consts::OS, "architecture":std::env::consts::ARCH,
+        "mode":status.mode, "sampleSetVersion":if status.mode == "fixed-correction" {Some(1)} else {None},
         "phase":status.phase, "planned":status.total, "completed":status.completed,
         "audioMs":status.audio_ms, "hasReference":status.has_reference,
         "axCharacters":status.ax_characters, "ocrCharacters":status.ocr_characters,
@@ -956,6 +1176,154 @@ mod tests {
 mod routing_tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+    fn fixture(root: &Path, name: &str, script: &str) {
+        let path = root.join(name);
+        std::fs::write(&path, script).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    #[test]
+    fn fixed_samples_use_only_builtin_text_serially_and_do_not_invent_asr_scores() {
+        let root = std::env::temp_dir().join(format!("voice-fixed-samples-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let log = root.join("processes");
+        let script = format!(
+            r#"#!/usr/bin/python3
+import sys,json,os
+from pathlib import Path
+log=Path({log:?})
+if log.exists():
+ try: os.kill(int(log.read_text()),0)
+ except ProcessLookupError: pass
+ else: raise AssertionError('previous process not reaped')
+log.write_text(str(os.getpid()))
+p=json.load(sys.stdin)
+if sys.argv[1:] == ['--validate']:
+ assert p['candidate']==p['transcript']+'。'
+ print(json.dumps(dict(text=p['candidate'])))
+else:
+ assert p['context']==''
+ assert p['transcript'] in {inputs}
+ if sys.argv[1:] == ['--correct']:
+  print(json.dumps(dict(text=p['transcript']+'。',backend='foundation',offloaded_layers=0)))
+ else:
+  assert sys.argv[-2:]==['cpu','--compare']
+  print(json.dumps(dict(candidate=p['transcript']+'。',accepted=True,reason=None,backend='cpu',offloaded_layers=0)))
+"#,
+            log = log.to_str().unwrap(),
+            inputs = serde_json::to_string(&FIXED_SAMPLES.iter().map(|s| s.1).collect::<Vec<_>>())
+                .unwrap()
+        );
+        fixture(&root, "apple-foundation-correction", &script);
+        fixture(&root, "local-correction", &script);
+        let paths = BTreeMap::from([("current-correction".into(), Ok(root.join("model.gguf")))]);
+        let mut rows = Vec::new();
+        run_fixed_samples(
+            &root,
+            true,
+            "cpu",
+            &paths,
+            &Ok(()),
+            &AtomicU64::new(1),
+            1,
+            |row| rows.push(row),
+        );
+        assert_eq!(rows.len(), 10);
+        for (index, row) in rows.iter().enumerate() {
+            assert_eq!(row.index, index);
+            assert_eq!(row.sample_id.as_deref(), Some(FIXED_SAMPLES[index / 2].0));
+            assert_eq!(row.status, "accepted", "{}", row.message);
+            assert_eq!(
+                row.final_text.as_deref(),
+                Some(format!("{}。", FIXED_SAMPLES[index / 2].1).as_str())
+            );
+            assert!(row.asr_ms.is_none() && row.asr_score.is_none() && row.final_score.is_none());
+            assert!(row.correction_ms.is_some());
+        }
+        let status = Status {
+            mode: "fixed-correction".into(),
+            rows,
+            total: 10,
+            completed: 10,
+            ..Status::default()
+        };
+        let report = comparison_report(&status, false).unwrap();
+        assert!(!report.contains(FIXED_SAMPLES[0].1));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&report).unwrap()["sampleSetVersion"],
+            1
+        );
+        let mut rows = Vec::new();
+        run_fixed_samples(
+            &root,
+            false,
+            "cpu",
+            &paths,
+            &Err("Apple FM: deviceNotEligible".into()),
+            &AtomicU64::new(1),
+            1,
+            |row| rows.push(row),
+        );
+        assert_eq!(rows.len(), 5);
+        assert!(
+            rows.iter().all(|r| r.status == "unavailable"
+                && r.raw == r.final_text
+                && r.candidate.is_none())
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn cancelling_fixed_samples_reaps_the_running_child_and_publishes_no_stale_rows() {
+        let root = std::env::temp_dir().join(format!("voice-fixed-cancel-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let marker = root.join("started");
+        fixture(
+            &root,
+            "apple-foundation-correction",
+            &format!(
+                "#!/usr/bin/python3\nimport os,time,json,sys\njson.load(sys.stdin)\nopen({:?},'w').write(str(os.getpid()))\ntime.sleep(10)\n",
+                marker.to_str().unwrap()
+            ),
+        );
+        let epoch = Arc::new(AtomicU64::new(1));
+        let child_epoch = epoch.clone();
+        let child_root = root.clone();
+        let worker = std::thread::spawn(move || {
+            let mut rows = Vec::new();
+            run_fixed_samples(
+                &child_root,
+                true,
+                "cpu",
+                &BTreeMap::new(),
+                &Ok(()),
+                &child_epoch,
+                1,
+                |row| rows.push(row),
+            );
+            rows
+        });
+        let started = Instant::now();
+        while std::fs::read_to_string(&marker)
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .is_none()
+            && started.elapsed() < Duration::from_secs(5)
+        {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(marker.exists(), "helper did not start");
+        epoch.fetch_add(1, Ordering::AcqRel);
+        assert!(worker.join().unwrap().is_empty());
+        let result = Command::new("/usr/bin/python3")
+            .arg("-c")
+            .arg("import os,sys; os.kill(int(sys.argv[1]),0)")
+            .arg(std::fs::read_to_string(&marker).unwrap())
+            .output()
+            .unwrap();
+        assert!(!result.status.success(), "cancelled child still running");
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn apple_unavailability_failure_and_guard_rejection_keep_scored_asr() {
         let root =

@@ -399,6 +399,16 @@ impl Recorder {
         crate::lifecycle::diagnostic("audio-workers-stopped");
     }
 
+    pub(crate) fn ensure_comparison_idle(&self) -> Result<(), String> {
+        let capture = self
+            .capture
+            .lock()
+            .map_err(|_| "録音状態を確認できません。")?;
+        if capture.recognition.working || matches!(capture.phase, Some("recording" | "preparing")) {
+            return Err("録音と文字起こしの終了をお待ちください。".into());
+        }
+        Ok(())
+    }
     pub(crate) fn comparison_input(&self) -> Result<ComparisonInput, String> {
         let capture = self
             .capture
@@ -608,6 +618,20 @@ mod tests {
             crate::updater::Updates::new(),
             crate::activity::Activity::default(),
         );
+        assert!(recorder.ensure_comparison_idle().is_ok()); // No audio or model is required.
+        {
+            let mut capture = recorder.capture.lock().unwrap();
+            capture.phase = Some("recording");
+        }
+        assert!(recorder.ensure_comparison_idle().is_err());
+        {
+            let mut capture = recorder.capture.lock().unwrap();
+            capture.phase = None;
+            capture.recognition.working = true;
+        }
+        assert!(recorder.ensure_comparison_idle().is_err());
+        recorder.capture.lock().unwrap().recognition.working = false;
+        assert!(recorder.ensure_comparison_idle().is_ok());
         recorder.shutdown();
         recorder.shutdown();
         assert!(recorder.closing.load(Ordering::Acquire));

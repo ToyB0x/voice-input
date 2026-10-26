@@ -6,6 +6,7 @@ fn main() {
         "comparison_plan",
         "comparison_status",
         "start_comparison",
+        "start_correction_selftest",
         "cancel_comparison",
         "arm_comparison_context",
         "copy_comparison_result",

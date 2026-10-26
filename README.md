@@ -203,3 +203,5 @@ python3 scripts/setup-updater-signing.py --key-file "$HOME/Library/Application S
 通常の依存更新は公開後48時間以上経過した版を対象にし、確認できたセキュリティ修正は版・チェックサム・理由・期限を記録した例外で優先します。pnpmの厳格なminimum release ageと、Rustの全ロックファイルの公開日時検査を適用します。詳細と手動更新手順は[依存更新ポリシー](docs/dependency-policy.md)を参照してください。
 
 実機でのApple／Qwen比較と文脈利用先の選び方は[実機比較ガイド](docs/real-device-comparison.md)を参照してください。
+
+録音や画面取得なしでモデルの生成を確かめる場合は、[固定サンプルの補正自己診断](docs/correction-selftest.md)を利用できます。
