@@ -1,3 +1,4 @@
+import { setupContextLab } from "./context-lab";
 import { setupComparison, comparisonWorking } from "./comparison";
 import { setupUpdates, updateInstalling } from "./updates";
 import "./styles.css";
@@ -348,3 +349,5 @@ if (isTauri()) {
   permission.textContent = "録音は macOS アプリで利用できます。";
   status.textContent = "ブラウザーでは UI のプレビューのみ利用できます。";
 }
+
+setupContextLab();

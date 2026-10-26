@@ -43,6 +43,10 @@
     "allow-update-status",
     "allow-check-updates",
     "allow-install-update",
-    "allow-copy-comparison-report"
+    "allow-copy-comparison-report",
+    "allow-start-context-lab",
+    "allow-context-lab-status",
+    "allow-context-lab-report",
+    "allow-copy-context-lab-report"
   ]
 }

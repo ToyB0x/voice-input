@@ -44,7 +44,11 @@
       "resources/local-correction": "bin/local-correction",
       "resources/apple-foundation-correction": "bin/apple-foundation-correction",
       "resources/CORRECTION-NOTICES.txt": "CORRECTION-NOTICES.txt",
-      "resources/compare-transcription": "bin/compare-transcription"
+      "resources/compare-transcription": "bin/compare-transcription",
+      "resources/context-lab-native": "bin/context-lab-native",
+      "../evaluation/context-evidence/assets/storm.png": "lab/storm.png",
+      "../evaluation/context-evidence/assets/candy.png": "lab/candy.png",
+      "../evaluation/context-evidence/baseline/fixtures/speech.wav": "lab/speech.wav"
     }
   },
   "plugins": {

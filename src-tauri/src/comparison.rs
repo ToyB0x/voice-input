@@ -12,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::Manager;
+pub mod context_lab;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,6 +108,7 @@ impl Default for Status {
 struct Inner {
     status: Status,
     active: Option<u64>,
+    lab: Option<context_lab::Session>,
 }
 #[derive(Clone)]
 pub struct Comparisons {
@@ -122,6 +124,7 @@ impl Comparisons {
             inner: Arc::new(Mutex::new(Inner {
                 status: Status::default(),
                 active: None,
+                lab: None,
             })),
             epoch: Arc::new(AtomicU64::new(0)),
             armed: Arc::new(AtomicBool::new(false)),
@@ -150,6 +153,7 @@ impl Comparisons {
             }
             .into();
             if clear {
+                state.lab = None;
                 state.status.rows.clear();
                 state.status.foundation = None;
                 state.status.audio_ms = 0;
@@ -222,6 +226,7 @@ impl Comparisons {
                 .inner
                 .lock()
                 .map_err(|_| "比較状態を確認できません。")?;
+            state.lab = None;
             state.active = Some(epoch);
             state.status = Status {
                 generation: epoch,
@@ -277,6 +282,7 @@ impl Comparisons {
                 .inner
                 .lock()
                 .map_err(|_| "比較状態を確認できません。")?;
+            state.lab = None;
             state.active = Some(epoch);
             state.status = Status {
                 generation: epoch,
@@ -347,6 +353,11 @@ impl Comparisons {
             state.status.working = false;
             state.active = None;
             let stale = self.epoch.load(Ordering::Acquire) != epoch;
+            let lab_complete =
+                !stale && error.is_none() && state.status.completed == state.status.total;
+            if let Some(lab) = &mut state.lab {
+                lab.report["completed"] = lab_complete.into();
+            }
             state.status.phase = if stale {
                 "cancelled"
             } else if error.is_some() {
