@@ -20,6 +20,15 @@
       ],
       "groupName": "JavaScript dependencies",
       "separateMajorMinor": false
+    },
+    {
+      "matchDepNames": [
+        "node",
+        "pnpm",
+        "npm:pnpm"
+      ],
+      "groupName": "Node and pnpm toolchain",
+      "separateMajorMinor": false
     }
   ],
   "vulnerabilityAlerts": {

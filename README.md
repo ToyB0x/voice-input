@@ -68,20 +68,24 @@ base / small を固定した人間の読み上げ音声と無音で比較し、�
 
 - macOS 27 以降（アプリの対象下限。アプリCIは `xcode-27` / Apple Silicon）
 - Xcode 27以降またはmacOS 27 SDKを含むCommand Line Tools（`xcrun --sdk macosx --show-sdk-version`で27以降を確認）
-- Node.js 26.12.1（`.nvmrc`）と pnpm 12.15.0（`package.json`の`packageManager`で固定）
-- CMake: `brew install cmake`（文字起こしエンジンのビルドに必要）
-- [rustup](https://rustup.rs/)（Rust は `rust-toolchain.toml` で指定）
+- [mise](https://mise.jdx.dev/) 2026.10.18以降（初回のみ `brew install mise`）
+
+[`.mise/config.toml`](.mise/config.toml)でNode.js 26.12.1・pnpm 12.15.0・Python 3.12.14・CMake 4.4.4を固定します。Rust 1.99.1とrustfmt／clippyは既存の`rust-toolchain.toml`をmiseが読み込みます。Xcode／SDKはmiseではインストールしません。
 
 ```sh
 git clone https://github.com/ToyB0x/voice-input.git
 cd voice-input
-# nvm を使っている場合: nvm install && nvm use
-pnpm install --frozen-lockfile
-pnpm run check:dependencies
-pnpm run tauri dev
+mise trust
+mise install  # mise i と同じ。ツールの導入だけで、依存導入や鍵生成はしません。
+mise exec -- python3 scripts/check-toolchain.py
+mise exec -- pnpm install --frozen-lockfile
+mise exec -- pnpm run check:dependencies
+mise exec -- pnpm run tauri dev
 ```
 
-初回は Rust ツールチェーンと依存クレートをダウンロードします。
+シェルを有効化済みなら、`mise exec --`を付けずに`pnpm`／`cargo`を使えます。macOS標準のzshでは`eval "$(mise activate zsh)"`を現在のTerminalで実行し、継続利用する場合は同じ行を`~/.zshrc`へ追加します。シェルを変更しない場合も、上記の`mise exec --`で固定版を使用できます。
+
+初回はmiseがツールチェーンを、pnpm／Cargoが依存をダウンロードします。詳しい範囲と署名キー生成までの手順は[開発ツールのセットアップ](docs/toolchain.md)を参照してください。
 Vite とネイティブウィンドウが起動し、初期画面に「Voice Input」と表示されます。
 アプリを終了すると開発サーバーも終了します。
 
