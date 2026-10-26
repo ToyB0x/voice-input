@@ -186,6 +186,7 @@ pub(crate) fn worker(
                             Ok(engine) => {
                                 let name = engine.model_name();
                                 model = Some(engine);
+                                crate::lifecycle::diagnostic("model-ready");
                                 Ok(name)
                             }
                             Err(e) => Err(format!(

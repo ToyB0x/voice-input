@@ -27,6 +27,8 @@ mod activity;
 #[cfg(target_os = "macos")]
 mod comparison;
 #[cfg(target_os = "macos")]
+mod lifecycle;
+#[cfg(target_os = "macos")]
 mod updater;
 
 fn main() {
@@ -138,11 +140,13 @@ fn main() {
                 event,
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
             ) {
+                lifecycle::diagnostic("exit-cleanup-started");
                 use tauri::Manager;
                 app.state::<comparison::Comparisons>().shutdown();
                 app.state::<local_models::Manager>().shutdown();
                 app.state::<context::Reader>().cancel();
                 app.state::<correction::Corrector>().shutdown();
+                lifecycle::diagnostic("exit-cleanup-completed");
             }
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);

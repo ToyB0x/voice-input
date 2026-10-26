@@ -199,6 +199,14 @@ jobs:
           path: ${{ runner.temp }}/voice-input-app/
           retention-days: 14
           if-no-files-found: error
+      - name: Verify clean exit before the Preview window check
+        timeout-minutes: 6
+        run: |
+          python3 scripts/prepare-transcription-model.py "$RUNNER_TEMP/exit-model.bin"
+          python3 scripts/verify-macos-exit.py \
+            --app "src-tauri/target/release/bundle/macos/Voice Input.app" \
+            --model "$RUNNER_TEMP/exit-model.bin" \
+            --output "$RUNNER_TEMP/voice-input-smoke/exit"
       - name: Build observable native context fixture
         if: inputs.full_integration
         run: |
