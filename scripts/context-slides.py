@@ -39,7 +39,7 @@ def main():
     engine=a.engine or r.get('presentationEngine','qwen3')
     instruction_key=r.get('presentationInstruction','kanji')
     route=r.get('presentationRoute','correction' if r.get('inputKind')=='text' else 'both')
-    engine_label='Apple Foundation Models' if engine=='apple-foundation' else 'Qwen'
+    engine_label='Apple Foundation Models' if engine=='apple-foundation' else r['models'].get('qwenName',r['models']['correction'] if 'Qwen' in r['models']['correction'] else 'Qwen（SHA-256はJSON）')
     footer_label={'recorded':'録音','text':'かな原文','bundled':'同梱音声'}.get(r.get('inputKind'),'合成音声')
     rows=r['rows'];slides=[]
     repeats=len({x['repeat'] for x in rows if 'repeat' in x})
@@ -73,10 +73,10 @@ def main():
     add('文字のない画像は、OCRだけでは足りる？','<div class="pictures">'+''.join(pics)+'</div><p>画像 → Apple Vision分類ラベル → テキスト補正。正解語への手動マッピングは行っていない。</p><p>画像はAI生成の合成刺激。画像を直接LLMへ渡すVLMの試験や、画面全体を読む製品機能ではない。</p>')
     route_rows=[]
     for source in ['fixture-text','ocr','vision-labels','mismatched-text']:
-        for route in ['hint','correction','both']:
+        for route_name in ['hint','correction','both']:
             for instruction in r['instructions']:
-                xs=[x for x in rows if x.get('source')==source and x.get('route')==route and x.get('instruction')==instruction and x.get('engine')==engine]
-                if xs: route_rows.append([LABELS[source],route,instruction,f"{sum(x['judgment']=='target' for x in xs)}/{len(xs)}",round(statistics.median(x['correctionMs'] for x in xs if x.get('correctionMs') is not None)) if any(x.get('correctionMs') is not None for x in xs) else '未計測'])
+                xs=[x for x in rows if x.get('source')==source and x.get('route')==route_name and x.get('instruction')==instruction and x.get('engine')==engine and x.get('status') not in ['unavailable','asr-failed','error'] and x.get('finalText') is not None]
+                if xs: route_rows.append([LABELS[source],route_name,instruction,f"{sum(x['judgment']=='target' for x in xs)}/{len(xs)}",round(statistics.median(x['correctionMs'] for x in xs if x.get('correctionMs') is not None)) if any(x.get('correctionMs') is not None for x in xs) else '未計測'])
     for offset in range(0,len(route_rows),8):
         add('利用先と追加指示を比較する',table(['取得元','利用先','指示','期待語／実行数','補正中央値ms'],route_rows[offset:offset+8])+'<p class="small">時間はこのJSONの実行環境での実測。Qwen重みの再利用は実行方式に依存し、AFM内部のロード時間はOS管理。ASRの同一入力は条件間で共有。</p>')
     # Show observed failures as first-class findings, not just aggregate scores.
@@ -85,14 +85,14 @@ def main():
     def counts(scene,source,kind='target'):
         value=condition_counts(rows,scene,source,engine,instruction_key,route)
         return f"{value[kind]}/{value['executed']}" if value['executed'] else '未実行'
-    kana=[x for x in r.get('kanaControls',[]) if x.get('engine',engine)==engine]
+    kana=[x for x in r.get('kanaControls',[]) if x.get('engine','qwen3')==engine]
     kana_changed=sum(x['result'].get('candidate','').rstrip('。')!=x['input'].rstrip('。') for x in kana if 'candidate' in x['result'])
     add('今回の実測で分かったこと',
         '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples))+'</b>。</p>'
         '<p>直接テキスト＋ヒント・補正の期待語出現：台風 '+counts('storm','fixture-text')+'、キャンディ '+counts('candy','fixture-text')+'。</p>'
         '<p>画像分類ラベル＋ヒント・補正の期待語出現：台風 '+counts('storm','vision-labels')+'、キャンディ '+counts('candy','vision-labels')+'。逆の文脈での逆語出現：台風 '+counts('storm','mismatched-text','opposite')+'、キャンディ '+counts('candy','mismatched-text','opposite')+'。</p>'
         '<p>かな入力の分離試験：'+str(len(kana))+'件中'+str(kana_changed)+'件で候補の表記が変化（末尾の句点を除く）。変化だけでは正しい漢字変換や意味保持の証明にならない。</p>')
-    controls=[x for x in r.get('preservationControls',[]) if x.get('engine',engine)==engine]
+    controls=[x for x in r.get('preservationControls',[]) if x.get('engine','qwen3')==engine]
     for instruction in r['instructions']:
         label='標準指示' if instruction=='default' else '追加指示 '+instruction
         xs=[x for x in controls if x['instruction']==instruction]

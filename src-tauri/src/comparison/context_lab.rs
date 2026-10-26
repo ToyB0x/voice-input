@@ -241,8 +241,8 @@ impl Comparisons {
             Value::Null
         };
         self.lab_update(epoch,"models",json!({"speech":if options.input=="text" {"なし（かな原文）"} else {"設定中のWhisper"},
-            "speechSha256":speech_hash,"speechBackend":prefs.backend,"correction":if options.apple {"Apple Foundation Models"} else {"設定中のQwen"},
-            "qwenSha256":qwen_hash,"qwenBackend":prefs.correction_backend}));
+            "speechSha256":speech_hash,"speechBackend":if options.input=="text" {"none"} else {prefs.backend.as_str()},"correction":if options.apple {"Apple Foundation Models"} else {"設定中のQwen"},
+            "qwenSha256":qwen_hash,"qwenBackend":prefs.correction_backend,"qwenModelReuse":false,"afmSessionReuse":false}));
         let apple = self.foundation_check(&resources, epoch);
         if let Ok(state) = self.inner.lock()
             && let Some(d) = &state.status.foundation
@@ -1032,7 +1032,12 @@ time.sleep(30)
         });
         let marker = root.join("capture.py.pid");
         let deadline = Instant::now() + Duration::from_secs(5);
-        while !marker.exists() && Instant::now() < deadline {
+        while std::fs::read_to_string(&marker)
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .is_none()
+            && Instant::now() < deadline
+        {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(marker.exists());

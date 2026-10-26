@@ -25,3 +25,22 @@ class ConclusionsTests(unittest.TestCase):
         self.assertEqual(slides.condition_counts([row],'storm','ocr')['executed'],0)
         row['status']='unavailable'
         self.assertEqual(slides.condition_counts([row],'storm','ocr',engine='apple-foundation',instruction='custom',route='correction')['executed'],0)
+
+    def test_afm_text_only_html_uses_custom_route_and_no_legacy_qwen_controls(self):
+        import json, tempfile
+        from unittest.mock import patch
+        report=json.loads((Path(__file__).resolve().parents[2]/'evaluation/context-evidence/baseline/results.json').read_text())
+        report.update(inputKind='text',presentationEngine='apple-foundation',presentationInstruction='custom',networkDenied=False,instructions={'default':'','custom':'表記の希望'})
+        report['models']['speech']='なし';report['models']['speechBackend']='none'
+        report['rows']=[dict(scene='storm',source='fixture-text',engine='apple-foundation',instruction='custom',route='correction',repeat=0,status='accepted',raw='あめ',finalText='雨',judgment='target',correctionMs=100)]
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);source=root/'device.json';source.write_text(json.dumps(report))
+            with patch('sys.argv',['slides','--report',str(source),'--output',str(root/'output')]): slides.main()
+            html=(root/'output/slides.html').read_text()
+            self.assertIn('台風 1/1',html)
+            self.assertIn('ローカルモデルAPI（通信Sandboxなし）',html)
+            self.assertNotIn('田中さんへ資料を送ります',html)
+            report['rows'][0]['status']='unavailable';report['rows'][0]['correctionMs']=None
+            source.write_text(json.dumps(report))
+            with patch('sys.argv',['slides','--report',str(source),'--output',str(root/'output')]): slides.main()
+            self.assertIn('未実行',(root/'output/slides.html').read_text())
