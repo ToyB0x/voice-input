@@ -84,3 +84,10 @@ OSキャッシュ・試行順序の影響があり、一定の高速化率は要
 ## UIナビゲーションと表示
 
 通常PR CIの `Browser navigation and layout` で、実Chromiumを使った画面切替・入力保持・共有保存・キーボード／マウス操作・狭い画面での横幅を検証します。`ui-navigation` Artifactに合成サンプルの各画面PNGと検証JSONを保存します。追加のnpm／Pythonブラウザライブラリは導入せず、Nodeの標準WebSocketでCDPを操作します。macOSの権限・実音声・WebKitとは別の検証です。詳細は[画面の使い分け](navigation.md)を参照してください。
+
+
+## miseによる開発ツールの導入
+
+.mise/config.tomlを使い、通常CIの `mise setup (Linux)` とmacOSアプリのビルドで`.mise/config.toml`からツールを導入し、Node／pnpm／Python／CMake／Rustの実バージョンとrustfmt／clippyを検査します。導入した環境で固定ロックのpnpm依存導入・UIテスト・frontend buildも実行します。mise本体は公開後48時間以上経過した2026.10.18、ActionはコミットSHAを固定します。
+
+macOSアプリCIはmiseのPython・CMake・Rustでネイティブビルドまで検証します。リリース・モデル評価CIは従来のセットアップを維持し、`.nvmrc`／`packageManager`との一致を依存ポリシーの最初に検査します。Rustはmiseも既存CIも同じ`rust-toolchain.toml`を使います。アプリの依存に対する2日の公開後待機は変更しません。
