@@ -9,7 +9,9 @@ import vm from 'node:vm';
 async function setup(phase, statusMessage) {
   const elements = new Map();
   class Element {
-    value = ''; textContent = ''; disabled = false; listeners = new Map();
+    value = ''; text = ''; textWrites = 0; disabled = false; listeners = new Map();
+    get textContent() { return this.text; }
+    set textContent(value) { this.text = value; this.textWrites++; }
     add() {}
     addEventListener(type, handler) { this.listeners.set(type, handler); }
     dispatch(type) { return this.listeners.get(type)?.(); }
@@ -39,14 +41,14 @@ async function setup(phase, statusMessage) {
   const module = new vm.SourceTextModule(source, { context });
   await module.link(() => api);
   await module.evaluate();
-  module.namespace.setupModels(() => false, () => {});
+  const controls = module.namespace.setupModels(() => false, () => {});
   const settle = () => new Promise(setImmediate);
   await settle();
   elements.get('model-preset').value = 'light';
   elements.get('model-preset').dispatch('change');
   elements.get('download-models').dispatch('click');
   await settle();
-  return { elements, state, settle, poll: () => poll(), calls: () => preparationCalls };
+  return { elements, state, controls, settle, poll: () => poll(), calls: () => preparationCalls };
 }
 
 test('an immediate failure is visible even when the first poll returns identical state', async () => {
@@ -72,5 +74,15 @@ test('a message change with unchanged byte count is still displayed', async () =
   app.poll(); await app.settle();
   assert.match(app.elements.get('managed-status').textContent, /^接続を確認中/);
   assert.equal(app.elements.get('download-models').disabled, true);
+  assert.equal(app.calls(), 1);
+});
+
+test('recorder refreshes preserve button text nodes when the label has not changed', async () => {
+  const app = await setup('error', '取得処理に失敗しました。');
+  const download = app.elements.get('download-models');
+  const apply = app.elements.get('apply-models');
+  const before = [download.textWrites, apply.textWrites];
+  for (let i = 0; i < 10; i++) app.controls.refreshControls();
+  assert.deepEqual([download.textWrites, apply.textWrites], before);
   assert.equal(app.calls(), 1);
 });

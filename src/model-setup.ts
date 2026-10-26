@@ -33,18 +33,23 @@ export function setupModels(locked: () => boolean, apply: (speech: string | unde
   const busy = () => requesting || !!state && ["starting", "downloading", "verifying"].includes(state.phase);
   const onlyDisableCorrection = () => speech.value === "" && correction.value === "";
   const matches = () => !!state && state.phase === "ready" && state.generation !== ignoredGeneration && state.prepared.map(m => m.id).join() === ids().join();
+  function setText(element: HTMLElement, value: string) {
+    if (element.textContent !== value) element.textContent = value;
+  }
   function render() {
     const unavailable = !isTauri() || !models.length;
     preset.disabled = speech.disabled = correction.disabled = unavailable || busy() || locked();
     download.disabled = unavailable || !ids().length || busy() || locked();
     verify.disabled = unavailable || !ids().length || busy() || locked() || ids().some(id => !models.find(m => m.id === id)?.cached);
     applyButton.disabled = !(matches() || onlyDisableCorrection()) || busy() || locked();
-    applyButton.textContent = onlyDisableCorrection() ? "補正を無効にして設定欄へ反映" : "検証済みモデルを設定欄へ反映";
+    setText(applyButton, onlyDisableCorrection() ? "補正を無効にして設定欄へ反映" : "検証済みモデルを設定欄へ反映");
     cancel.disabled = requesting || !busy();
     const chosen = ids().map(id => models.find(m => m.id === id)).filter((m): m is Model => !!m);
     const total = chosen.reduce((n, m) => n + m.bytes, 0);
-    download.textContent = `ダウンロードして準備（最大 ${(total / 1e9).toFixed(2)} GB）`;
-    information.textContent = chosen.map(m => `${m.name} / ${(m.bytes / 1e9).toFixed(2)} GB / ${m.license} / ${m.cached ? "保存あり・使用前に検証" : "未取得"}。${m.memoryHint}`).join("\n");
+    // This render runs with recorder polling too. Preserve the existing text
+    // nodes while a native pointer/keyboard interaction may be in progress.
+    setText(download, `ダウンロードして準備（最大 ${(total / 1e9).toFixed(2)} GB）`);
+    setText(information, chosen.map(m => `${m.name} / ${(m.bytes / 1e9).toFixed(2)} GB / ${m.license} / ${m.cached ? "保存あり・使用前に検証" : "未取得"}。${m.memoryHint}`).join("\n"));
     progress.hidden = !busy();
     progress.max = Math.max(state?.total ?? 0, 1);
     progress.value = state?.received ?? 0;
