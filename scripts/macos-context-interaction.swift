@@ -3,7 +3,8 @@ import ApplicationServices
 import Foundation
 
 func contextCheckbox(_ root: AXUIElement) -> AXUIElement? {
-    axElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Local recognition context") }
+    revealProductControl(root, "Local recognition context")
+    return axElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Local recognition context") }
 }
 func pressContextButton(_ root: AXUIElement, _ label: String) throws {
     var button: AXUIElement?
