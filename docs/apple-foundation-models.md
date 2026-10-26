@@ -72,3 +72,5 @@ Artifact `apple-foundation-runtime`にSDK版・来歴・利用可否の結果、
 ## 同じ音声で他方式と比較する
 
 [実機比較ガイド](real-device-comparison.md)のプリセットで、Apple／設定中のQwenと、画面情報をWhisper・補正・両方に利用する条件を選べます。比較開始時のApple利用可否も本文なしの比較レポートに含めます。
+
+録音前に実推論だけを切り分けるには、[固定サンプルの自己診断](correction-selftest.md)を使えます。音声モデルやマイク・画面取得の権限は不要です。

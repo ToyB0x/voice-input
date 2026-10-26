@@ -98,3 +98,23 @@ test('availability diagnostics update and clearing removes the previous comparis
   app.poll(); await app.settle();
   assert.doesNotMatch(app.elements.get('compare-foundation').textContent, /modelNotReady/);
 });
+
+test('fixed diagnosis needs no recording, reference, capture or permission command', async () => {
+  const app = await setup();
+  app.elements.get('compare-use-reference').checked = true;
+  app.elements.get('compare-reference').value = 'PRIVATE_REFERENCE';
+  const before = app.requests.length;
+  app.click('compare-selftest-apple'); await app.settle();
+  app.click('compare-selftest-both'); await app.settle();
+  const requests = app.requests.slice(before);
+  assert.deepEqual(requests.filter(r => r.command === 'start_correction_selftest').map(r => r.args),
+    [{ includeQwen: false }, { includeQwen: true }]);
+  assert.ok(requests.every(r => ['start_correction_selftest', 'comparison_status'].includes(r.command)));
+  app.state.mode = 'fixed-correction'; app.state.working = true;
+  app.poll(); await app.settle();
+  assert.equal(app.elements.get('compare-selftest-apple').disabled, true);
+  assert.equal(app.elements.get('compare-selftest-both').disabled, true);
+  assert.match(app.elements.get('compare-progress').textContent, /音声・画面情報は使用しません/);
+  app.click('compare-cancel'); await app.settle();
+  assert.equal(app.requests.filter(r => r.command === 'cancel_comparison').at(-1).args.clear, false);
+});
