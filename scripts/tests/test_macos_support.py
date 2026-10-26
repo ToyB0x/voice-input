@@ -43,8 +43,8 @@ class MacOSSupportTests(unittest.TestCase):
                                      and bundle_min == '27.0' and binary_min == '27.0' else 'failed')
             return result
 
-    def test_supported_app_checks_all_four_executables(self):
-        self.assertEqual(len(self.verify()['binaries']), 4)
+    def test_supported_app_checks_all_five_executables(self):
+        self.assertEqual(len(self.verify()['binaries']), 5)
 
     def test_old_host_is_not_runtime_coverage(self):
         with self.assertRaises(ValueError):

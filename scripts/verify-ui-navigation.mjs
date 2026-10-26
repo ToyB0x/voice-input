@@ -74,7 +74,7 @@ try {
     window.__ui.snapshot.phase='recording'; window.__ui.snapshot.elapsedMs=1234; await pause();
     select('settings'); await pause(); select('input');
     check(!el('stop').disabled && el('duration').textContent.includes('1.2'),'Navigation interrupted recording UI');
-    const reads = new Set(['recording_status','recording_level','desktop_status','insertion_status','context_status','correction_status','comparison_status','comparison_plan','comparison_models','model_catalog','model_preparation_status','update_status']);
+    const reads = new Set(['context_lab_status','recording_status','recording_level','desktop_status','insertion_status','context_status','correction_status','comparison_status','comparison_plan','comparison_models','model_catalog','model_preparation_status','update_status']);
     const forbidden = window.__ui.calls.filter(c => !reads.has(c) && c !== 'save_preferences');
     check(window.__ui.calls.filter(c=>c==='save_preferences').length===1,'Settings were saved outside the explicit action');
     check(forbidden.length===0,'Navigation triggered native side effects: '+forbidden.join(','));

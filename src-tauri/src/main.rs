@@ -102,6 +102,10 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            comparison::context_lab::start_context_lab,
+            comparison::context_lab::context_lab_status,
+            comparison::context_lab::context_lab_report,
+            comparison::context_lab::copy_context_lab_report,
             comparison::copy_comparison_report,
             comparison::comparison_models,
             comparison::comparison_plan,

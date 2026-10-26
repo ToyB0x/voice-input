@@ -1,6 +1,29 @@
 fn main() {
+    let revision = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_owned())
+        .filter(|s| s.len() == 40 && s.bytes().all(|c| c.is_ascii_hexdigit()))
+        .unwrap_or_else(|| "unknown".into());
+    println!("cargo:rustc-env=VOICE_INPUT_SOURCE_REVISION={revision}");
+    println!("cargo:rerun-if-changed=../.git/HEAD");
+    if let Ok(output) = std::process::Command::new("git")
+        .args(["symbolic-ref", "-q", "HEAD"])
+        .output()
+        && let Ok(reference) = String::from_utf8(output.stdout)
+    {
+        println!("cargo:rerun-if-changed=../.git/{}", reference.trim());
+    }
+
     println!("cargo:rerun-if-env-changed=VOICE_INPUT_UPDATER_PUBLIC_KEY");
     let manifest = tauri_build::AppManifest::new().commands(&[
+        "start_context_lab",
+        "context_lab_status",
+        "context_lab_report",
+        "copy_context_lab_report",
         "copy_comparison_report",
         "comparison_models",
         "comparison_plan",

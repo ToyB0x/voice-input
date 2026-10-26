@@ -32,6 +32,7 @@ async function setup() {
   } });
   const modules = {
     '@tauri-apps/api/core': api,
+    './context-lab': stub({ setupContextLab() {} }),
     './comparison': stub({ setupComparison() {}, comparisonWorking: () => false }),
     './updates': stub({ setupUpdates() {}, updateInstalling: () => false }),
     './model-setup': stub({ setupModels: () => ({ refreshControls() {} }) }),

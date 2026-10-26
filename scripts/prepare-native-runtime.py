@@ -47,3 +47,8 @@ comparison_target=ROOT/'src-tauri/resources/compare-transcription'
 shutil.copy2(comparison_source,comparison_target)
 subprocess.run(['codesign','--force','--sign','-',str(comparison_target)],check=True)
 print('In-memory comparison runtime prepared.')
+
+lab=ROOT/'src-tauri/resources/context-lab-native'
+subprocess.run(['xcrun','swiftc','-O','-target',f'{platform.machine()}-apple-macos{minimum}',str(ROOT/'scripts/context-lab-native.swift'),'-o',str(lab)],check=True,env=build_env)
+subprocess.run(['codesign','--force','--sign','-',str(lab)],check=True)
+print('Controlled context lab helper prepared (no user screen capture).')

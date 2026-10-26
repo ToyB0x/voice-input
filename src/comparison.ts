@@ -67,7 +67,7 @@ async function refresh() {
     el("compare-foundation").textContent = diagnostic
       ? `Apple FM: ${diagnostic.status?.availability ?? diagnostic.error ?? "未確認"} / 確認 ${seconds(diagnostic.elapsedMs)}${diagnostic.status ? ` / macOS ${diagnostic.status.os_major}.${diagnostic.status.os_minor}.${diagnostic.status.os_patch}` : ""}。利用可否は比較開始時点の結果で、生成成功の保証ではありません。`
       : "Apple FM: この比較では未確認。固定サンプル診断、または録音済み音声のApple比較を開始してください。";
-    el("compare-progress").textContent = `${next.mode === "fixed-correction" ? "固定サンプル補正" : "録音比較"} / ${next.phase}: ${next.completed}/${next.total}${next.mode === "fixed-correction" ? " / 音声・画面情報は使用しません" : ` / 音声 ${seconds(next.audioMs)} / AX ${next.axCharacters}文字、OCR ${next.ocrCharacters}文字`}\n${next.message}`;
+    el("compare-progress").textContent = `${next.mode === "context-lab" ? "同音語の実機検証" : next.mode === "fixed-correction" ? "固定サンプル補正" : "録音比較"} / ${next.phase}: ${next.completed}/${next.total}${next.mode === "fixed-correction" ? " / 音声・画面情報は使用しません" : ` / 音声 ${seconds(next.audioMs)} / AX ${next.axCharacters}文字、OCR ${next.ocrCharacters}文字`}\n${next.message}`;
   } catch (error) { message(String(error)); }
   finally { reading=false; }
 }

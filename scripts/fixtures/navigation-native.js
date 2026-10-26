@@ -19,6 +19,7 @@ window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
   if (command === 'insertion_status') return { enabled: false, trusted: false };
   if (command === 'context_status') return { message: '認識補助: 無効', ocrMessage: 'OCR: 無効', screenPermitted: false };
   if (command === 'correction_status') return { working: false, checkingFoundation: false, foundation: null, text: null, error: null, elapsedMs: 0 };
+  if (command === 'context_lab_status') return {runId:null,working:false,phase:'idle',message:'',planned:0,completed:0,rows:[],next:0,more:false,parts:0,foundation:null};
   if (command === 'comparison_status') return { generation: 1, rows: [], next: 0, armed: false, working: false, completed: 0, total: 0, phase: 'idle', message: '', mode: 'recorded', audioMs: 0, axCharacters: 0, ocrCharacters: 0 };
   if (command === 'comparison_plan') return 1;
   if (command === 'comparison_models') return [];
