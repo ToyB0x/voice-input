@@ -51,8 +51,10 @@
         <p id="status" role="status" aria-live="polite">準備中…</p>
         <p id="input-device" class="hint">録音入力: 録音開始時にmacOSの既定入力を使用します。</p>
         <div class="level">
-          <label for="input-level">入力レベル</label>
-          <meter id="input-level" min="0" max="1" value="0">0</meter>
+          <span id="input-level-label">入力レベル</span>
+          <div id="input-level" role="meter" aria-labelledby="input-level-label" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0">
+            <span id="input-level-fill" aria-hidden="true"></span>
+          </div>
           <output id="input-level-value" aria-label="入力音量">停止中</output>
           <output id="duration" aria-label="録音時間">0.0 秒</output>
         </div>

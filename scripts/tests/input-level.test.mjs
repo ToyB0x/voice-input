@@ -5,7 +5,10 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 async function setup() {
-  const meter = { value: 0, setAttribute() {}, removeAttribute() {} };
+  const attributes = new Map();
+  const meter = { get value() { return Number(attributes.get('aria-valuenow') ?? 0); },
+    setAttribute(name, value) { attributes.set(name, value); }, removeAttribute(name) { attributes.delete(name); } };
+  const fill = { style: { width: '0%' } };
   const readout = { textContent: '' };
   const status = { textContent: '' };
   let clock = 0;
@@ -24,8 +27,8 @@ async function setup() {
   const source = stripTypeScriptTypes(readFileSync(new URL('../../src/input-level.ts', import.meta.url), 'utf8'));
   const module = new vm.SourceTextModule(source, { context });
   await module.link(() => api); await module.evaluate();
-  const controls = module.namespace.setupInputLevel(meter, readout, status, () => readable);
-  return { meter, readout, status, requests, controls, advance: ms => { clock += ms; }, tick: () => tick(), interval: () => interval,
+  const controls = module.namespace.setupInputLevel(meter, fill, readout, status, () => readable);
+  return { meter, fill, readout, status, requests, controls, advance: ms => { clock += ms; }, tick: () => tick(), interval: () => interval,
     cleared: () => cleared, setReadable: value => { readable = value; }, settle: () => new Promise(setImmediate) };
 }
 
@@ -122,4 +125,17 @@ test('zero and invalid levels are distinct from transport failures and stop rese
   app.controls.setRecording(false);
   assert.equal(app.readout.textContent, '停止中');
   assert.equal(app.status.textContent, '');
+  assert.equal(app.fill.style.width, '0%');
+});
+
+test('the reported speech range updates both the visible fill and accessible meter value', async () => {
+  const app = await setup();
+  app.controls.setRecording(true, 10 ** (-65 / 20));
+  assert.equal(app.fill.style.width, '0%');
+  for (const [db, fraction] of [[-35, 25 / 60], [-15, 45 / 60]]) {
+    app.controls.setRecording(true, 10 ** (db / 20));
+    assert.ok(Math.abs(parseFloat(app.fill.style.width) / 100 - fraction) < 0.0001);
+    assert.ok(Math.abs(app.meter.value - fraction) < 0.0001);
+    assert.equal(app.readout.textContent, `${db.toFixed(1)} dBFS`);
+  }
 });

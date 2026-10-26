@@ -38,7 +38,8 @@ const settings = document.querySelector<HTMLButtonElement>("#settings")!;
 const permission = document.querySelector<HTMLParagraphElement>("#permission")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const error = document.querySelector<HTMLParagraphElement>("#error")!;
-const level = document.querySelector<HTMLMeterElement>("#input-level")!;
+const level = document.querySelector<HTMLDivElement>("#input-level")!;
+const levelFill = document.querySelector<HTMLSpanElement>("#input-level-fill")!;
 const levelValue = document.querySelector<HTMLOutputElement>("#input-level-value")!;
 const levelStatus = document.querySelector<HTMLParagraphElement>("#input-level-status")!;
 const inputDevice = document.querySelector<HTMLParagraphElement>("#input-device")!;
@@ -102,7 +103,7 @@ let busy = false;
 let refreshing = false;
 let refreshVersion = 0;
 let actionError: string | null = null;
-const inputLevel = setupInputLevel(level, levelValue, levelStatus, () => isTauri() && !busy);
+const inputLevel = setupInputLevel(level, levelFill, levelValue, levelStatus, () => isTauri() && !busy);
 
 const managedModels = setupModels(
   () => busy || !snapshot || snapshot.working || snapshot.phase === "recording" || !!correction?.working,

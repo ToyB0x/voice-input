@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 type Level = { phase: string; level: number };
 
-export function setupInputLevel(meter: HTMLMeterElement, readout: HTMLOutputElement, status: HTMLElement, canRead: () => boolean) {
+export function setupInputLevel(meter: HTMLElement, fill: HTMLElement, readout: HTMLOutputElement, status: HTMLElement, canRead: () => boolean) {
   let recording = false;
   let reading = false;
   let generation = 0;
@@ -14,12 +14,17 @@ export function setupInputLevel(meter: HTMLMeterElement, readout: HTMLOutputElem
   function text(element: HTMLElement, value: string) {
     if (element.textContent !== value) element.textContent = value;
   }
+  function setBar(value: number) {
+    // Explicit HTML/CSS painting avoids depending on native <meter> repainting.
+    fill.style.width = `${value * 100}%`;
+    meter.setAttribute("aria-valuenow", String(value));
+  }
   function display(raw: number, message: string) {
     const rms = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
     const db = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
     // Speech is often far below full scale; use a standard -60..0 dBFS display
     // without changing the captured samples or recognition input.
-    meter.value = Math.max(0, (Math.max(-60, db) + 60) / 60);
+    setBar(Math.max(0, (Math.max(-60, db) + 60) / 60));
     const label = `${Number.isFinite(db) ? db.toFixed(1) : "-∞"} dBFS`;
     text(readout, label);
     meter.setAttribute("aria-valuetext", label);
@@ -43,7 +48,7 @@ export function setupInputLevel(meter: HTMLMeterElement, readout: HTMLOutputElem
       } else {
         window.clearInterval(timer);
         timer = undefined;
-        meter.value = 0;
+        setBar(0);
         meter.removeAttribute("aria-valuetext");
         text(readout, "停止中");
         text(status, "");
