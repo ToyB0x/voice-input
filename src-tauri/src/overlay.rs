@@ -1,10 +1,12 @@
-//! Cache only status metadata; no audio, transcripts, context or target identifiers.
+//! Cache only fixed status metadata; native drawing is bounded to one queued task.
 use crate::overlay_state::{Signal, Status, Tracker};
 use std::{sync::Mutex, time::Instant};
 use tauri::Manager;
 struct Inner {
     tracker: Tracker,
     status: Status,
+    pending: bool,
+    applied_visible: bool,
 }
 pub(crate) struct Overlay {
     inner: Mutex<Inner>,
@@ -16,6 +18,8 @@ impl Default for Overlay {
             inner: Mutex::new(Inner {
                 tracker: Tracker::default(),
                 status: Status::default(),
+                pending: false,
+                applied_visible: false,
             }),
             started: Instant::now(),
         }
@@ -23,53 +27,43 @@ impl Default for Overlay {
 }
 impl Overlay {
     pub fn tick(&self, app: &tauri::AppHandle, enabled: bool, signal: &Signal, delivery: &str) {
-        let changed = if let Ok(mut inner) = self.inner.lock() {
+        let schedule = if let Ok(mut inner) = self.inner.lock() {
             let next = inner.tracker.tick(
                 enabled,
                 signal,
                 delivery,
                 self.started.elapsed().as_millis() as u64,
             );
-            let changed = next.visible != inner.status.visible;
+            let needs_paint = next.visible || inner.status.visible || inner.applied_visible;
             inner.status = next;
-            changed
+            if needs_paint && !inner.pending {
+                inner.pending = true;
+                true
+            } else {
+                false
+            }
         } else {
             false
         };
-        if changed {
+        if schedule {
             let next = app.clone();
             let _ = app.run_on_main_thread(move || {
-                // Read current intent here, not a stale queued show request.
-                let visible = next.state::<Overlay>().status().visible
-                    && !next.state::<crate::activity::Activity>().is_closing();
-                if let Some(window) = next.get_webview_window("overlay") {
-                    let result = if visible {
-                        crate::overlay_window::show(&window)
-                    } else {
-                        crate::overlay_window::hide(&window)
-                    };
-                    if result.is_err() {
-                        let _ = crate::overlay_window::hide(&window);
-                    }
+                let status = if let Ok(mut inner) = next.state::<Overlay>().inner.lock() {
+                    let mut status = inner.status.clone();
+                    status.visible &= !next.state::<crate::activity::Activity>().is_closing();
+                    inner.pending = false;
+                    inner.applied_visible = status.visible;
+                    status
+                } else {
+                    Status::default()
+                };
+                if crate::overlay_window::render(&status).is_err() {
+                    let _ = crate::overlay_window::hide();
                 }
             });
         }
     }
-    fn status(&self) -> Status {
-        self.inner
-            .lock()
-            .map(|inner| inner.status.clone())
-            .unwrap_or_default()
-    }
 }
-#[tauri::command]
-pub(crate) fn overlay_status(overlay: tauri::State<'_, Overlay>) -> Status {
-    overlay.status()
-}
-pub(crate) fn setup(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let window = app
-        .get_webview_window("overlay")
-        .ok_or("overlay window missing")?;
-    crate::overlay_window::configure(&window)?;
-    Ok(())
+pub(crate) fn setup() -> Result<(), Box<dyn std::error::Error>> {
+    crate::overlay_window::initialize().map_err(Into::into)
 }

@@ -209,6 +209,7 @@ jobs:
         timeout-minutes: 3
         env:
           VOICE_INPUT_OVERLAY_FOCUS_TARGET: ${{ runner.temp }}/Overlay Focus Fixture.app
+          VOICE_INPUT_OVERLAY_EVIDENCE: ${{ runner.temp }}/voice-input-smoke
         run: |
           fixture="$VOICE_INPUT_OVERLAY_FOCUS_TARGET"
           mkdir -p "$fixture/Contents/MacOS"

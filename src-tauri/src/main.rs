@@ -88,7 +88,7 @@ fn main() {
         .manage(inserter)
         .setup(|app| {
             lifecycle::install_native_quit_hook(app.handle())?;
-            overlay::setup(app.handle())?;
+            overlay::setup()?;
             desktop::setup(app)?;
             updater::start_automatic_checks(app.handle());
             Ok(())
@@ -100,7 +100,6 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            overlay::overlay_status,
             comparison::copy_comparison_report,
             comparison::comparison_models,
             comparison::comparison_plan,

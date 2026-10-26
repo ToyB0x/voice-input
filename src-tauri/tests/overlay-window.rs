@@ -1,5 +1,9 @@
 //! Native window regression, independent of WebView rendering and TCC grants.
 #[cfg(target_os = "macos")]
+#[allow(dead_code)]
+#[path = "../src/overlay_state.rs"]
+mod overlay_state;
+#[cfg(target_os = "macos")]
 #[path = "../src/overlay_window.rs"]
 mod overlay_window;
 #[cfg(target_os = "macos")]
@@ -14,7 +18,7 @@ mod probe {
         sync::mpsc,
         time::{Duration, Instant},
     };
-    use tauri::Manager;
+
     fn on_main<T: Send + 'static>(
         app: &tauri::AppHandle,
         task: impl FnOnce(&tauri::AppHandle) -> Result<T, String> + Send + 'static,
@@ -40,30 +44,17 @@ mod probe {
             }
         }
     }
-    fn inspect(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
-        let window = app.get_webview_window("overlay").ok_or("overlay missing")?;
-        unsafe {
-            let native = window
-                .ns_window()
-                .map_err(|e| e.to_string())?
-                .cast::<AnyObject>();
-            let key: Bool = msg_send![native, isKeyWindow];
-            let can_key: Bool = msg_send![native, canBecomeKeyWindow];
-            let can_main: Bool = msg_send![native, canBecomeMainWindow];
-            let ignoring: Bool = msg_send![native, ignoresMouseEvents];
-            let shown: Bool = msg_send![native, isVisible];
-            let level: isize = msg_send![native, level];
-            if key.as_bool()
-                || can_key.as_bool()
-                || can_main.as_bool()
-                || !ignoring.as_bool()
-                || shown.as_bool() != visible
-                || level < 3
-            {
-                return Err(
-                    "overlay focus, mouse, visibility or floating-level property mismatch".into(),
-                );
-            }
+    fn inspect(_app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
+        let p = super::overlay_window::properties()?;
+        if p.key
+            || p.can_key
+            || p.can_main
+            || !p.ignores_mouse
+            || !p.floating
+            || !p.non_activating
+            || p.visible != visible
+        {
+            return Err("invalid non-activating panel properties".into());
         }
         Ok(())
     }
@@ -121,34 +112,37 @@ mod probe {
                     Ok(())
                 })?;
             }
-            on_main(app, |app| {
-                let window = app.get_webview_window("overlay").ok_or("overlay missing")?;
-                super::overlay_window::position(&window).map_err(|error| error.to_string())
-            })?;
-            std::thread::sleep(Duration::from_millis(250));
-            on_main(app, move |_| {
-                let actual = front_pid();
-                if actual != pid {
-                    return Err(format!(
-                        "positioning changed foreground: expected={pid},actual={actual},probe={}",
-                        std::process::id()
-                    ));
-                }
-                Ok(())
-            })?;
-            for visible in [true, false, true, false] {
-                on_main(app, move |app| {
-                    let window = app.get_webview_window("overlay").ok_or("overlay missing")?;
-                    if visible {
-                        super::overlay_window::show(&window)
-                    } else {
-                        super::overlay_window::hide(&window)
-                    }
-                    .map_err(|e| e.to_string())
+            for (index, visible) in [true, false, true, false].into_iter().enumerate() {
+                on_main(app, move |_| {
+                    super::overlay_window::render(&crate::overlay_state::Status {
+                        visible,
+                        phase: if index == 0 {
+                            "recording"
+                        } else {
+                            "correcting"
+                        },
+                        message: if index == 0 {
+                            "録音中"
+                        } else {
+                            "ローカル補正中・入力は待機"
+                        },
+                        recording_ms: 1234,
+                        stage_ms: 2450,
+                        level: 0.02,
+                    })
                 })?;
                 std::thread::sleep(Duration::from_millis(250));
                 on_main(app, move |app| {
                     inspect(app, visible)?;
+                    if visible && let Some(root) = std::env::var_os("VOICE_INPUT_OVERLAY_EVIDENCE")
+                    {
+                        let path = std::path::PathBuf::from(root).join(if index == 0 {
+                            "overlay-recording.png"
+                        } else {
+                            "overlay-correcting.png"
+                        });
+                        super::overlay_window::capture(&path)?;
+                    }
                     if front_pid() != pid {
                         return Err(format!(
                             "ordering changed foreground at visible={visible}: expected={pid},actual={},probe={}",
@@ -180,15 +174,10 @@ mod probe {
             return;
         };
         let mut context = tauri::generate_context!();
-        context
-            .config_mut()
-            .app
-            .windows
-            .retain(|window| window.label == "overlay");
+        context.config_mut().app.windows.clear();
         let app = tauri::Builder::default()
-            .setup(|app| {
-                let window = app.get_webview_window("overlay").ok_or("overlay missing")?;
-                super::overlay_window::configure(&window)?;
+            .setup(|_| {
+                super::overlay_window::initialize()?;
                 Ok(())
             })
             .build(context)
@@ -200,7 +189,7 @@ mod probe {
                 std::thread::spawn(move|| {
                     let outcome=run(&app,fixture);
                     match &outcome {
-                        Ok(())=>println!("{{\"status\":\"passed\",\"nonFocusable\":true,\"ignoresMouse\":true,\"frontmostPreserved\":true,\"showHideCycles\":2,\"renderingTested\":false}}"),
+                        Ok(())=>println!("{{\"status\":\"passed\",\"nonFocusable\":true,\"ignoresMouse\":true,\"frontmostPreserved\":true,\"showHideCycles\":2,\"nativeViewRendered\":true}}"),
                         Err(reason)=>eprintln!("native overlay probe failed: {reason}"),
                     }
                     app.exit(if outcome.is_ok(){0}else{1});

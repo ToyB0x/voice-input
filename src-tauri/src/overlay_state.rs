@@ -26,6 +26,18 @@ pub(crate) struct Status {
     pub stage_ms: u64,
     pub level: f32,
 }
+pub(crate) fn level_percent(level: f32) -> f64 {
+    let level = if level.is_finite() {
+        level.clamp(0., 1.)
+    } else {
+        0.
+    };
+    if level > 0. {
+        f64::from(((20. * level.log10()).max(-60.) + 60.) / 60. * 100.)
+    } else {
+        0.
+    }
+}
 #[derive(Default)]
 pub(crate) struct Tracker {
     seen: Option<u64>,
@@ -106,6 +118,14 @@ mod tests {
             level: 0.1,
             ..Signal::default()
         }
+    }
+    #[test]
+    fn speech_range_uses_decibels_and_invalid_levels_are_zero() {
+        assert!((level_percent(0.01) - 100. / 3.).abs() < 0.001);
+        for level in [0., -1., f32::NAN, f32::INFINITY] {
+            assert_eq!(level_percent(level), 0.);
+        }
+        assert_eq!(level_percent(1.), 100.);
     }
     #[test]
     fn recording_to_correction_and_delivery_expires_without_reappearing() {

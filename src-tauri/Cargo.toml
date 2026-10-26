@@ -22,6 +22,7 @@ tauri-plugin-global-shortcut = "2.4.1"
 core-foundation = "0.10.1"
 cpal = "0.18.2"
 objc2 = "0.6.5"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSPanel", "NSWindow", "NSView", "NSResponder", "NSTextField", "NSControl", "NSColor", "NSFont", "NSProgressIndicator", "NSScreen", "NSGraphics", "NSImageRep", "NSBitmapImageRep"] }
 block2 = "0.6.2"
 objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
 
