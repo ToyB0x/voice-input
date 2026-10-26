@@ -190,7 +190,12 @@ impl Updates {
                     let result =
                         tauri::async_runtime::spawn_blocking(move || update.install(bytes)).await;
                     if matches!(result, Ok(Ok(()))) {
-                        handle.restart();
+                        if let Ok(mut s) = owner.0.lock() {
+                            s.status.phase = "restarting".into();
+                            s.status.message =
+                                "更新を適用しました。モデルを解放して再起動します。".into();
+                        }
+                        crate::lifecycle::request_restart(&handle);
                     } else {
                         owner.end("error","更新を適用できません。Applicationsへ移動し、権限・署名設定を確認してください。");
                     }

@@ -101,6 +101,12 @@ fn finish_on_main(app: tauri::AppHandle, code: Option<i32>) {
             let application: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
             let _: () = msg_send![application, replyToApplicationShouldTerminate: objc2::runtime::Bool::YES];
         }
+    } else if code == Some(tauri::RESTART_EXIT_CODE) {
+        // Unlike normal exit, Tauri restart cannot be prevented by
+        // ExitRequestApi. Reach it only after all native owners have ended.
+        app.state::<Lifecycle>().join_worker();
+        diagnostic("restart-cleanup-ready");
+        app.request_restart();
     } else {
         app.exit(code.unwrap_or(0));
     }
@@ -143,6 +149,16 @@ pub(crate) fn request_exit(app: &tauri::AppHandle, api: tauri::ExitRequestApi, c
         return;
     }
     api.prevent_exit();
+    start_cleanup(app, code);
+}
+
+/// The updater must finish native cleanup *before* asking Tauri to restart.
+pub(crate) fn request_restart(app: &tauri::AppHandle) {
+    start_cleanup(app, Some(tauri::RESTART_EXIT_CODE));
+}
+
+fn start_cleanup(app: &tauri::AppHandle, code: Option<i32>) {
+    let lifecycle = app.state::<Lifecycle>();
     if !lifecycle.begin() {
         return;
     }
@@ -185,6 +201,8 @@ pub(crate) fn request_exit(app: &tauri::AppHandle, api: tauri::ExitRequestApi, c
 }
 
 pub(crate) fn diagnostic(stage: &'static str) {
+    #[cfg(feature = "ci-restart-probe")]
+    crate::restart_probe::diagnostic(stage);
     if std::env::var_os("VOICE_INPUT_LIFECYCLE_DIAGNOSTICS").as_deref()
         == Some(std::ffi::OsStr::new("1"))
     {
