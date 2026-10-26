@@ -59,7 +59,13 @@ func revealProductControl(_ root: AXUIElement, _ label: String) {
 }
 
 func uiButton(_ root: AXUIElement, _ names: [String]) -> AXUIElement? {
-    if let name = names.first { revealProductControl(root, name) }
+    if names.contains("Save preferences"), !axElements(root).contains(where: { element in
+        axValue(element, kAXRoleAttribute) as? String == kAXButtonRole &&
+        [kAXTitleAttribute,kAXDescriptionAttribute].contains { axValue(element,$0) as? String == "Save preferences" }
+    }) {
+        // A clean Input view intentionally hides the shared save bar.
+        revealProductControl(root, "Recording shortcut")
+    } else if let name = names.first { revealProductControl(root, name) }
     return axElements(root).first { element in
         guard axValue(element, kAXRoleAttribute) as? String == kAXButtonRole,
               (axValue(element, kAXEnabledAttribute) as? Bool) == true else { return false }
