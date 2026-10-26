@@ -999,6 +999,48 @@ mod tests {
         assert!(!owner.has_results());
     }
     #[test]
+    #[ignore = "requires the bundled native helper; invoked explicitly by macOS CI"]
+    fn controlled_context_helper_real_vision() {
+        let runtime =
+            PathBuf::from(std::env::var("VOICE_INPUT_LAB_BIN").expect("native helper path"));
+        let assets =
+            PathBuf::from(std::env::var("VOICE_INPUT_LAB_ASSETS").expect("controlled assets path"));
+        let output = PathBuf::from(
+            std::env::var("VOICE_INPUT_LAB_EVIDENCE").expect("public CI evidence path"),
+        );
+        std::fs::create_dir_all(&output).unwrap();
+        for (scene, expected) in TEXTS {
+            let captured = capture_scene(
+                &runtime,
+                &assets,
+                scene,
+                expected,
+                true,
+                &AtomicU64::new(1),
+                1,
+            )
+            .expect("native controlled capture");
+            for key in ["ax", "ocr", "imageOCR", "vision"] {
+                assert!(
+                    ["completed", "unavailable"]
+                        .contains(&captured[key]["status"].as_str().unwrap_or("invalid"))
+                );
+            }
+            std::fs::write(
+                output.join(format!("{scene}.json")),
+                serde_json::to_vec_pretty(&captured).unwrap(),
+            )
+            .unwrap();
+            eprintln!(
+                "{scene}: AX={}, OCR={}, image OCR={}, Vision={}",
+                captured["ax"]["status"],
+                captured["ocr"]["status"],
+                captured["imageOCR"]["status"],
+                captured["vision"]["status"]
+            );
+        }
+    }
+    #[test]
     fn capture_cancellation_reaps_the_owned_helper() {
         use std::os::unix::fs::PermissionsExt;
         let root = std::env::temp_dir().join(format!("voice-lab-cancel-{}", std::process::id()));

@@ -39,4 +39,5 @@ test('copy is opt in and pages advance only on explicit actions',async()=>{
   await a.click('lab-copy-part');await a.click('lab-copy-part');const copies=a.requests.filter(x=>x.command==='copy_context_lab_report').slice(-2);
   assert.deepEqual(copies.map(x=>x.args.part),[0,1]);assert.ok(copies.every(x=>x.args.includeText));
   assert.equal(JSON.parse(a.elements.get('lab-json').value).part,1);
+  a.state.runId='new-run';await a.poll();assert.equal(a.elements.get('lab-include-text').checked,false);assert.equal(a.elements.get('lab-json').value,'');
 });

@@ -203,13 +203,13 @@ jobs:
           path: ${{ runner.temp }}/voice-input-app/
           retention-days: 14
           if-no-files-found: error
-      - name: Probe bundled controlled context helper with actual Vision
+      - name: Probe owned fixture AX and actual Vision with the production parent protocol
         timeout-minutes: 4
-        run: |
-          python3 scripts/verify-context-lab-native.py \
-            --binary "src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/context-lab-native" \
-            --assets "src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/lab" \
-            --output "$RUNNER_TEMP/voice-input-smoke/context-lab"
+        env:
+          VOICE_INPUT_LAB_BIN: ${{ github.workspace }}/src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/context-lab-native
+          VOICE_INPUT_LAB_ASSETS: ${{ github.workspace }}/src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/lab
+          VOICE_INPUT_LAB_EVIDENCE: ${{ runner.temp }}/voice-input-smoke/context-lab
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked controlled_context_helper_real_vision -- --ignored --nocapture
       - name: Verify native overlay focus and render sample views without WebView
         timeout-minutes: 3
         env:

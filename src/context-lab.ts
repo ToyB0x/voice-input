@@ -28,7 +28,7 @@ async function refresh(){
   if(reading||!isTauri())return;reading=true;
   try{
     const next=await invoke<LabStatus>("context_lab_status",{runId:state?.runId??null,after:cursor});
-    if(state?.runId!==next.runId){cursor=0;part=0;el("lab-rows").replaceChildren();el<HTMLTextAreaElement>("lab-json").value="";}
+    if(state?.runId!==next.runId){cursor=0;part=0;el<HTMLInputElement>("lab-include-text").checked=false;el("lab-rows").replaceChildren();el<HTMLTextAreaElement>("lab-json").value="";}
     state=next;for(const row of next.rows)append(row);cursor=next.next;render();
   }catch(error){el("lab-message").textContent=String(error);}
   finally{reading=false;}
