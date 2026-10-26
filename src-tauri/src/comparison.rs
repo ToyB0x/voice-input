@@ -750,7 +750,7 @@ fn correct_text(
             return Err("correction-model-missing".into());
         }
         correction_started = Some(Instant::now());
-        let payload=serde_json::to_vec(&serde_json::json!({"transcript":transcript,"context":if case.correction_context(){context.as_str()}else{""}})).map_err(|_|"input-failed")?;
+        let payload=serde_json::to_vec(&serde_json::json!({"transcript":transcript,"context":if case.correction_context(){context}else{""}})).map_err(|_|"input-failed")?;
         let candidate = if case.correction == "apple-foundation" {
             let output = crate::correction::child_output(
                 Command::new(resources.join("apple-foundation-correction")).arg("--correct"),

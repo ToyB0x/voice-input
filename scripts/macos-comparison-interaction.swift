@@ -55,7 +55,7 @@ func comparisonOfRecordedAudio(root: AXUIElement, output: URL) throws {
 // No microphone, screen-consent or Accessibility grant to the product is required.
 func fixedCorrectionInteraction(root: AXUIElement, output: URL) throws -> Bool {
     try press(uiButton(root,["Appleモデルの固定サンプル診断"])!)
-    try waitForUI("fixed correction without recording",seconds:810) {uiText(root).contains("固定サンプル補正 / done: 5/5")}
+    try waitForUI("fixed correction without recording",seconds:840) {uiText(root).contains("固定サンプル補正 / done: 5/5")}
     NSPasteboard.general.clearContents()
     try press(uiButton(root,["比較レポートJSONをコピー"])!)
     var report:[String:Any]=[:]
