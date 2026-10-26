@@ -292,6 +292,7 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
         try typeField(voice,label:"Correction model path",value:originalCorrectionPath)
         if let automatic = axElements(voice).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Automatic correction after transcription") }) {try press(automatic)}
         try press(uiButton(voice,["Save preferences"])!)
+        try waitForUI("automatic fallback preferences restored") {uiText(voice).contains("設定を保存しました") && uiButton(voice,["Request accessibility permission"]) != nil}
         // Register the product in System Settings through its real prompt API.
         try press(uiButton(voice, ["Request accessibility permission"])!)
         try interactionScreenshot(output, name: "accessibility-request.png")
