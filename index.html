@@ -49,11 +49,14 @@
         <h2 id="recording-title">ローカル録音</h2>
         <p id="permission">マイクの許可を確認しています…</p>
         <p id="status" role="status" aria-live="polite">準備中…</p>
+        <p id="input-device" class="hint">録音入力: 録音開始時にmacOSの既定入力を使用します。</p>
         <div class="level">
           <label for="input-level">入力レベル</label>
           <meter id="input-level" min="0" max="1" value="0">0</meter>
+          <output id="input-level-value" aria-label="入力音量">停止中</output>
           <output id="duration" aria-label="録音時間">0.0 秒</output>
         </div>
+        <p id="input-level-status" class="hint"></p>
         <div class="controls">
           <button id="start" aria-label="Start recording" disabled>録音を開始</button>
           <button id="stop" aria-label="Stop recording" disabled>停止</button>

@@ -17,6 +17,8 @@ type Snapshot = {
   level: number;
   sampleCount: number;
   sampleRate: number;
+  inputDevice: string | null;
+  inputChannels: number;
   error: string | null;
   modelReady: boolean;
   modelPath: string;
@@ -37,6 +39,9 @@ const permission = document.querySelector<HTMLParagraphElement>("#permission")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const error = document.querySelector<HTMLParagraphElement>("#error")!;
 const level = document.querySelector<HTMLMeterElement>("#input-level")!;
+const levelValue = document.querySelector<HTMLOutputElement>("#input-level-value")!;
+const levelStatus = document.querySelector<HTMLParagraphElement>("#input-level-status")!;
+const inputDevice = document.querySelector<HTMLParagraphElement>("#input-device")!;
 const duration = document.querySelector<HTMLOutputElement>("#duration")!;
 
 const modelPath = document.querySelector<HTMLInputElement>("#model-path")!;
@@ -97,7 +102,7 @@ let busy = false;
 let refreshing = false;
 let refreshVersion = 0;
 let actionError: string | null = null;
-const inputLevel = setupInputLevel(level, () => isTauri() && !busy && document.visibilityState === "visible");
+const inputLevel = setupInputLevel(level, levelValue, levelStatus, () => isTauri() && !busy);
 
 const managedModels = setupModels(
   () => busy || !snapshot || snapshot.working || snapshot.phase === "recording" || !!correction?.working,
@@ -174,7 +179,10 @@ function render() {
     (snapshot.modelReady ? `モデル準備完了（${snapshot.backend === "metal" ? "GPU / Metal" : "CPU"}を選択）` : "モデル未読み込み。録音のみ利用できます。"));
   settings.hidden = snapshot.permission !== "denied";
   settings.disabled = busy;
-  inputLevel.setRecording(recording);
+  inputLevel.setRecording(recording, snapshot.level);
+  setText(inputDevice, snapshot.inputDevice
+    ? `録音入力: ${snapshot.inputDevice} / ${snapshot.sampleRate.toLocaleString()} Hz / ${snapshot.inputChannels} ch`
+    : "録音入力: 録音開始時にmacOSの既定入力を使用します。");
   setText(duration, `${(snapshot.elapsedMs / 1000).toFixed(1)} 秒`);
   const states: Record<Snapshot["phase"], string> = {
     idle: snapshot.permission === "authorized"

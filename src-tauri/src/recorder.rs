@@ -59,6 +59,8 @@ pub struct Snapshot {
     level: f32,
     pub(crate) sample_count: usize,
     sample_rate: u32,
+    input_device: Option<String>,
+    input_channels: usize,
     error: Option<String>,
     #[serde(flatten)]
     pub(crate) recognition: Session,
@@ -74,6 +76,7 @@ pub struct LevelSnapshot {
 #[derive(Default)]
 pub(crate) struct Capture {
     pub(crate) audio: Option<AudioBuffer>,
+    input_device: Option<String>,
     phase: Option<&'static str>,
     error: Option<String>,
     pub(crate) recognition: Session,
@@ -103,6 +106,8 @@ impl Capture {
             level: self.level_snapshot().level,
             sample_count: self.audio.as_ref().map_or(0, |a| a.samples.len()),
             sample_rate: self.audio.as_ref().map_or(0, |a| a.sample_rate),
+            input_device: self.input_device.clone(),
+            input_channels: self.audio.as_ref().map_or(0, |a| a.channels),
             error: self.error.clone(),
             recognition: self.recognition.clone(),
         }
@@ -315,6 +320,7 @@ impl Recorder {
                                 if let Ok(mut c) = shared.lock() {
                                     corrector.cancel();
                                     c.audio = None;
+                                    c.input_device = None;
                                     c.comparison_hint = None;
                                     c.insertion_ticket = None;
                                     c.context_hint = None;
@@ -475,6 +481,10 @@ fn start_stream(capture: Arc<Mutex<Capture>>) -> Result<cpal::Stream, String> {
     {
         let mut c = capture.lock().map_err(|e| e.to_string())?;
         c.audio = Some(audio);
+        c.input_device = device
+            .description()
+            .ok()
+            .map(|description| description.name().to_owned());
         c.phase = Some("recording");
     }
     let config = supported.config();
@@ -567,6 +577,7 @@ mod tests {
         audio.push([0.5; 800].into_iter());
         let mut capture = Capture {
             audio: Some(audio),
+            input_device: Some("Test external input".into()),
             phase: Some("recording"),
             error: None,
             recognition: Session::default(),
@@ -581,6 +592,11 @@ mod tests {
         let snapshot = capture.snapshot();
         assert_eq!(snapshot.phase, "recorded");
         assert_eq!(snapshot.sample_count, 800);
+        assert_eq!(
+            snapshot.input_device.as_deref(),
+            Some("Test external input")
+        );
+        assert_eq!(snapshot.input_channels, 1);
         assert_eq!(snapshot.elapsed_ms, 100);
         assert_eq!(snapshot.level, 0.0);
         assert_eq!(capture.level_snapshot().phase, "recorded");
