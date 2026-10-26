@@ -52,10 +52,12 @@ test('automatic correction is initially off and saved only by explicit preferenc
   assert.ok(app.requests.every(r => r.command.endsWith('_status')));
   app.elements.get('auto-correction').checked = true;
   app.elements.get('show-overlay').checked = true;
+  app.elements.get('correction-instruction').value = '自然な漢字表記にしてください。';
   app.click('save-preferences'); await app.settle();
   const saved = app.requests.find(r => r.command === 'save_preferences').args.preferences;
   assert.equal(saved.autoCorrection, true);
   assert.equal(saved.showOverlay, true);
+  assert.equal(saved.correctionInstruction, '自然な漢字表記にしてください。');
   assert.equal(saved.autoInsert, false);
   assert.equal(saved.correctionEngine, 'apple-foundation');
 });

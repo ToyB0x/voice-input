@@ -5,7 +5,7 @@ import { setupModels } from "./model-setup";
 import { setupInputLevel } from "./input-level";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; autoCorrection: boolean; reuseCorrectionModel: boolean; showOverlay: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
+type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; autoCorrection: boolean; reuseCorrectionModel: boolean; showOverlay: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionInstruction: string; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
 type InsertionStatus = { enabled: boolean; trusted: boolean; state: string; message: string };
 type DesktopStatus = { preferences: Preferences; shortcutRegistered: boolean; error: string | null };
 
@@ -90,6 +90,7 @@ let context: ContextStatus | undefined;
 let correction: CorrectionStatus | undefined;
 const ocrContext = document.querySelector<HTMLInputElement>("#ocr-context")!;
 const whisperContext = document.querySelector<HTMLInputElement>("#whisper-context")!;
+const correctionInstruction = document.querySelector<HTMLTextAreaElement>("#correction-instruction")!;
 const correctionContext = document.querySelector<HTMLInputElement>("#correction-context")!;
 const ocrStatus = document.querySelector<HTMLParagraphElement>("#ocr-status")!;
 const screenPermission = document.querySelector<HTMLButtonElement>("#screen-permission")!;
@@ -138,6 +139,7 @@ function render() {
   savePreferences.disabled = busy;
   shortcut.disabled = showOverlay.disabled = autoCorrection.disabled = autoInsert.disabled = recognitionContext.disabled = accessibility.disabled = busy;
   setText(contextStatus, context?.message ?? "認識補助: 無効");
+  correctionInstruction.disabled = busy;
   ocrContext.disabled = whisperContext.disabled = correctionContext.disabled = screenPermission.disabled = busy;
   const foundationSelected = correctionEngine.value === "apple-foundation";
   correctionEngine.disabled = busy;
@@ -256,6 +258,7 @@ async function refresh() {
         ocrContext.checked = desktop.preferences.ocrContext;
         whisperContext.checked = desktop.preferences.whisperContext;
         correctionContext.checked = desktop.preferences.correctionContext;
+        correctionInstruction.value = desktop.preferences.correctionInstruction ?? "";
         correctionEngine.value = desktop.preferences.correctionEngine;
         if (correctionEngine.value === "apple-foundation") foundationDiagnostics.open = true;
         correctionModelPath.value = desktop.preferences.correctionModelPath;
@@ -296,12 +299,12 @@ savePreferences.addEventListener("click", () => void action(async () => {
   desktop = await invoke<DesktopStatus>("save_preferences", { preferences: {
     version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, autoCorrection: autoCorrection.checked, reuseCorrectionModel: reuseCorrectionModel.checked, showOverlay: showOverlay.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
     whisperContext: whisperContext.checked, correctionContext: correctionContext.checked,
-    correctionModelPath: correctionModelPath.value, correctionEngine: correctionEngine.value, correctionBackend: correctionBackend.value,
+    correctionInstruction: correctionInstruction.value, correctionModelPath: correctionModelPath.value, correctionEngine: correctionEngine.value, correctionBackend: correctionBackend.value,
   } });
   preferencesMessage.textContent = "設定を保存しました。ショートカットは反映済みです。";
 }));
 accessibility.addEventListener("click", () => void action(() => invoke("request_accessibility")));
-for (const field of [modelPath, backend, shortcut, autoInsert, autoCorrection, reuseCorrectionModel, showOverlay, recognitionContext, ocrContext, whisperContext, correctionContext, correctionEngine, correctionModelPath, correctionBackend]) {
+for (const field of [modelPath, backend, shortcut, autoInsert, autoCorrection, reuseCorrectionModel, showOverlay, recognitionContext, ocrContext, whisperContext, correctionContext, correctionInstruction, correctionEngine, correctionModelPath, correctionBackend]) {
   field.addEventListener("input", () => { preferencesMessage.textContent = "未保存の設定があります。"; });
 }
 modelPath.addEventListener("input", render);

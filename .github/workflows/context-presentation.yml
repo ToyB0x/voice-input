@@ -1,0 +1,53 @@
+name: Context evidence presentation
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/context-presentation.yml'
+      - 'scripts/context-slides.py'
+      - 'scripts/render-context-slides.mjs'
+      - 'scripts/prepare-presentation-font.py'
+      - 'evaluation/context-evidence/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/context-presentation.yml'
+      - 'scripts/context-slides.py'
+      - 'scripts/render-context-slides.mjs'
+      - 'scripts/prepare-presentation-font.py'
+      - 'evaluation/context-evidence/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  presentation:
+    name: Regenerate measured presentation and check layout
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned Japanese font
+        run: python3 scripts/prepare-presentation-font.py
+      - name: Verify frozen measurement and generate slides
+        run: |
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('evaluation/context-evidence/baseline')
+          proof=json.loads((root/'provenance.json').read_text())
+          report=root/'results.json'
+          assert hashlib.sha256(report.read_bytes()).hexdigest()==proof['reportSha256']
+          assert json.loads(report.read_text())['sourceRevision']==proof['sourceRevision']
+          PY
+          EVIDENCE_RUN_URL="$(python3 -c 'import json;print(json.load(open("evaluation/context-evidence/baseline/provenance.json"))["runUrl"])')" \
+            python3 scripts/context-slides.py --report evaluation/context-evidence/baseline/results.json --output presentation
+          CHROME_BIN=/usr/bin/google-chrome node scripts/render-context-slides.mjs presentation
+          cat presentation/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: japanese-context-presentation-frozen
+          path: presentation/
+          retention-days: 30

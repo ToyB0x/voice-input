@@ -139,6 +139,9 @@
             <option value="apple-foundation">Apple Foundation Models（実験的）</option>
           </select>
           <p class="hint">AppleモデルはmacOS 26以降とApple Intelligence対応・有効化が必要です。GGUFの指定は不要です。選択後に「設定を保存」を押してください。利用不可でも他のエンジンへ自動で切り替えません。</p>
+          <label for="correction-instruction">補正の追加指示（任意）</label>
+          <textarea id="correction-instruction" aria-label="Correction instruction" rows="3" maxlength="512" placeholder="例：文脈から判断できる同音語は自然な漢字表記にしてください。"></textarea>
+          <p class="hint">表記・整形の希望を通常補正と録音済み音声の比較へ適用します。空欄は標準動作です。意味・数値・否定の保持チェックは継続します。追加指示だけで精度は保証されません。保存するとこのMacの設定ファイルに残ります。</p>
           <label for="correction-model-path">補正モデルの絶対パス（Qwen3 GGUF）</label>
           <input id="correction-model-path" aria-label="Correction model path" type="text" placeholder="/Users/you/Models/Qwen3-1.7B-Q8_0.gguf" spellcheck="false" autocomplete="off">
           <label for="correction-backend">補正の実行方式</label>

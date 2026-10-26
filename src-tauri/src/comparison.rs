@@ -454,6 +454,7 @@ impl Comparisons {
                 &paths,
                 &apple,
                 selection.reference.as_deref(),
+                &preferences.correction_instruction,
                 &self.epoch,
                 epoch,
             );
@@ -601,7 +602,7 @@ fn run_fixed_sample(
     row.final_text = row.raw.clone();
     let started = Instant::now();
     if let Err(error) = correct_text(
-        resources, &case, &mut row, sample.1, "", paths, apple, epoch, current,
+        resources, &case, &mut row, sample.1, "", "", paths, apple, epoch, current,
     ) {
         record_error(&mut row, error);
     }
@@ -639,6 +640,7 @@ fn run_case(
     paths: &BTreeMap<String, Result<PathBuf, String>>,
     apple: &Result<(), String>,
     reference: Option<&str>,
+    instruction: &str,
     epoch: &AtomicU64,
     current: u64,
 ) -> Row {
@@ -700,7 +702,16 @@ fn run_case(
         row.raw = Some(asr.text.clone());
         row.final_text = Some(asr.text.clone());
         correct_text(
-            resources, case, &mut row, &asr.text, &context, paths, apple, epoch, current,
+            resources,
+            case,
+            &mut row,
+            &asr.text,
+            &context,
+            instruction,
+            paths,
+            apple,
+            epoch,
+            current,
         )
     })();
     row.total_ms = started.elapsed().as_millis() as u64;
@@ -726,6 +737,7 @@ fn correct_text(
     row: &mut Row,
     transcript: &str,
     context: &str,
+    instruction: &str,
     paths: &BTreeMap<String, Result<PathBuf, String>>,
     apple: &Result<(), String>,
     epoch: &AtomicU64,
@@ -750,7 +762,11 @@ fn correct_text(
             return Err("correction-model-missing".into());
         }
         correction_started = Some(Instant::now());
-        let payload=serde_json::to_vec(&serde_json::json!({"transcript":transcript,"context":if case.correction_context(){context}else{""}})).map_err(|_|"input-failed")?;
+        let mut payload = serde_json::json!({"transcript":transcript,"context":if case.correction_context(){context}else{""}});
+        if !instruction.is_empty() {
+            payload["instruction"] = instruction.into();
+        }
+        let payload = serde_json::to_vec(&payload).map_err(|_| "input-failed")?;
         let candidate = if case.correction == "apple-foundation" {
             let output = crate::correction::child_output(
                 Command::new(resources.join("apple-foundation-correction")).arg("--correct"),
@@ -1399,6 +1415,7 @@ sys.exit(1)
                 &paths,
                 &available,
                 Some("raw fixture"),
+                "",
                 &AtomicU64::new(1),
                 1,
             );
@@ -1486,6 +1503,7 @@ sys.exit(1)
                     &paths,
                     &Ok(()),
                     Some("REFERENCE_PRIVATE"),
+                    "",
                     &AtomicU64::new(1),
                     1,
                 );

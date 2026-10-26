@@ -22,3 +22,5 @@
 通常CIの `Browser navigation and layout` では実Chromiumを使い、4画面、クリックとキーボード、未保存設定・比較入力・録音表示の保持、共有保存、意図しないネイティブ操作がないこと、横方向のはみ出しを検証します。通常／狭いウィンドウ・明暗テーマのPNGと `result.json` を `ui-navigation` Artifactに残します。画面データとネイティブ応答は合成サンプルで、実録音・macOSの権限・WebKitの動作を確認したものではありません。
 
 macOSのネイティブ操作テストのロケーターも、実際のタブ／折りたたみを操作する形に更新しています。既知のGHA27 PreviewのWebView空画面問題は引き続き別のPreview GUI workflowで扱い、ブラウザーの成功をmacOS GUIの成功とは扱いません。
+
+発表向けの同音語・画面文脈の実測と補正追加指示は[実験ガイド](context-evidence.md)を参照。

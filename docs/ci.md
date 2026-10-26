@@ -91,3 +91,7 @@ OSキャッシュ・試行順序の影響があり、一定の高速化率は要
 .mise/config.tomlを使い、通常CIの `mise setup (Linux)` とmacOSアプリのビルドで`.mise/config.toml`からツールを導入し、Node／pnpm／Python／CMake／Rustの実バージョンとrustfmt／clippyを検査します。導入した環境で固定ロックのpnpm依存導入・UIテスト・frontend buildも実行します。mise本体は公開後48時間以上経過した2026.10.18、ActionはコミットSHAを固定します。
 
 macOSアプリCIはmiseのPython・CMake・Rustでネイティブビルドまで検証します。リリース・モデル評価CIは従来のセットアップを維持し、`.nvmrc`／`packageManager`との一致を依存ポリシーの最初に検査します。Rustはmiseも既存CIも同じ`rust-toolchain.toml`を使います。アプリの依存に対する2日の公開後待機は変更しません。
+
+日本語文脈の[発表用実験](context-evidence.md)は明示実行に限定する。保存済みの実測データと資料コードを変更したPRでは、`Context evidence presentation`がスライド・PDF・各ページPNGを再生成し、表や文字の切れを検査する。推論は再実行しない。
+
+通常CIの短いASR試験はアプリと同じ`xcode-27`ホストでCPU／Metalを確認し、27専用キャッシュを使用する。26のランナー不足でジョブが開始されず取り消されるケースに対応する。長時間のモデル評価workflowは別設定を維持する。
