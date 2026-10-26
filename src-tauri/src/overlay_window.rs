@@ -1,6 +1,6 @@
 //! An owned non-activating AppKit panel. No secondary renderer or IPC surface.
 use crate::overlay_state::Status;
-use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, rc::Retained};
+use objc2::{MainThreadMarker, MainThreadOnly, define_class, msg_send, rc::Retained};
 use objc2_app_kit::{
     NSBackingStoreType, NSColor, NSFloatingWindowLevel, NSFont, NSPanel, NSProgressIndicator,
     NSScreen, NSTextField, NSView, NSWindowCollectionBehavior, NSWindowStyleMask,
@@ -34,7 +34,7 @@ define_class!(
         #[unsafe(method(drawRect:))]
         fn draw_rect(&self,_rect:NSRect) {
             NSColor::colorWithSRGBRed_green_blue_alpha(0.094,0.137,0.2,1.).setFill();
-            unsafe {objc2_app_kit::NSRectFill(self.bounds());}
+            objc2_app_kit::NSRectFill(self.bounds());
         }
     }
 );

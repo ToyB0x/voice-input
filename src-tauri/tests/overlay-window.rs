@@ -153,6 +153,7 @@ mod probe {
                     Ok(())
                 })?;
             }
+            on_main(app, |_| super::overlay_window::hide())?;
             Ok(())
         })();
         // Dedicated synthetic app only; no user application or content is touched.
