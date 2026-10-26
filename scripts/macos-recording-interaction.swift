@@ -36,7 +36,7 @@ func revealProductControl(_ root: AXUIElement, _ label: String) {
     guard AXUIElementGetPid(root, &pid) == .success,
           NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == "dev.toyb0x.voiceinput" else { return }
     let models = ["Model path", "Inference backend", "Load local model", "Model preset", "Managed speech model", "Managed correction model", "Correction engine", "Correction model path", "Correction backend", "Reuse Qwen correction model", "Download selected models", "Verify cached models", "Cancel model preparation", "Apply prepared models"]
-    let settings = ["Recording shortcut", "Automatic text insertion", "Automatic correction after transcription", "Recording status overlay", "Local recognition context", "Local OCR context", "Use context in Whisper", "Use context in correction", "Request accessibility permission", "Request screen permission"]
+    let settings = ["Recording shortcut", "Automatic text insertion", "Automatic correction after transcription", "Recording status overlay", "Local recognition context", "Local OCR context", "Use context in Whisper", "Use context in correction", "Request accessibility permission", "Request screen permission", "更新を確認", "更新をインストールして再起動"]
     let input = ["Start recording", "録音を開始", "Stop recording", "Transcribe recording", "Discard recording", "Copy transcript", "Transcription result", "Final text", "Corrected text", "Preview local correction", "Copy correction", "Open microphone settings"]
     let diagnostics = ["Check Apple model availability", "Copy processing diagnostics", "比較画面を開く・閉じる", "すべてのパターンを選択", "Appleモデルの比較条件を選ぶ", "設定中のQwenの比較条件を選ぶ", "録音済み音声で直列比較を開始", "比較レポートJSONをコピー", "比較結果を破棄", "Appleモデルの固定サンプル診断", "AppleとQwenの固定サンプル比較"]
     let view = models.contains(label) ? "モデル" : settings.contains(label) ? "設定" : input.contains(label) ? "音声入力" : diagnostics.contains(label) ? "比較・診断" : nil
@@ -597,6 +597,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     }
     defer { if let restarted, !restarted.isTerminated { restarted.forceTerminate() } }
     let restored = AXUIElementCreateApplication(restarted!.processIdentifier)
+    revealProductControl(restored, "Recording shortcut")
     try waitForUI("persisted preferences and automatic CPU model load", seconds: 120) {
         let text = uiText(restored)
         return text.contains("Control+Alt+KeyV（登録済み）") && text.contains("モデル準備完了（CPUを選択）")
