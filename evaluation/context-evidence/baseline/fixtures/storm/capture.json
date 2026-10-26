@@ -1,0 +1,89 @@
+{
+  "ax" : {
+    "focusCode" : -25208,
+    "rangeCode" : -25200,
+    "status" : "unavailable",
+    "target" : "own fixture process",
+    "text" : "",
+    "trusted" : true
+  },
+  "fixtureText" : "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。",
+  "imageOCR" : {
+    "attempts" : [
+      {
+        "code" : 9,
+        "cpuOnly" : false,
+        "domain" : "TextRecognition.CRImageReaderError",
+        "status" : "failed"
+      },
+      {
+        "code" : 9,
+        "cpuOnly" : true,
+        "domain" : "TextRecognition.CRImageReaderError",
+        "status" : "failed"
+      }
+    ],
+    "reason" : "vision-ocr-failed",
+    "status" : "unavailable",
+    "text" : ""
+  },
+  "ocr" : {
+    "attempts" : [
+      {
+        "code" : 9,
+        "cpuOnly" : false,
+        "domain" : "TextRecognition.CRImageReaderError",
+        "status" : "failed"
+      },
+      {
+        "code" : 9,
+        "cpuOnly" : true,
+        "domain" : "TextRecognition.CRImageReaderError",
+        "status" : "failed"
+      }
+    ],
+    "reason" : "vision-ocr-failed",
+    "status" : "unavailable",
+    "text" : ""
+  },
+  "renderMethod" : "AppKit view bitmap; not ScreenCaptureKit; no screen-recording permission tested",
+  "scenario" : "storm",
+  "vision" : {
+    "elapsedMs" : 775,
+    "labels" : [
+      {
+        "confidence" : 0.10882138460874557,
+        "label" : "liquid"
+      },
+      {
+        "confidence" : 0.10882138460874557,
+        "label" : "water"
+      },
+      {
+        "confidence" : 0.10880923271179199,
+        "label" : "water_body"
+      },
+      {
+        "confidence" : 0.1088092103600502,
+        "label" : "ocean"
+      },
+      {
+        "confidence" : 0.039535786956548691,
+        "label" : "outdoor"
+      },
+      {
+        "confidence" : 0.039534907788038254,
+        "label" : "sky"
+      },
+      {
+        "confidence" : 0.039241794496774673,
+        "label" : "cloudy"
+      },
+      {
+        "confidence" : 0.015818877145648003,
+        "label" : "frozen"
+      }
+    ],
+    "status" : "completed"
+  }
+}

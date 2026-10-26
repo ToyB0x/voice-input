@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "utterance": "あめがすごいですね",
+  "voice": "Eddy (Japanese (Japan))",
+  "origin": "macOS installed Japanese say voice; synthetic, not human speech",
+  "audioMs": 1663,
+  "hashes": {
+    "speech.aiff": "309a4c4f7c02be3eee5c4018874b102fa2e412b8b7b97db270cbf67e387451c3",
+    "speech.wav": "1da8846a64c35951720b445ed6f52e7fc535b0c3641178ab75302bbde02c4e0d",
+    "storm/image-window.png": "31acfa2f2de7b51bec9f224a4a004ed8287766e25abe35c901052f8b26ed6277",
+    "storm/capture.json": "3e399f0c6035b2ee53cbe665683d5df8a2c0bc946bd8d9aaa4817ecb15185eca",
+    "storm/text-window.png": "34b1086aa47e50752e29887c87925bc3c9e7b5e11cbb24ccab00907efa074edd",
+    "candy/image-window.png": "d114298ac67c271b6432a208460ed04e7cbd1a56f8f65a4232b5fd858a65cd2e",
+    "candy/capture.json": "229e6a6d39b1f33ba6682e28825b8e4ef595a72cbd1ee7f11c0cc100fb658d54",
+    "candy/text-window.png": "21d73a01db651404cb8bd2abc3e9127b09f99a30c5510d6d6575c940893d5424"
+  },
+  "assetHashes": {
+    "candy.png": "82c365294bddf58f9262b9d419fb01991fcba61c7fdbe07968b2f7ac29eaf043",
+    "storm.png": "2ceb1b888d56a31b8c68b56267085fa7df89a7393828995e2b05a031a3a49e4e"
+  }
+}

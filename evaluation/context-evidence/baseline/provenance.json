@@ -1,0 +1,7 @@
+{
+  "sourceRevision": "1f2da4f8281d155f076ea6ea8035e8d94959916e",
+  "runUrl": "https://github.com/ToyB0x/voice-input/actions/runs/40344979563",
+  "measurementJobUrl": "https://github.com/ToyB0x/voice-input/actions/runs/40344979563/job/121649529040",
+  "reportSha256": "2f45c68442962ea4814ed8b62e283001a9b20e4fd8ac62cf3141753c2279e0a8",
+  "note": "Measurement job succeeded. The parent CI also recorded an unrelated apt font timeout; fixed in a later commit. Frozen presentation CI regenerates slides without rerunning inference."
+}

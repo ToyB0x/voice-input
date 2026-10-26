@@ -101,13 +101,10 @@ jobs:
           EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python3 scripts/context-slides.py --report evidence/results/results.json --output presentation
-          google-chrome --headless --no-sandbox --disable-dev-shm-usage --virtual-time-budget=3000 \
-            --dump-dom "file://$PWD/presentation/slides.html" > "$RUNNER_TEMP/slides-layout.html"
-          python3 -c 'import os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"slides-layout.html"; assert "data-layout=\"passed\"" in p.read_text(), "Slide content overlaps footer or is clipped"'
-          google-chrome --headless --no-sandbox --disable-dev-shm-usage --no-pdf-header-footer \
-            --print-to-pdf="$PWD/presentation/slides.pdf" "file://$PWD/presentation/slides.html"
+          CHROME_BIN=/usr/bin/google-chrome node scripts/render-context-slides.mjs presentation
           cat presentation/summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
         with:
           name: japanese-context-presentation
           path: presentation/

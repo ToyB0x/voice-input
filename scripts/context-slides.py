@@ -56,6 +56,21 @@ def main():
                 if xs: route_rows.append([LABELS[source],route,instruction,f"{sum(x['judgment']=='target' for x in xs)}/{len(xs)}",round(statistics.median(x['correctionMs'] for x in xs))])
     for offset in range(0,len(route_rows),8):
         add('利用先と追加指示を比較する',table(['取得元','利用先','指示','期待語／実行数','補正中央値ms'],route_rows[offset:offset+8])+'<p class="small">推論時間はCI CPU上の実測。Qwen重みは再利用、発話ごとにKVを初期化。ASRの同一入力は条件間で共有。Mac実機の待ち時間を示す値ではない。</p>')
+    # Show observed failures as first-class findings, not just aggregate scores.
+    actual=[x for x in rows if x.get('engine')=='none' and x.get('source')=='none']
+    raw_examples=list(dict.fromkeys(x.get('raw','') for x in actual))
+    add('今回の実測で分かったこと',
+        '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples))+'</b>。最初から「雨／飴」の二択として認識できていたわけではない。</p>'
+        '<p>天気テキストのヒントで「雨」に変わる一方、キャンディ文脈や画像分類だけでは期待した変換に到達しなかった。</p>'
+        '<p>キャンディを画像分類できたことと、音声認識・補正を改善できたことは別。逆の文脈で意図しない「雨」になる条件もあった。</p>'
+        '<p>かな入力の分離テストでも、Qwenは「あめ」のまま出力。追加指示の希望どおりに変換するとは限らない。</p>')
+    controls=r.get('preservationControls',[])
+    for instruction,label in [('default','標準指示'),('kanji','漢字表記の追加指示')]:
+        xs=[x for x in controls if x['instruction']==instruction]
+        if xs:
+            add('意味の保持も別に確認する：'+label,
+                table(['原文','実際の補正候補','ガード判定'],[[x['input'],x['result'].get('candidate',''), '採用' if x['result'].get('accepted') else '棄却・原文利用'] for x in xs])+
+                '<p class="small">標準条件では「本番には」「田中さんへ」が脱落しても採用された。否定語・数字のチェックだけでは意味保持を保証できない。追加指示で改善した例も、この4件を超える品質保証にはならない。</p>')
     apple=r['foundation']
     add('確認できた範囲と、残る検証','<p>Apple Foundation Models / CI：<b>'+e(apple.get('availability',apple.get('failure','unknown')))+'</b>。利用不可なら推論結果は存在しない。</p><p>この実験は1発話・2シーンのパイロット。一般的な精度改善、他言語や他製品への優位性は結論にしない。</p><p>次の検証：実話者・複数の同音語・文脈が無関係／誤っている条件・直接画像を扱うローカルVLM・実機のAX／撮影。</p><p>数値・否定・名前の保持と、期待語の選択は別の評価軸。採用ガードの通過だけでは品質を保証しない。</p>')
     run=os.environ.get('EVIDENCE_RUN_URL','ローカル実行')

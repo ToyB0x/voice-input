@@ -1,0 +1,89 @@
+{
+  "ax" : {
+    "focusCode" : -25208,
+    "rangeCode" : -25200,
+    "status" : "unavailable",
+    "target" : "own fixture process",
+    "text" : "",
+    "trusted" : true
+  },
+  "fixtureText" : "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
+  "imageOCR" : {
+    "attempts" : [
+      {
+        "code" : 9,
+        "cpuOnly" : false,
+        "domain" : "TextRecognition.CRImageReaderError",
+        "status" : "failed"
+      },
+      {
+        "code" : 9,
+        "cpuOnly" : true,
+        "domain" : "TextRecognition.CRImageReaderError",
+        "status" : "failed"
+      }
+    ],
+    "reason" : "vision-ocr-failed",
+    "status" : "unavailable",
+    "text" : ""
+  },
+  "ocr" : {
+    "attempts" : [
+      {
+        "code" : 9,
+        "cpuOnly" : false,
+        "domain" : "TextRecognition.CRImageReaderError",
+        "status" : "failed"
+      },
+      {
+        "code" : 9,
+        "cpuOnly" : true,
+        "domain" : "TextRecognition.CRImageReaderError",
+        "status" : "failed"
+      }
+    ],
+    "reason" : "vision-ocr-failed",
+    "status" : "unavailable",
+    "text" : ""
+  },
+  "renderMethod" : "AppKit view bitmap; not ScreenCaptureKit; no screen-recording permission tested",
+  "scenario" : "candy",
+  "vision" : {
+    "elapsedMs" : 247,
+    "labels" : [
+      {
+        "confidence" : 0.98258101940155029,
+        "label" : "candy"
+      },
+      {
+        "confidence" : 0.98258101940155029,
+        "label" : "food"
+      },
+      {
+        "confidence" : 0.98258101940155029,
+        "label" : "lollipop"
+      },
+      {
+        "confidence" : 0.0080693159252405167,
+        "label" : "candy_other"
+      },
+      {
+        "confidence" : 0.0045625199563801289,
+        "label" : "celebration"
+      },
+      {
+        "confidence" : 0.0039979708380997181,
+        "label" : "dessert"
+      },
+      {
+        "confidence" : 0.0039222477935254574,
+        "label" : "candy_cane"
+      },
+      {
+        "confidence" : 0.0037448124494403601,
+        "label" : "egg"
+      }
+    ],
+    "status" : "completed"
+  }
+}
