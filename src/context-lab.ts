@@ -8,6 +8,7 @@ const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 let state:LabStatus|undefined;
 let cursor=0,part=0;
 let reading=false,acting=false;
+function setText(id:string,value:string){const node=el(id);if(node.textContent!==value)node.textContent=value;}
 const append=(row:LabRow)=>{
   const tr=el<HTMLTableSectionElement>("lab-rows").insertRow();
   const ms=(n:number|null|undefined)=>n==null?"—":`${(n/1000).toFixed(2)}秒`;
@@ -21,8 +22,8 @@ function render(){
   el<HTMLButtonElement>("lab-copy-part").disabled = busy || !state?.runId || !state.parts || !!state.more;
   el<HTMLButtonElement>("lab-clear").disabled = acting || !state?.runId;
   for(const id of ["lab-input","lab-apple","lab-qwen","lab-ax","lab-repeats","lab-instruction","lab-compare-instruction"]) (el(id) as HTMLInputElement).disabled=busy;
-  el("lab-progress").textContent=state?`${state.phase}: ${state.completed}/${state.planned}\n${state.message}\nAFM: ${state.foundation?.status?.availability??state.foundation?.error??"未確認"}`:"未実行。実行ボタンを押すまで取得・推論は行いません。";
-  el("lab-copy-part").textContent=`分割JSONをコピー（${part+1}/${Math.max(1,state?.parts??1)}）`;
+  setText("lab-progress",state?`${state.phase}: ${state.completed}/${state.planned}\n${state.message}\nAFM: ${state.foundation?.status?.availability??state.foundation?.error??"未確認"}`:"未実行。実行ボタンを押すまで取得・推論は行いません。");
+  setText("lab-copy-part",`分割JSONをコピー（${part+1}/${Math.max(1,state?.parts??1)}）`);
 }
 async function refresh(){
   if(reading||!isTauri())return;reading=true;

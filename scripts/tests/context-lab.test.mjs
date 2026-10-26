@@ -41,3 +41,10 @@ test('copy is opt in and pages advance only on explicit actions',async()=>{
   assert.equal(JSON.parse(a.elements.get('lab-json').value).part,1);
   a.state.runId='new-run';await a.poll();assert.equal(a.elements.get('lab-include-text').checked,false);assert.equal(a.elements.get('lab-json').value,'');
 });
+
+test('polling preserves the copy button text node while the label is unchanged',async()=>{
+  const a=await setup();const node=a.elements.get('lab-copy-part');let value=node.textContent,writes=0;
+  Object.defineProperty(node,'textContent',{get(){return value;},set(v){value=v;writes++;}});
+  await a.poll();await a.poll();assert.equal(writes,0);
+  a.state.runId='new';a.state.parts=2;await a.poll();assert.equal(writes,1);
+});
