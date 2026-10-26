@@ -7,12 +7,13 @@ use objc2::{
 };
 use std::sync::{
     Mutex,
-    atomic::{AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
 };
 use tauri::Manager;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 static NATIVE_APP: Mutex<Option<tauri::AppHandle>> = Mutex::new(None);
+static NATIVE_QUIT_PENDING: AtomicBool = AtomicBool::new(false);
 
 // AppKit's native Quit invokes applicationWillTerminate directly in the current
 // Tao implementation, without Tauri's cancellable ExitRequested event. Install
@@ -73,17 +74,36 @@ unsafe extern "C-unwind" fn native_should_terminate(
     if let Some(lifecycle) = app.try_state::<Lifecycle>() {
         if lifecycle.ready() {
             lifecycle.join_worker();
+            diagnostic("exit-ready");
             return 1;
         }
     }
-    // NSTerminateCancel keeps AppKit running while the ordinary Tauri exit
-    // request completes resource shutdown. Repeated requests are coalesced below.
+    // NSTerminateLater preserves macOS logout/shutdown semantics. Reply on the
+    // main operation queue only after all native resource owners have ended.
+    NATIVE_QUIT_PENDING.store(true, Ordering::Release);
     app.exit(0);
-    0
+    2
 }
 
 pub(crate) fn native_exit() {
+    NATIVE_QUIT_PENDING.store(false, Ordering::Release);
     *NATIVE_APP.lock().unwrap_or_else(|error| error.into_inner()) = None;
+}
+
+fn finish_on_main(app: tauri::AppHandle, code: Option<i32>) {
+    if NATIVE_QUIT_PENDING.swap(false, Ordering::AcqRel) {
+        app.state::<Lifecycle>().join_worker();
+        diagnostic("exit-ready");
+        // SAFETY: NSOperationQueue.mainQueue executes this outside the Tauri
+        // event callback on AppKit's main thread. Native termination can send
+        // applicationWillTerminate: synchronously, so avoid a reentrant borrow.
+        unsafe {
+            let application: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let _: () = msg_send![application, replyToApplicationShouldTerminate: objc2::runtime::Bool::YES];
+        }
+    } else {
+        app.exit(code.unwrap_or(0));
+    }
 }
 
 #[derive(Default)]
@@ -150,11 +170,12 @@ pub(crate) fn request_exit(app: &tauri::AppHandle, api: tauri::ExitRequestApi, c
         diagnostic("exit-cleanup-completed");
         handle.state::<Lifecycle>().finish();
         let next = handle.clone();
-        if handle
-            .run_on_main_thread(move || next.exit(code.unwrap_or(0)))
-            .is_err()
-        {
-            diagnostic("exit-dispatch-failed");
+        let finish = block2::RcBlock::new(move || finish_on_main(next.clone(), code));
+        // SAFETY: Cocoa copies/retains the block until it runs on the public main
+        // operation queue. No native termination runs on this cleanup worker.
+        unsafe {
+            let queue: *mut AnyObject = msg_send![class!(NSOperationQueue), mainQueue];
+            let _: () = msg_send![queue, addOperationWithBlock: &*finish];
         }
     });
     *lifecycle
