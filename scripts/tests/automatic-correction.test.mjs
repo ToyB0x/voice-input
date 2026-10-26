@@ -13,7 +13,7 @@ async function setup() {
   const state = {
     snapshot: { phase: 'recorded', permission: 'authorized', elapsedMs: 1000, level: 0, sampleCount: 16000, sampleRate: 16000, inputDevice: null,
       modelReady: true, backend: 'metal', working: false, recognitionPhase: 'idle', transcript: 'Whisper原文', finalText: null, finalSource: 'correcting', recognitionError: null },
-    desktop: { preferences: { version: 1, modelPath: '/model.bin', backend: 'metal', shortcut: 'Control+Alt+KeyV', autoInsert: false, autoCorrection: false, showOverlay: false,
+    desktop: { preferences: { version: 1, modelPath: '/model.bin', backend: 'metal', shortcut: 'Control+Alt+KeyV', autoInsert: false, autoCorrection: false, reuseCorrectionModel: false, showOverlay: false,
       recognitionContext: false, ocrContext: false, whisperContext: true, correctionContext: false, correctionModelPath: '', correctionEngine: 'apple-foundation', correctionBackend: 'metal' }, shortcutRegistered: true, error: null },
     correction: { working: true, checkingFoundation: false, foundation: null, text: null, error: null, elapsedMs: 0 },
   };
@@ -74,4 +74,26 @@ test('pending final result cannot be copied; new recording and discard remain av
   app.click('copy-final'); await app.settle();
   assert.equal(app.requests.filter(r => r.command === 'copy_final_transcript').length, 1);
   assert.ok(!app.requests.some(r => r.command === 'correct_transcript' || r.command === 'start_recording'));
+});
+
+
+test('reuse is opt in and per-stage timing distinguishes zero from unavailable', async () => {
+  const app = await setup();
+  assert.equal(app.elements.get('reuse-correction-model').checked, false);
+  app.elements.get('correction-engine').value = 'qwen3';
+  app.state.snapshot.recognitionMs = 250;
+  app.state.correction.timings = { totalMs: 120, modelReused: true, backendMs: 0, modelLoadMs: 0,
+    contextMs: 3, prefillMs: 10, generationMs: 100, validationMs: 1 };
+  app.poll(); await app.settle();
+  assert.equal(app.elements.get('reuse-correction-model').disabled, false);
+  const text = app.elements.get('processing-timings').textContent;
+  assert.match(text, /音声認識: 0.25秒/);
+  assert.match(text, /モデル: 再利用/);
+  assert.match(text, /読込: 0.00秒/);
+  app.elements.get('reuse-correction-model').checked = true;
+  app.click('save-preferences'); await app.settle();
+  assert.equal(app.requests.find(r => r.command === 'save_preferences').args.preferences.reuseCorrectionModel, true);
+  app.state.correction.timings = { totalMs: 50, modelReused: false };
+  app.poll(); await app.settle();
+  assert.match(app.elements.get('processing-timings').textContent, /読込: 未計測/);
 });

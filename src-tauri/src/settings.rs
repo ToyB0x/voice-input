@@ -14,6 +14,8 @@ pub struct Preferences {
     #[serde(default)]
     pub auto_correction: bool,
     #[serde(default)]
+    pub reuse_correction_model: bool,
+    #[serde(default)]
     pub show_overlay: bool,
     #[serde(default)]
     pub recognition_context: bool,
@@ -48,6 +50,7 @@ impl Default for Preferences {
             shortcut: "Command+Shift+Space".into(),
             auto_insert: false,
             auto_correction: false,
+            reuse_correction_model: false,
             show_overlay: false,
             recognition_context: false,
             ocr_context: false,
@@ -153,6 +156,7 @@ mod tests {
                 .unwrap();
         assert!(!legacy.auto_insert);
         assert!(!legacy.auto_correction);
+        assert!(!legacy.reuse_correction_model);
         assert!(!legacy.show_overlay);
         assert!(!legacy.recognition_context);
         assert!(!legacy.ocr_context && !legacy.correction_context);
@@ -161,6 +165,7 @@ mod tests {
         let settings = Preferences {
             correction_engine: "apple-foundation".into(),
             auto_correction: true,
+            reuse_correction_model: true,
             show_overlay: true,
             model_path: "/tmp/日本語モデル.bin".into(),
             shortcut: String::new(),

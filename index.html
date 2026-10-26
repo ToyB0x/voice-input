@@ -114,6 +114,10 @@
         <select id="correction-backend" aria-label="Correction backend"><option value="metal">GPU（Metal）</option><option value="cpu">CPU</option></select>
         <p class="hint">上の「設定を保存」で反映します。モデルは自動ダウンロードしません。音声の認識結果と、設定で許可したテキストだけをこのMac内で補正します。</p>
         <button id="correct" aria-label="Preview local correction" disabled>最終補正をプレビュー</button>
+        <label><input id="reuse-correction-model" aria-label="Reuse Qwen correction model" type="checkbox" />Qwen補正モデルを再利用する（初期状態は無効）</label>
+        <p class="note">重みだけを再利用し、発話ごとの文脈は保持しません。5分間未使用・設定保存・処理中の取り消し・終了時に解放します。Appleモデルには適用しません。</p>
+        <p id="processing-timings" role="status">処理時間は未計測です。</p>
+        <button id="foundation-copy" aria-label="Copy processing diagnostics">処理時間・診断情報をコピー（本文なし）</button>
         <p id="correction-status" role="status">補正は未実行です。</p>
         <textarea id="corrected" aria-label="Corrected text" rows="4" readonly placeholder="元の文字起こしは上の認識結果に保持します。"></textarea>
         <h3>最終結果</h3>
@@ -125,7 +129,6 @@
           <button id="foundation-check" aria-label="Check Apple model availability">Appleモデルの利用可否を確認</button>
           <p id="foundation-info" role="status">Appleモデルの利用可否は未確認です。</p>
           <pre id="foundation-detail" aria-label="Apple model diagnostics"></pre>
-          <button id="foundation-copy" aria-label="Copy Apple model diagnostics">診断情報をコピー（本文なし）</button>
           <p class="hint">確認操作は推論しません。診断には利用可否・OSバージョン・処理時間・固定の失敗理由を含み、音声・文字起こし・取得文脈・補正本文・モデルパスを含みません。</p>
         </details>
         <button id="copy-correction" aria-label="Copy correction" disabled>補正結果をコピー</button>

@@ -206,6 +206,7 @@ pub fn save_preferences(
         .configure(context_config);
     // Serialize invalidation with final delivery, even when saving unchanged settings.
     app.state::<Recorder>().configure_automatic(automatic);
+    app.state::<crate::correction::Corrector>().release_model();
     inner.preferences = preferences;
     inner.registered = new;
     inner.error = None;
@@ -289,6 +290,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let worker = std::thread::spawn(move || {
         let mut previous = String::new();
         while !closing.load(Ordering::Acquire) {
+            handle
+                .state::<crate::correction::Corrector>()
+                .expire_model();
             if let Ok(snapshot) = handle.state::<Recorder>().overlay_signal() {
                 let (enabled, delivery) = handle.state::<crate::insertion::Inserter>().feedback();
                 let (overlay_enabled, desktop_failed) = handle

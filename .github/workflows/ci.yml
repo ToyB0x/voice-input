@@ -10,6 +10,10 @@ on:
         description: Run the full macOS permission/audio/OCR/insertion suite
         type: boolean
         default: false
+      correction_reuse:
+        description: Verify real Qwen model reuse offline (explicit only)
+        type: boolean
+        default: false
       release_validation:
         description: Build installers with a disposable signing key (no publishing)
         type: boolean
@@ -34,6 +38,11 @@ jobs:
     uses: ./.github/workflows/release-build.yml
     with:
       tag: v0.0.1
+
+  correction-reuse:
+    name: Qwen reuse validation (explicit only)
+    if: github.event_name == 'workflow_dispatch' && inputs.correction_reuse
+    uses: ./.github/workflows/correction-reuse.yml
 
   foundation:
     name: Apple model runtime

@@ -5,7 +5,7 @@ import { setupModels } from "./model-setup";
 import { setupInputLevel } from "./input-level";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; autoCorrection: boolean; showOverlay: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
+type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; autoCorrection: boolean; reuseCorrectionModel: boolean; showOverlay: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
 type InsertionStatus = { enabled: boolean; trusted: boolean; state: string; message: string };
 type DesktopStatus = { preferences: Preferences; shortcutRegistered: boolean; error: string | null };
 
@@ -14,6 +14,7 @@ type Snapshot = {
   phase: "idle" | "recording" | "recorded" | "error";
   permission: Permission;
   elapsedMs: number;
+  recognitionMs?: number | null;
   level: number;
   sampleCount: number;
   sampleRate: number;
@@ -70,6 +71,8 @@ const savePreferences = document.querySelector<HTMLButtonElement>("#save-prefere
 const desktopStatus = document.querySelector<HTMLParagraphElement>("#desktop-status")!;
 const preferencesMessage = document.querySelector<HTMLParagraphElement>("#preferences-message")!;
 const showOverlay = document.querySelector<HTMLInputElement>("#show-overlay")!;
+const reuseCorrectionModel = document.querySelector<HTMLInputElement>("#reuse-correction-model")!;
+const processingTimings = document.querySelector<HTMLParagraphElement>("#processing-timings")!;
 const autoCorrection = document.querySelector<HTMLInputElement>("#auto-correction")!;
 const finalText = document.querySelector<HTMLTextAreaElement>("#final-text")!;
 const finalStatus = document.querySelector<HTMLParagraphElement>("#final-status")!;
@@ -81,7 +84,8 @@ const recognitionContext = document.querySelector<HTMLInputElement>("#recognitio
 const contextStatus = document.querySelector<HTMLParagraphElement>("#context-status")!;
 type ContextStatus = { enabled: boolean; message: string; ocrMessage: string; screenPermitted: boolean };
 type FoundationStatus = { availability: string; framework_imported: boolean; os_supported: boolean; os_major: number; os_minor: number; os_patch: number };
-type CorrectionStatus = { checkingFoundation: boolean; foundation: FoundationStatus | null; working: boolean; text: string | null; error: string | null; model: string; elapsedMs: number };
+type Timings = { totalMs: number; modelReused: boolean; backendMs: number | null; modelLoadMs: number | null; contextMs: number | null; prefillMs: number | null; generationMs: number | null; validationMs: number | null };
+type CorrectionStatus = { checkingFoundation: boolean; foundation: FoundationStatus | null; working: boolean; timings?: Timings | null; text: string | null; error: string | null; model: string; elapsedMs: number };
 let context: ContextStatus | undefined;
 let correction: CorrectionStatus | undefined;
 const ocrContext = document.querySelector<HTMLInputElement>("#ocr-context")!;
@@ -137,7 +141,7 @@ function render() {
   ocrContext.disabled = whisperContext.disabled = correctionContext.disabled = screenPermission.disabled = busy;
   const foundationSelected = correctionEngine.value === "apple-foundation";
   correctionEngine.disabled = busy;
-  correctionModelPath.disabled = correctionBackend.disabled = busy || foundationSelected;
+  correctionModelPath.disabled = correctionBackend.disabled = reuseCorrectionModel.disabled = busy || foundationSelected;
   foundationCheck.disabled = busy || !!correction?.working || snapshot.working || snapshot.phase === "recording";
   foundationCopy.disabled = busy;
   const availabilityMessages: Record<string, string> = {
@@ -155,6 +159,10 @@ function render() {
   correct.disabled = busy || snapshot.working || snapshot.phase === "recording" || !!correction?.working || !snapshot.transcript || (!foundationSelected && !correctionModelPath.value.trim());
   copyCorrection.disabled = busy || !!correction?.working || !correction?.text;
   if (corrected.value !== (correction?.text ?? "")) corrected.value = correction?.text ?? "";
+  const seconds = (ms: number | null | undefined) => ms == null ? "未計測" : `${(ms / 1000).toFixed(2)}秒`;
+  const timing = correction?.timings;
+  setText(processingTimings, `音声認識: ${seconds(snapshot.recognitionMs)} / 補正全体: ${seconds(timing?.totalMs)}` +
+    (timing ? ` / モデル: ${timing.modelLoadMs == null ? "未計測（AppleはOS管理）" : timing.modelReused ? "再利用" : "新規"} / 初期化: ${seconds(timing.backendMs)} / 読込: ${seconds(timing.modelLoadMs)} / 文脈準備: ${seconds(timing.contextMs)} / 入力処理: ${seconds(timing.prefillMs)} / 生成: ${seconds(timing.generationMs)} / 検証: ${seconds(timing.validationMs)}` : ""));
   setText(correctionStatus, correction?.working ? (correction.checkingFoundation ? "Appleモデルの利用可否を確認中…" : "ローカル補正中…（破棄・新しい録音で取り消せます）") : correction?.error ?? (correction?.text !== null && correction?.text !== undefined ? `補正プレビュー: ${correction.model} / ${(correction.elapsedMs / 1000).toFixed(1)}秒。内容を確認してください。` : "補正は未実行です。元の文字起こしを保持します。"));
   setText(insertionStatus, !insertion?.enabled ? "直接入力: 無効" :
     `直接入力: 有効 / アクセシビリティ${insertion.trusted ? "許可済み" : "未許可"}`);
@@ -242,6 +250,7 @@ async function refresh() {
         shortcut.value = desktop.preferences.shortcut;
         autoInsert.checked = desktop.preferences.autoInsert;
         autoCorrection.checked = desktop.preferences.autoCorrection;
+        reuseCorrectionModel.checked = desktop.preferences.reuseCorrectionModel ?? false;
         showOverlay.checked = desktop.preferences.showOverlay;
         recognitionContext.checked = desktop.preferences.recognitionContext;
         ocrContext.checked = desktop.preferences.ocrContext;
@@ -285,14 +294,14 @@ async function action(operation: () => Promise<unknown>) {
 
 savePreferences.addEventListener("click", () => void action(async () => {
   desktop = await invoke<DesktopStatus>("save_preferences", { preferences: {
-    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, autoCorrection: autoCorrection.checked, showOverlay: showOverlay.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
+    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, autoCorrection: autoCorrection.checked, reuseCorrectionModel: reuseCorrectionModel.checked, showOverlay: showOverlay.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
     whisperContext: whisperContext.checked, correctionContext: correctionContext.checked,
     correctionModelPath: correctionModelPath.value, correctionEngine: correctionEngine.value, correctionBackend: correctionBackend.value,
   } });
   preferencesMessage.textContent = "設定を保存しました。ショートカットは反映済みです。";
 }));
 accessibility.addEventListener("click", () => void action(() => invoke("request_accessibility")));
-for (const field of [modelPath, backend, shortcut, autoInsert, autoCorrection, showOverlay, recognitionContext, ocrContext, whisperContext, correctionContext, correctionEngine, correctionModelPath, correctionBackend]) {
+for (const field of [modelPath, backend, shortcut, autoInsert, autoCorrection, reuseCorrectionModel, showOverlay, recognitionContext, ocrContext, whisperContext, correctionContext, correctionEngine, correctionModelPath, correctionBackend]) {
   field.addEventListener("input", () => { preferencesMessage.textContent = "未保存の設定があります。"; });
 }
 modelPath.addEventListener("input", render);

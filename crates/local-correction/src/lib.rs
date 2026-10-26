@@ -24,6 +24,8 @@ pub struct Report {
     pub backend: String,
     pub offloaded_layers: u32,
     pub elapsed_ms: u64,
+    #[serde(default)]
+    pub model_reused: bool,
     // No inference (empty transcript) has no performance sample.
     pub performance: Option<performance::Performance>,
 }

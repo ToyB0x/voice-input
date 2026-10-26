@@ -20,7 +20,29 @@ pub struct Status {
     pub model: String,
     pub elapsed_ms: u64,
     pub checking_foundation: bool,
+    pub timings: Option<Timings>,
     pub foundation: Option<FoundationStatus>,
+}
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Timings {
+    pub total_ms: u64,
+    pub model_reused: bool,
+    pub backend_ms: Option<u64>,
+    pub model_load_ms: Option<u64>,
+    pub context_ms: Option<u64>,
+    pub prefill_ms: Option<u64>,
+    pub generation_ms: Option<u64>,
+    pub validation_ms: Option<u64>,
+}
+#[derive(Deserialize)]
+struct Performance {
+    backend_ms: u64,
+    model_load_ms: u64,
+    context_ms: u64,
+    prefill_ms: u64,
+    generation_ms: u64,
+    validation_ms: u64,
 }
 #[derive(Deserialize)]
 struct Report {
@@ -29,6 +51,12 @@ struct Report {
     elapsed_ms: u64,
     backend: String,
     offloaded_layers: u32,
+    #[serde(default)]
+    performance: Option<Performance>,
+    #[serde(default)]
+    model_reused: bool,
+    #[serde(skip)]
+    total_ms: u64,
 }
 #[derive(Clone, Deserialize, Serialize)]
 pub struct FoundationStatus {
@@ -45,6 +73,7 @@ pub(crate) struct AutomaticConfig {
     pub runtime: std::path::PathBuf,
     pub model: String,
     pub backend: String,
+    pub reuse_model: bool,
 }
 impl AutomaticConfig {
     pub fn from_preferences(
@@ -61,6 +90,7 @@ impl AutomaticConfig {
                 .map_err(|_| "補正ヘルパーを確認できません。")?
                 .join("bin/local-correction"),
             model: preferences.correction_model_path.clone(),
+            reuse_model: preferences.reuse_correction_model,
             backend: if preferences.correction_engine == "apple-foundation" {
                 "foundation".into()
             } else {
@@ -82,6 +112,7 @@ pub struct Corrector {
     state: Arc<Mutex<Inner>>,
     epoch: Arc<AtomicU64>,
     closing: Arc<AtomicBool>,
+    pool: Arc<crate::correction_pool::Pool>,
     worker: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
 }
 impl Corrector {
@@ -93,6 +124,7 @@ impl Corrector {
             })),
             epoch: Arc::new(AtomicU64::new(0)),
             closing: Arc::new(AtomicBool::new(false)),
+            pool: Arc::new(crate::correction_pool::Pool::default()),
             worker: Arc::new(Mutex::new(None)),
         }
     }
@@ -118,6 +150,13 @@ impl Corrector {
         if let Some(handle) = worker.take() {
             let _ = handle.join();
         }
+        self.pool.release();
+    }
+    pub fn release_model(&self) {
+        self.pool.release();
+    }
+    pub fn expire_model(&self) {
+        self.pool.tick();
     }
     pub(crate) fn generation(&self) -> u64 {
         self.epoch.load(Ordering::Acquire)
@@ -128,6 +167,7 @@ impl Corrector {
             .map(|s| s.status.clone())
             .unwrap_or_default()
     }
+    #[allow(clippy::too_many_arguments)]
     fn start(
         &self,
         runtime: std::path::PathBuf,
@@ -136,6 +176,7 @@ impl Corrector {
         raw: String,
         hint: Option<crate::context::Hint>,
         generation: u64,
+        reuse_model: bool,
     ) -> Result<Status, String> {
         if backend != "foundation"
             && (model.is_empty()
@@ -152,7 +193,8 @@ impl Corrector {
         }
         self.start_job(generation, false, move |worker, epoch| {
             let context = hint.and_then(|hint| hint.correction()).unwrap_or_default();
-            run(
+            let result = run_with_pool(
+                reuse_model.then_some(worker.pool.as_ref()),
                 &runtime,
                 &model,
                 &backend,
@@ -160,8 +202,11 @@ impl Corrector {
                 &context,
                 &worker.epoch,
                 epoch,
-            )
-            .map(Outcome::Correction)
+            );
+            if result.is_err() {
+                worker.pool.release();
+            }
+            result.map(Outcome::Correction)
         })
     }
     pub(crate) fn start_automatic(
@@ -176,7 +221,8 @@ impl Corrector {
         // A cancelled/busy reservation never falls back to insertion.
         self.start_job(generation, false, move |owner, epoch| {
             let context = hint.and_then(|hint| hint.correction()).unwrap_or_default();
-            let result = run(
+            let result = run_with_pool(
+                config.reuse_model.then_some(owner.pool.as_ref()),
                 &config.runtime,
                 &config.model,
                 &config.backend,
@@ -185,6 +231,9 @@ impl Corrector {
                 &owner.epoch,
                 epoch,
             );
+            if result.is_err() {
+                owner.pool.release();
+            }
             if owner.epoch.load(Ordering::Acquire) == epoch
                 && !owner.closing.load(Ordering::Acquire)
             {
@@ -257,7 +306,21 @@ impl Corrector {
                         Ok(Outcome::Correction(report)) => {
                             state.status.text = Some(report.text);
                             state.status.model = report.model;
-                            state.status.elapsed_ms = report.elapsed_ms;
+                            state.status.elapsed_ms = report.total_ms;
+                            let mut timings = Timings {
+                                total_ms: report.total_ms,
+                                model_reused: report.model_reused,
+                                ..Timings::default()
+                            };
+                            if let Some(p) = report.performance {
+                                timings.backend_ms = Some(p.backend_ms);
+                                timings.model_load_ms = Some(p.model_load_ms);
+                                timings.context_ms = Some(p.context_ms);
+                                timings.prefill_ms = Some(p.prefill_ms);
+                                timings.generation_ms = Some(p.generation_ms);
+                                timings.validation_ms = Some(p.validation_ms);
+                            }
+                            state.status.timings = Some(timings);
                         }
                         Err(error) => state.status.error = Some(error),
                     }
@@ -267,7 +330,21 @@ impl Corrector {
         Ok(self.status())
     }
 }
+#[cfg(test)]
 fn run(
+    runtime: &Path,
+    model: &str,
+    backend: &str,
+    raw: &str,
+    context: &str,
+    epoch: &AtomicU64,
+    current: u64,
+) -> Result<Report, String> {
+    run_with_pool(None, runtime, model, backend, raw, context, epoch, current)
+}
+#[allow(clippy::too_many_arguments)]
+fn run_with_pool(
+    pool: Option<&crate::correction_pool::Pool>,
     runtime: &Path,
     model: &str,
     backend: &str,
@@ -298,13 +375,33 @@ fn run(
     } else {
         command.arg(model).arg(backend);
     }
-    let result = child_output(
-        &mut command,
-        input,
-        epoch,
-        current,
-        Duration::from_secs(150),
-    )?;
+    let result = if let Some(pool) = pool.filter(|_| backend != "foundation") {
+        use std::os::unix::process::ExitStatusExt;
+        let stdout = pool.request(
+            runtime,
+            model,
+            backend,
+            input,
+            epoch,
+            current,
+            Duration::from_secs(150),
+        )?;
+        let success = serde_json::from_slice::<serde_json::Value>(&stdout)
+            .is_ok_and(|v| v.get("text").is_some());
+        std::process::Output {
+            status: std::process::ExitStatus::from_raw(if success { 0 } else { 256 }),
+            stdout,
+            stderr: Vec::new(),
+        }
+    } else {
+        child_output(
+            &mut command,
+            input,
+            epoch,
+            current,
+            Duration::from_secs(150),
+        )?
+    };
     let status = result.status;
     let output = result.stdout;
     if !status.success() {
@@ -338,8 +435,9 @@ fn run(
             "ローカル補正に失敗しました（{stage}）。モデル・実行方式・入力上限を確認してください。元の認識結果は保持しています。"
         ));
     }
-    let report: Report = serde_json::from_slice(&output).map_err(|_| failed())?;
-    if report.text.trim().is_empty()
+    let mut report: Report = serde_json::from_slice(&output).map_err(|_| failed())?;
+    if report.elapsed_ms > 150_000
+        || report.text.trim().is_empty()
         || report.text.len() > 8192
         || report.text.contains('\0')
         || report.backend != backend
@@ -382,6 +480,7 @@ fn run(
     if epoch.load(Ordering::Acquire) != current {
         return Err("補正を取り消しました。".into());
     }
+    report.total_ms = started.elapsed().as_millis() as u64;
     Ok(report)
 }
 pub(crate) fn child_output(
@@ -507,6 +606,7 @@ pub fn correct_transcript(
         raw,
         hint,
         generation,
+        preferences.reuse_correction_model,
     )
 }
 #[tauri::command]
@@ -669,10 +769,13 @@ pub fn copy_foundation_diagnostics(
     let status = corrector.status();
     // No paths, model metadata, audio, transcript, context, or generated body.
     let diagnostic = serde_json::json!({
-        "app_version": env!("CARGO_PKG_VERSION"), "diagnostic_version": 1,
+        "app_version": env!("CARGO_PKG_VERSION"), "diagnostic_version": 2,
         "selected_engine": preferences.correction_engine, "availability": status.foundation,
         "working": status.working, "checking_availability": status.checking_foundation,
         "last_elapsed_ms": status.elapsed_ms, "last_error": status.error,
+        "timings": status.timings,
+        "reuse_model_enabled": preferences.reuse_correction_model,
+        "recognition_ms": app.state::<crate::recorder::Recorder>().status()?.recognition.recognition_ms,
     });
     arboard::Clipboard::new()
         .and_then(|mut clipboard| clipboard.set_text(diagnostic.to_string()))
@@ -699,6 +802,7 @@ mod tests {
                     "old transcript".into(),
                     None,
                     generation,
+                    false,
                 )
                 .is_err()
         );

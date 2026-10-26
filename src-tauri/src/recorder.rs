@@ -346,6 +346,7 @@ impl Recorder {
                                 Err("録音を停止してから操作してください。".into())
                             }
                             Action::LoadModel(path, backend) => {
+                                corrector.release_model();
                                 shared.lock().map_err(|e| e.to_string()).and_then(|mut c| {
                                     corrector.cancel();
                                     transcription::load(&mut c.recognition, path, &backend, &jobs)
@@ -363,6 +364,7 @@ impl Recorder {
                                 })
                             }
                             Action::Clear => {
+                                corrector.release_model();
                                 comparisons.cancel(true);
                                 inserter.cancel();
                                 context.cancel();
@@ -481,6 +483,7 @@ impl Recorder {
         }
     }
     pub(crate) fn suspend_for_comparison(&self) -> Result<(), String> {
+        self.corrector.release_model();
         let (tx, rx) = mpsc::channel();
         self.jobs
             .send(transcription::Job::Suspend { reply: tx })

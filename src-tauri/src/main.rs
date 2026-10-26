@@ -11,6 +11,8 @@ mod transcription;
 mod context;
 #[cfg(target_os = "macos")]
 mod correction;
+#[cfg(any(target_os = "macos", test))]
+mod correction_pool;
 #[cfg(target_os = "macos")]
 mod desktop;
 #[cfg(target_os = "macos")]
