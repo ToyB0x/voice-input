@@ -104,6 +104,7 @@ fn main() {
             models::prepare_models,
             models::cancel_model_preparation,
             recorder::recording_status,
+            recorder::recording_level,
             recorder::request_microphone_permission,
             recorder::start_recording,
             recorder::stop_recording,

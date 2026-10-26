@@ -64,6 +64,13 @@ pub struct Snapshot {
     pub(crate) recognition: Session,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LevelSnapshot {
+    phase: &'static str,
+    level: f32,
+}
+
 #[derive(Default)]
 pub(crate) struct Capture {
     pub(crate) audio: Option<AudioBuffer>,
@@ -77,16 +84,23 @@ pub(crate) struct Capture {
 }
 
 impl Capture {
+    fn level_snapshot(&self) -> LevelSnapshot {
+        LevelSnapshot {
+            phase: self.phase.unwrap_or("idle"),
+            level: if self.phase == Some("recording") {
+                self.audio.as_ref().map_or(0.0, |audio| audio.level)
+            } else {
+                0.0
+            },
+        }
+    }
+
     fn snapshot(&self) -> Snapshot {
         Snapshot {
             phase: self.phase.unwrap_or("idle"),
             permission: permission_status(),
             elapsed_ms: self.audio.as_ref().map_or(0, AudioBuffer::elapsed_ms),
-            level: if self.phase == Some("recording") {
-                self.audio.as_ref().map_or(0.0, |a| a.level)
-            } else {
-                0.0
-            },
+            level: self.level_snapshot().level,
             sample_count: self.audio.as_ref().map_or(0, |a| a.samples.len()),
             sample_rate: self.audio.as_ref().map_or(0, |a| a.sample_rate),
             error: self.error.clone(),
@@ -486,6 +500,16 @@ pub fn recording_status(recorder: tauri::State<'_, Recorder>) -> Result<Snapshot
         .map_err(|e| e.to_string())
 }
 
+/// Numeric display only: no audio samples, transcript clone or OS permission query.
+#[tauri::command]
+pub fn recording_level(recorder: tauri::State<'_, Recorder>) -> Result<LevelSnapshot, String> {
+    recorder
+        .capture
+        .lock()
+        .map(|capture| capture.level_snapshot())
+        .map_err(|_| "入力レベルを取得できません。".to_owned())
+}
+
 #[tauri::command]
 pub async fn start_recording(recorder: tauri::State<'_, Recorder>) -> Result<Snapshot, String> {
     recorder.send(Action::Start).await
@@ -551,12 +575,16 @@ mod tests {
             correction_hint: None,
             comparison_hint: None,
         };
+        assert_eq!(capture.level_snapshot().phase, "recording");
+        assert_eq!(capture.level_snapshot().level, 0.5);
         capture.finish();
         let snapshot = capture.snapshot();
         assert_eq!(snapshot.phase, "recorded");
         assert_eq!(snapshot.sample_count, 800);
         assert_eq!(snapshot.elapsed_ms, 100);
         assert_eq!(snapshot.level, 0.0);
+        assert_eq!(capture.level_snapshot().phase, "recorded");
+        assert_eq!(capture.level_snapshot().level, 0.0);
         capture = Capture::default();
         assert_eq!(capture.snapshot().sample_count, 0);
     }

@@ -2,6 +2,7 @@ import { setupComparison, comparisonWorking } from "./comparison";
 import { setupUpdates, updateInstalling } from "./updates";
 import "./styles.css";
 import { setupModels } from "./model-setup";
+import { setupInputLevel } from "./input-level";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
 type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
@@ -96,6 +97,7 @@ let busy = false;
 let refreshing = false;
 let refreshVersion = 0;
 let actionError: string | null = null;
+const inputLevel = setupInputLevel(level, () => isTauri() && !busy && document.visibilityState === "visible");
 
 const managedModels = setupModels(
   () => busy || !snapshot || snapshot.working || snapshot.phase === "recording" || !!correction?.working,
@@ -172,7 +174,7 @@ function render() {
     (snapshot.modelReady ? `モデル準備完了（${snapshot.backend === "metal" ? "GPU / Metal" : "CPU"}を選択）` : "モデル未読み込み。録音のみ利用できます。"));
   settings.hidden = snapshot.permission !== "denied";
   settings.disabled = busy;
-  level.value = snapshot.level;
+  inputLevel.setRecording(recording);
   setText(duration, `${(snapshot.elapsedMs / 1000).toFixed(1)} 秒`);
   const states: Record<Snapshot["phase"], string> = {
     idle: snapshot.permission === "authorized"

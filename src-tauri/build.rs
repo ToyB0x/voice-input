@@ -17,6 +17,7 @@ fn main() {
         "prepare_models",
         "cancel_model_preparation",
         "recording_status",
+        "recording_level",
         "request_microphone_permission",
         "start_recording",
         "stop_recording",
