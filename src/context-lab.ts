@@ -17,7 +17,9 @@ function render(){
   const busy=acting||!!state?.working;
   el<HTMLButtonElement>("lab-start").disabled=!isTauri()||busy;
   el<HTMLButtonElement>("lab-cancel").disabled=acting||!state?.working;
-  for(const id of ["lab-copy","lab-copy-part"]) el<HTMLButtonElement>(id).disabled=busy||!state?.runId||state.completed===0||!!state.more;
+  for(const id of ["lab-copy","lab-copy-part"]) el<HTMLButtonElement>(id).disabled=busy||!state?.runId||!!state.more;
+  el<HTMLButtonElement>("lab-copy-part").disabled = busy || !state?.runId || !state.parts || !!state.more;
+  el<HTMLButtonElement>("lab-clear").disabled = acting || !state?.runId;
   for(const id of ["lab-input","lab-apple","lab-qwen","lab-ax","lab-repeats","lab-instruction","lab-compare-instruction"]) (el(id) as HTMLInputElement).disabled=busy;
   el("lab-progress").textContent=state?`${state.phase}: ${state.completed}/${state.planned}\n${state.message}\nAFM: ${state.foundation?.status?.availability??state.foundation?.error??"未確認"}`:"未実行。実行ボタンを押すまで取得・推論は行いません。";
   el("lab-copy-part").textContent=`分割JSONをコピー（${part+1}/${Math.max(1,state?.parts??1)}）`;

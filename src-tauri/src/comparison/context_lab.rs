@@ -207,6 +207,19 @@ impl Comparisons {
         self.lab_update(epoch,"fixture",json!({"utterance":if options.input=="recorded" {"利用者の録音（期待語は実験シーン側の定義）"} else {"あめがすごいですね"},
             "voice":if options.input=="bundled" {"CIの同梱合成音声（Eddy ja_JP）"} else if options.input=="text" {"音声なし"} else {"利用者の録音"},
             "origin":options.input,"audioMs":audio_ms,"audioSha256":audio_hash,"audioHashFormat":"f32le-16000-mono","hashes":{},"assetHashes":asset_hashes}));
+        let mut binaries = serde_json::Map::new();
+        for name in [
+            "local-correction",
+            "compare-transcription",
+            "apple-foundation-correction",
+            "context-lab-native",
+        ] {
+            binaries.insert(
+                name.into(),
+                json!(hash_file(&resources.join(name), &self.epoch, epoch)?),
+            );
+        }
+        self.lab_update(epoch, "binaries", Value::Object(binaries));
         let mut paths = BTreeMap::new();
         let speech_hash = if options.input != "text" {
             paths.insert("current-speech".into(), custom_path(&prefs.model_path));
@@ -426,6 +439,7 @@ impl Comparisons {
                         epoch,
                     );
                     kana.push(json!({"scene":scene,"engine":engine,"instruction":key,"input":"あめがすごいですね","result":control_result(&row)}));
+                    self.lab_update(epoch, "kanaControls", json!(kana));
                     self.lab_publish_control(epoch);
                 }
                 // Four preservation probes plus filler and formatting probes, matching the ordinary selftest.
@@ -453,6 +467,7 @@ impl Comparisons {
                         epoch,
                     );
                     controls.push(json!({"engine":engine,"input":raw,"instruction":key,"result":control_result(&row),"finalText":row.final_text}));
+                    self.lab_update(epoch, "preservationControls", json!(controls));
                     self.lab_publish_control(epoch);
                 }
             }
@@ -484,7 +499,11 @@ fn lab_case(engine: &str, prefs: &crate::settings::Preferences, route: &str) -> 
         } else {
             prefs.correction_backend.clone()
         },
-        source: "ax".into(),
+        source: if route == "none" {
+            "none".into()
+        } else {
+            "ax".into()
+        },
         route: match route {
             "hint" => "asr-only",
             "correction" => "correction-only",
@@ -937,7 +956,9 @@ pub fn context_lab_report(
     if report["reportId"] != run_id {
         return Err("検証結果が変わりました。再確認してください。".into());
     }
-    export(report, include_text, part, &state.status.phase)
+    let mut report = report.clone();
+    report["runMessage"] = state.status.message.clone().into();
+    export(&report, include_text, part, &state.status.phase)
 }
 #[tauri::command]
 pub fn copy_context_lab_report(
@@ -955,6 +976,80 @@ pub fn copy_context_lab_report(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn context_free_asr_uses_the_none_source_and_retained_labs_block_updates() {
+        let prefs = crate::settings::Preferences::default();
+        let case = lab_case("none", &prefs, "none");
+        assert_eq!(case.source, "none");
+        assert_eq!(
+            crate::context::Sources {
+                ax: String::new(),
+                ocr: String::new()
+            }
+            .for_source(&case.source),
+            Some(String::new())
+        );
+        let owner = Comparisons::new();
+        assert!(!owner.has_results());
+        owner.inner.lock().unwrap().lab = Some(Session {
+            report: json!({"rows":[]}),
+        });
+        assert!(owner.has_results());
+        owner.cancel(true);
+        assert!(!owner.has_results());
+    }
+    #[test]
+    fn capture_cancellation_reaps_the_owned_helper() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("voice-lab-cancel-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let script = root.join("capture.py");
+        std::fs::write(
+            &script,
+            r#"import json,os,pathlib,sys,time
+pathlib.Path(sys.argv[0]+'.pid').write_text(str(os.getpid()))
+print(json.dumps(dict(phase='ready',protocolVersion=1)),flush=True)
+assert sys.stdin.readline()=='continue\n'
+time.sleep(30)
+"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let epoch = Arc::new(AtomicU64::new(1));
+        let worker_epoch = epoch.clone();
+        let path = script.clone();
+        let worker = std::thread::spawn(move || {
+            capture_scene(
+                Path::new("/usr/bin/python3"),
+                &path,
+                "storm",
+                "public",
+                false,
+                &worker_epoch,
+                1,
+            )
+        });
+        let marker = root.join("capture.py.pid");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !marker.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(marker.exists());
+        epoch.fetch_add(1, Ordering::AcqRel);
+        assert!(worker.join().unwrap().is_err());
+        let pid = std::fs::read_to_string(&marker).unwrap();
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", pid.trim()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn metadata_export_redacts_bodies_instructions_and_control_candidates() {
         let r = json!({"reportId":"run","rows":[{"raw":"PRIVATE","candidate":"PRIVATE","finalText":"PRIVATE","context":"PRIVATE","status":"accepted"}],

@@ -7,7 +7,7 @@ slides=importlib.util.module_from_spec(spec);spec.loader.exec_module(slides)
 
 class ConclusionsTests(unittest.TestCase):
     def test_new_success_and_new_omissions_are_read_from_the_supplied_report(self):
-        row=dict(scene='candy',source='vision-labels',engine='qwen3',instruction='kanji',route='both',judgment='undetermined')
+        row=dict(scene='candy',source='vision-labels',engine='qwen3',instruction='kanji',route='both',judgment='undetermined',status='accepted',finalText='飴')
         self.assertEqual(slides.condition_counts([row],'candy','vision-labels')['target'],0)
         row['judgment']='target'
         self.assertEqual(slides.condition_counts([row],'candy','vision-labels')['target'],1)
@@ -18,3 +18,10 @@ class ConclusionsTests(unittest.TestCase):
         self.assertEqual(slides.omitted_fragments([control],'kanji'),[])
         control['result']['accepted']=False
         self.assertEqual(slides.omitted_fragments([control],'default'),[])
+
+    def test_afm_custom_text_only_reports_do_not_use_qwen_or_unavailable_rows(self):
+        row=dict(scene='storm',source='ocr',engine='apple-foundation',instruction='custom',route='correction',status='accepted',finalText='雨',judgment='target')
+        self.assertEqual(slides.condition_counts([row],'storm','ocr',engine='apple-foundation',instruction='custom',route='correction')['target'],1)
+        self.assertEqual(slides.condition_counts([row],'storm','ocr')['executed'],0)
+        row['status']='unavailable'
+        self.assertEqual(slides.condition_counts([row],'storm','ocr',engine='apple-foundation',instruction='custom',route='correction')['executed'],0)

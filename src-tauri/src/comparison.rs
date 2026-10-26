@@ -136,7 +136,9 @@ impl Comparisons {
         self.inner.lock().map_or(true, |s| s.status.working)
     }
     pub fn has_results(&self) -> bool {
-        self.inner.lock().is_ok_and(|s| !s.status.rows.is_empty())
+        self.inner
+            .lock()
+            .is_ok_and(|s| !s.status.rows.is_empty() || s.lab.is_some())
     }
     pub fn armed(&self) -> bool {
         self.armed.load(Ordering::Acquire)
