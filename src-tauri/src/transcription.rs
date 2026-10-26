@@ -127,6 +127,8 @@ pub(crate) fn load(
     backend: &str,
     tx: &mpsc::Sender<Job>,
 ) -> Result<(), String> {
+    // A replacement request may fail validation before begin() clears the session.
+    session.cancel_automatic();
     if session.working {
         return Err("処理が終わるまでお待ちください。".into());
     }
@@ -165,6 +167,7 @@ pub(crate) fn recognize(
     config: Option<crate::correction::AutomaticConfig>,
     corrector: &crate::correction::Corrector,
 ) -> Result<(), String> {
+    capture.recognition.cancel_automatic();
     if capture.recognition.working {
         return Err("処理が終わるまでお待ちください。".into());
     }
@@ -574,6 +577,45 @@ print(json.dumps(dict(text=p['transcript']+'。',model='fixture',backend='cpu',o
         assert_eq!(shared.lock().unwrap().recognition.final_source, "whisper");
         corrector.shutdown();
         std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn invalid_replacement_requests_finalize_cancelled_automatic_results() {
+        let (tx, _rx) = mpsc::channel();
+        for (path, backend) in [("relative-model.bin", "cpu"), ("/tmp/model.bin", "invalid")] {
+            let mut capture = Capture::default();
+            let generation = capture.recognition.begin("transcribing");
+            capture
+                .recognition
+                .finish(generation, Ok("retained raw".into()), false);
+            capture.recognition.final_source = "correcting".into();
+            capture.recognition.final_text = None;
+            assert!(load(&mut capture.recognition, path.into(), backend, &tx).is_err());
+            assert_eq!(capture.recognition.final_source, "cancelled");
+            assert_eq!(
+                capture.recognition.final_text.as_deref(),
+                Some("retained raw")
+            );
+            capture.recognition.complete_automatic(
+                generation,
+                "retained raw",
+                Ok("late".into()),
+                |_| panic!("invalid replacement allowed old delivery"),
+            );
+        }
+        let corrector = crate::correction::Corrector::new();
+        let mut capture = Capture::default();
+        let generation = capture.recognition.begin("transcribing");
+        capture
+            .recognition
+            .finish(generation, Ok("retained raw".into()), false);
+        capture.recognition.final_source = "correcting".into();
+        capture.recognition.final_text = None;
+        assert!(recognize(&mut capture, &tx, None, &corrector).is_err());
+        assert_eq!(capture.recognition.final_source, "cancelled");
+        assert_eq!(
+            capture.recognition.final_text.as_deref(),
+            Some("retained raw")
+        );
     }
     #[test]
     fn discard_drops_stale_text_and_locks_until_worker_finishes() {
