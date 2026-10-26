@@ -91,6 +91,9 @@ jobs:
           EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python3 scripts/context-slides.py --report evidence/results/results.json --output presentation
+          google-chrome --headless --no-sandbox --disable-dev-shm-usage --virtual-time-budget=3000 \
+            --dump-dom "file://$PWD/presentation/slides.html" > "$RUNNER_TEMP/slides-layout.html"
+          python3 -c 'import os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"slides-layout.html"; assert "data-layout=\"passed\"" in p.read_text(), "Slide content overlaps footer or is clipped"'
           google-chrome --headless --no-sandbox --disable-dev-shm-usage --no-pdf-header-footer \
             --print-to-pdf="$PWD/presentation/slides.pdf" "file://$PWD/presentation/slides.html"
           cat presentation/summary.md >> "$GITHUB_STEP_SUMMARY"

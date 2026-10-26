@@ -1,5 +1,5 @@
 import unittest
-from context_evidence import judge, sources
+from context_evidence import judge, sources, recognition_hint
 
 class ContextEvidenceTests(unittest.TestCase):
     def test_no_credit_for_kana_mixed_or_omitted_word(self):
@@ -17,3 +17,8 @@ class ContextEvidenceTests(unittest.TestCase):
         self.assertEqual(result['mismatched-text'],'UNRELATED')
         capture['vision']['status']='unavailable'
         self.assertEqual(sources(capture,{'fixtureText':'x'})['vision-labels'],'')
+
+    def test_hint_matches_product_byte_cap_and_control_removal(self):
+        self.assertEqual(recognition_hint(' A\nB\tC '),'ABC')
+        self.assertEqual(recognition_hint('あ'*300),'あ'*256)
+        self.assertEqual(recognition_hint('x'*800),'x'*768)

@@ -11,6 +11,7 @@ import socket
 import struct
 import subprocess
 import time
+import unicodedata
 import wave
 from correction_models import MODELS as CORRECTION_MODELS
 from transcription_models import MODELS as SPEECH_MODELS
@@ -24,6 +25,15 @@ def digest(path):
     with path.open('rb') as f:
         for block in iter(lambda: f.read(1024 * 1024), b''): h.update(block)
     return h.hexdigest()
+
+def recognition_hint(text):
+    # Same byte cap and control-character removal as the product.
+    result=''
+    for c in text:
+        if unicodedata.category(c)=='Cc': continue
+        if len((result+c).encode())>768: break
+        result+=c
+    return result.strip()
 
 def judge(text, expected, opposite):
     if expected in text and opposite not in text: return 'target'
@@ -124,9 +134,7 @@ def main():
                 for source,route,context in conditions:
                     if source!='none' and not context.strip():
                         report['rows'].append(dict(scene=scene,repeat=repeat,source=source,route=route,status='unavailable',reason='No captured context',context='',engine=None));save();continue
-                    # Product recognition_hint trims 256 chars; UTF8 cap stays below 768 bytes.
-                    hint=context[:256] if route in ['hint','both'] else ''
-                    while len(hint.encode())>768: hint=hint[:-1]
+                    hint=recognition_hint(context) if route in ['hint','both'] else ''
                     speech=asr(hint,repeat)
                     if 'failure' in speech:
                         report['rows'].append(dict(scene=scene,repeat=repeat,source=source,route=route,status='asr-failed',speech=speech));save();continue
@@ -162,6 +170,19 @@ def main():
                 payload=json.dumps(dict(transcript=fixtures['utterance'],context=captures[scene]['fixtureText'],instruction=instruction),ensure_ascii=False).encode()
                 result=resident.request(payload)
                 report['kanaControls'].append(dict(scene=scene,instruction=name,input=fixtures['utterance'],result=result))
+        report['preservationControls']=[]
+        for raw,markers in [
+            ('明日の午後3時に会議室Bで10人の会議をします',['3','10','B']),
+            ('この変更は本番には適用しないでください',['ない']),
+            ('金曜日ではなく木曜日にお願いします',['金曜日','ではなく','木曜日']),
+            ('田中さんへ資料を送ります',['田中']),
+        ]:
+            for name,instruction in report['instructions'].items():
+                payload=json.dumps(dict(transcript=raw,context='',instruction=instruction),ensure_ascii=False).encode()
+                result=resident.request(payload)
+                final=result.get('candidate',raw) if result.get('accepted') else raw
+                report['preservationControls'].append(dict(input=raw,instruction=name,result=result,
+                    markers=markers,finalText=final,markersPreserved=all(x in final for x in markers)))
         report['completed']=True;save()
     finally: resident.close()
     if resident.child.returncode!=0: raise RuntimeError('Resident helper did not exit cleanly')

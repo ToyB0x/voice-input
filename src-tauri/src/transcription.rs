@@ -455,6 +455,7 @@ print(json.dumps(dict(text=p['transcript']+'。',model='fixture',backend='cpu',o
         std::fs::write(&runtime, script).unwrap();
         std::fs::set_permissions(&runtime, std::fs::Permissions::from_mode(0o700)).unwrap();
         let config = crate::correction::AutomaticConfig {
+            instruction: String::new(),
             reuse_model: false,
             runtime,
             model: root.join("model.gguf").to_string_lossy().into(),
