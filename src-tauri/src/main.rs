@@ -80,6 +80,7 @@ fn main() {
         .manage(corrector)
         .manage(inserter)
         .setup(|app| {
+            lifecycle::install_native_quit_hook(app.handle())?;
             desktop::setup(app)?;
             updater::start_automatic_checks(app.handle());
             Ok(())
@@ -133,12 +134,13 @@ fn main() {
         .expect("failed to build Voice Input")
         .run(|app, event| {
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { .. } = event {
-                desktop::show(app);
-            }
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-                lifecycle::request_exit(app, api, code);
+            match event {
+                tauri::RunEvent::Reopen { .. } => desktop::show(app),
+                tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    lifecycle::request_exit(app, api, code)
+                }
+                tauri::RunEvent::Exit => lifecycle::native_exit(),
+                _ => {}
             }
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);

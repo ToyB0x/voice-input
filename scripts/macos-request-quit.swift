@@ -12,5 +12,7 @@ repeat {
 } while Date() < deadline
 guard let app = application, app.isFinishedLaunching, !app.isTerminated else { exit(3) }
 if CommandLine.arguments[2] == "quit" {
-    guard app.terminate() else { exit(4) }
+    // The app can defer native termination while releasing its resources.
+    // The parent probe requires eventual exit code 0 and completed cleanup.
+    _ = app.terminate()
 } else if CommandLine.arguments[2] != "ready" { exit(2) }
