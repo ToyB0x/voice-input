@@ -152,6 +152,10 @@ impl Corrector {
         }
         self.pool.release();
     }
+    pub fn cancel_and_release_model(&self) {
+        self.cancel();
+        self.pool.release();
+    }
     pub fn release_model(&self) {
         self.pool.release();
     }
@@ -888,6 +892,56 @@ for count, line in enumerate(sys.stdin, 1):
                 .start_job(corrector.generation(), false, |_, _| unreachable!())
                 .is_err()
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn releasing_a_cancelled_resident_never_delivers_a_raw_fallback() {
+        let root = fixture_root("resident-cancel-delivery");
+        let runtime = root.join("local-correction");
+        executable(
+            &runtime,
+            r#"#!/usr/bin/env python3
+import os, pathlib, sys, time
+sys.stdin.readline()
+pathlib.Path(sys.argv[0] + '.pid').write_text(str(os.getpid()))
+time.sleep(30)
+"#,
+        );
+        let corrector = Corrector::new();
+        let config = AutomaticConfig {
+            runtime: runtime.clone(),
+            model: runtime.to_string_lossy().into_owned(),
+            backend: "cpu".into(),
+            reuse_model: true,
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        corrector
+            .start_automatic(
+                config,
+                "synthetic input".into(),
+                None,
+                corrector.generation(),
+                move |result| {
+                    let _ = tx.send(result);
+                },
+            )
+            .unwrap();
+        let marker = root.join("local-correction.pid");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !marker.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(marker.exists());
+        // Recorder holds its capture/delivery lock while invalidating first.
+        // Stopping the helper first could otherwise turn cancellation into fallback.
+        corrector.cancel_and_release_model();
+        while corrector.status().working && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!corrector.status().working);
+        assert!(rx.try_recv().is_err());
+        assert!(corrector.status().text.is_none());
+        corrector.shutdown();
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]

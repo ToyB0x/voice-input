@@ -346,9 +346,8 @@ impl Recorder {
                                 Err("録音を停止してから操作してください。".into())
                             }
                             Action::LoadModel(path, backend) => {
-                                corrector.release_model();
                                 shared.lock().map_err(|e| e.to_string()).and_then(|mut c| {
-                                    corrector.cancel();
+                                    corrector.cancel_and_release_model();
                                     transcription::load(&mut c.recognition, path, &backend, &jobs)
                                 })
                             }
@@ -364,13 +363,12 @@ impl Recorder {
                                 })
                             }
                             Action::Clear => {
-                                corrector.release_model();
                                 comparisons.cancel(true);
                                 inserter.cancel();
                                 context.cancel();
                                 drop(stream.take());
                                 if let Ok(mut c) = shared.lock() {
-                                    corrector.cancel();
+                                    corrector.cancel_and_release_model();
                                     c.audio = None;
                                     c.input_device = None;
                                     c.comparison_hint = None;
