@@ -219,7 +219,9 @@
             <select id="lab-input"><option value="bundled">CIと同じ同梱音声（Whisperモデルが必要）</option><option value="recorded">直前の録音（同じ音声を両シーンへ再利用）</option><option value="text">かな原文のみ（音声認識・マイク不要）</option></select>
             <p class="hint">同梱音声／録音は設定中のWhisperとCPU / Metalを使用します。録音は先に完了してください。録音時の通常AX/OCRは使わず、下の同梱シーンを新たに取得します。音声モデルは検証開始時に解放されるため、通常入力へ戻る際は再読み込みしてください。</p>
             <label class="check"><input id="lab-apple" type="checkbox" checked>Apple Foundation Modelsで補正する</label>
-            <label class="check"><input id="lab-qwen" type="checkbox">設定中のQwenも比較する（準備済みモデルが必要）</label>
+            <label class="check"><input id="lab-qwen" type="checkbox">保存済みのQwenも比較する（モデルパスの保存が必要）</label>
+            <p id="lab-model-readiness" class="hint" role="status"></p>
+            <button type="button" data-view-target="models">比較用モデルを準備・設定する</button>
             <label class="check"><input id="lab-ax" type="checkbox" checked>専用サンプルウィンドウからAX取得も試す</label>
             <button id="lab-permission">アクセシビリティの許可を確認する</button>
             <p class="hint">取得時に専用ウィンドウを表示します。AXはこのアプリが起動したサンプルの入力欄だけを読みます。OCR・画像分類はそのウィンドウの描画結果を使用し、他アプリや画面全体は撮影しません。画像をLLMへ直接渡す方式ではありません。利用不可の方式は未取得／未実行として残します。</p>
@@ -229,7 +231,7 @@
             <label class="check"><input id="lab-compare-instruction" type="checkbox" checked>追加指示なしの標準条件も比較する</label>
             <p class="hint">文脈なし・直接テキスト・AX・文字OCR・文字なし画像OCR・画像分類ラベル・逆の文脈を比較します。音声がある場合はWhisperヒント／補正／両方へ振り分けます。かな原文モードは最終補正だけを比較します。数値・否定・人名・フィラーなどの補助試験も行います。期待語の出現やガード採用は意味保持の保証ではありません。</p>
             <button id="lab-start">実機で直列検証を開始</button><button id="lab-cancel" disabled>検証を中止</button><button id="lab-clear">結果を破棄</button>
-            <p id="lab-progress" role="status"></p><p id="lab-message" role="status"></p>
+            <p id="lab-progress" role="status"></p><p id="lab-message" role="alert" aria-live="assertive"></p>
             <div class="table-scroll"><table><thead><tr><th>条件</th><th>状態・期待語</th><th>時間</th><th>原文・候補・最終</th></tr></thead><tbody id="lab-rows"></tbody></table></div>
             <label class="check"><input id="lab-include-text" type="checkbox">解析・スライド更新用に本文・取得文脈・追加指示をJSONへ含める</label>
             <p class="hint">初期状態は診断情報だけです。録音を使った場合、認識文には個人情報が含まれる可能性があります。内容を確認してから共有してください。音声・画像のバイト列、モデルパスやマイク名はコピーしません。コピー操作だけで外部送信・自動保存はしません。</p>
