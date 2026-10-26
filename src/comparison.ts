@@ -3,7 +3,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 type Choice = { id: string; name: string; kind: string; available: boolean };
 type Score = { cer: number | null; edits: number; referenceChars: number; silenceFalsePositive: boolean | null };
 type Row = { index: number; case: {speech: string; speechBackend: string; correction: string; correctionBackend: string; source: string; route: string}; status: string; message: string; raw: string | null; candidate: string | null; finalText: string | null; asrMs: number | null; asrLoadMs: number | null; correctionMs: number | null; totalMs: number; asrScore: Score | null; candidateScore: Score | null; finalScore: Score | null };
-type Status = {generation: number; working: boolean; armed: boolean; phase: string; message: string; total: number; completed: number; audioMs: number; axCharacters: number; ocrCharacters: number; hasReference: boolean; rows: Row[]; next: number; more: boolean};
+type FoundationDiagnostic = {status: {availability: string; os_major: number; os_minor: number; os_patch: number; framework_imported: boolean} | null; error: string | null; elapsedMs: number};
+type Status = {generation: number; working: boolean; armed: boolean; phase: string; message: string; total: number; completed: number; audioMs: number; axCharacters: number; ocrCharacters: number; hasReference: boolean; foundation: FoundationDiagnostic | null; rows: Row[]; next: number; more: boolean};
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let state: Status | undefined;
 let generation = 0;
@@ -32,7 +33,7 @@ function cell(row: HTMLTableRowElement, text: string) {
 function append(result: Row) {
   const tr = el<HTMLTableSectionElement>("compare-rows").insertRow();
   cell(tr, `${result.index+1}: ${result.case.speech} / ${result.case.speechBackend}\n${result.case.correction} / ${result.case.correctionBackend}\n${result.case.source} → ${result.case.route}`);
-  cell(tr, `${result.status}\n${result.message}`);
+  cell(tr, `${result.status}\n${result.message}${["error", "unavailable", "rejected"].includes(result.status) && result.raw !== null ? "\nWhisper原文を保持しています。" : ""}`);
   cell(tr, `ASR ${seconds(result.asrMs)} (load ${seconds(result.asrLoadMs)})\n補正 ${seconds(result.correctionMs)}\n合計 ${seconds(result.totalMs)}`);
   cell(tr, `ASR ${metric(result.asrScore)}\n候補 ${metric(result.candidateScore)}\n最終 ${metric(result.finalScore)}`);
   const td = cell(tr, "");
@@ -60,6 +61,10 @@ async function refresh() {
     el<HTMLButtonElement>("compare-cancel").disabled=acting || !next.working;
     el<HTMLInputElement>("compare-arm").disabled=acting || next.working;
     el<HTMLButtonElement>("compare-copy-report").disabled=acting || next.working || next.completed===0 || next.more;
+    const diagnostic = next.foundation;
+    el("compare-foundation").textContent = diagnostic
+      ? `Apple FM: ${diagnostic.status?.availability ?? diagnostic.error ?? "未確認"} / 確認 ${seconds(diagnostic.elapsedMs)}${diagnostic.status ? ` / macOS ${diagnostic.status.os_major}.${diagnostic.status.os_minor}.${diagnostic.status.os_patch}` : ""}。利用可否は比較開始時点の結果で、生成成功の保証ではありません。`
+      : "Apple FM: この比較では未確認。Apple比較プリセットを選び、録音済み音声で比較を開始してください。";
     el("compare-progress").textContent = `${next.phase}: ${next.completed}/${next.total} / 音声 ${seconds(next.audioMs)} / AX ${next.axCharacters}文字、OCR ${next.ocrCharacters}文字\n${next.message}`;
   } catch (error) { message(String(error)); }
   finally { reading=false; }
@@ -87,6 +92,20 @@ async function loadChoices() {
   }
   await count();
 }
+function preset(correction: string) {
+  if (acting || state?.working) { message("比較の終了を待ってから条件を変更してください。"); return; }
+  const source = el<HTMLSelectElement>("compare-preset-source").value;
+  for (const [id, values] of [
+    ["compare-speech", ["current-speech"]],
+    ["compare-correction", ["none", correction]],
+    ["compare-sources", ["none", source]],
+    ["compare-routes", ["none", "asr-only", "correction-only", "both"]],
+  ] as [string, string[]][]) {
+    for (const option of el<HTMLSelectElement>(id).options) option.selected=values.includes(option.value);
+  }
+  message("比較条件を選択しました。取得元の許可・保存と、録音前の比較用文脈保持が必要です。権限・設定・録音は変更していません。");
+  void count();
+}
 export function setupComparison() {
   el("compare-open").addEventListener("click",()=>{const panel=el<HTMLDetailsElement>("comparison-panel");panel.open=!panel.open;});
   el("compare-start").addEventListener("click",()=>void action(()=>invoke("start_comparison",{selection:selection()})));
@@ -94,6 +113,8 @@ export function setupComparison() {
   el("compare-clear").addEventListener("click",()=>void action(()=>invoke("cancel_comparison",{clear:true})));
   el("compare-arm").addEventListener("change",()=>void action(()=>invoke("arm_comparison_context",{enabled:el<HTMLInputElement>("compare-arm").checked})));
   el("compare-refresh-models").addEventListener("click",()=>void action(loadChoices));
+  el("compare-preset-apple").addEventListener("click",()=>preset("apple-foundation"));
+  el("compare-preset-qwen").addEventListener("click",()=>preset("current-correction"));
   el("compare-all").addEventListener("click",()=>{for (const id of ["compare-speech","compare-correction","compare-asr-backends","compare-correction-backends","compare-sources","compare-routes"]) for (const option of el<HTMLSelectElement>(id).options) option.selected=true;void count();});
   el("compare-copy-report").addEventListener("click",()=>void action(async()=>{await invoke("copy_comparison_report",{generation,includeText:el<HTMLInputElement>("compare-include-text").checked});message("比較レポートをコピーしました。");}));
   for (const input of el("comparison-panel").querySelectorAll("select,input,textarea")) input.addEventListener("change",()=>void count());

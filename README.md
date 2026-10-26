@@ -201,3 +201,5 @@ python3 scripts/setup-updater-signing.py --key-file "$HOME/Library/Application S
 当面は個人利用を前提とし、Developer ID証明書・Apple公証は行いません。更新用の署名はAppleの署名・公証とは別です。初回はReleaseのDMGを開き、Voice Input.appを`/Applications`へコピーし、DMGを取り出してから起動してください。Gatekeeperで止まる場合は既存の未公証アプリ手順に従い「システム設定 → プライバシーとセキュリティ → このまま開く」を使います。OS全体のGatekeeperを無効化しないでください。更新後もOSの確認や権限の再許可が必要な場合があります。Intel Mac向け配布とAppleの署名・公証は後続対応です。
 
 通常の依存更新は公開後48時間以上経過した版を対象にし、確認できたセキュリティ修正は版・チェックサム・理由・期限を記録した例外で優先します。pnpmの厳格なminimum release ageと、Rustの全ロックファイルの公開日時検査を適用します。詳細と手動更新手順は[依存更新ポリシー](docs/dependency-policy.md)を参照してください。
+
+実機でのApple／Qwen比較と文脈利用先の選び方は[実機比較ガイド](docs/real-device-comparison.md)を参照してください。

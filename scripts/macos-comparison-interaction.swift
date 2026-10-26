@@ -7,6 +7,10 @@ func comparisonInteraction(pid: pid_t, output: URL) throws {
     try waitForUI("comparison opener") { uiButton(root,["比較画面を開く・閉じる"]) != nil }
     try press(uiButton(root,["比較画面を開く・閉じる"])!)
     try waitForUI("comparison controls") { uiButton(root,["すべてのパターンを選択"]) != nil }
+    try press(uiButton(root,["Appleモデルの比較条件を選ぶ"])!)
+    try waitForUI("guided Apple context comparison") { uiText(root).contains("6 件を直列に実行") }
+    try press(uiButton(root,["設定中のQwenの比較条件を選ぶ"])!)
+    try waitForUI("guided Qwen context comparison") { uiText(root).contains("6 件を直列に実行") }
     try press(uiButton(root,["すべてのパターンを選択"])!)
     try waitForUI("full Cartesian plan") { uiText(root).contains("1128 件を直列に実行") }
     try press(uiButton(root,["録音済み音声で直列比較を開始"])!)
@@ -14,7 +18,7 @@ func comparisonInteraction(pid: pid_t, output: URL) throws {
     try waitForUI("development updater reports missing signing configuration") {uiText(root).contains("更新署名キー未設定")}
     try interactionScreenshot(output,name:"comparison.png")
     try uiText(root).write(to:output.appendingPathComponent("comparison-state.txt"),atomically:true,encoding:.utf8)
-    try writeJSON(["status":"passed","fullMatrixCount":1128,"emptyAudioRejected":true,"unsignedUpdaterDisabled":true,"inferenceTested":false],to:output.appendingPathComponent("interaction.json"))
+    try writeJSON(["status":"passed","fullMatrixCount":1128,"guidedPresetCount":6,"emptyAudioRejected":true,"unsignedUpdaterDisabled":true,"inferenceTested":false],to:output.appendingPathComponent("interaction.json"))
 }
 
 func comparisonOfRecordedAudio(root: AXUIElement, output: URL) throws {

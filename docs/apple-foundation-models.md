@@ -65,6 +65,10 @@ printf '%s' '{"transcript":"会議は10時です","candidate":"会議は20時で
 
 Swiftヘルパーは毎回新しい`LanguageModelSession`を作り、ツールや以前の録音の履歴を渡しません。構造化出力で本文だけを生成し、その候補を既存のRustガードで検証してからプレビューへ渡します。これらのガードは意味の同一性を保証するものではなく、Appleモデルの品質がQwenより高いことも未確認です。アプリ側の約150秒の制限と、取り消し・新しい録音・エンジン変更・終了時の子プロセス停止／回収は両エンジンに適用します。
 
-通常CIでは、`xcode-27`上でヘルパーとアプリをビルドし、同じrunのArtifact経由で同梱します。ホストOS・SDK・アプリのInfo.plist・全同梱実行ファイルの最低OSが27以降の方針と一致することを検証します。来歴とハッシュ、サイズ制限・不正入力、共通ガード32ケース、子プロセス回収、実アプリのエンジン選択・利用可否確認・診断コピーを検証します。公開・合成データ以外をCIへ送りません。macOS 14専用の起動検証は削除しました。
+通常CIでは、`xcode-27`上でヘルパーとアプリをビルドし、同じrunのArtifact経由で同梱します。ホストOS・SDK・アプリのInfo.plist・全同梱実行ファイルの最低OSが27以降の方針と一致することを検証します。来歴とハッシュ、サイズ制限・不正入力、共通ガード32ケース、子プロセス回収を検証します。実アプリのエンジン選択・利用可否確認・診断コピーは独立した手動・週次のPreview GUI workflowで検証します。公開・合成データ以外をCIへ送りません。macOS 14専用の起動検証は削除しました。
 
-Artifact `apple-foundation-runtime`にSDK版・来歴・利用可否の結果、通常のMac Artifactに`foundation-runtime.json`と`foundation/diagnostics.png`・`diagnostics.json`・`interaction.json`を保存します。CIのVMが`deviceNotEligible`なら`inferenceTested: false`と記録します。SDKでコンパイルできたことや模擬応答のガード試験を、実際のAppleモデルの推論成功として扱いません。対応実機での生成・日本語品質・速度はPRマージ後の確認事項です。
+Artifact `apple-foundation-runtime`にSDK版・来歴・利用可否の結果、通常のMac Artifactに`foundation-runtime.json`、GUI検証のArtifactに`foundation/diagnostics.png`・`diagnostics.json`・`interaction.json`を保存します。CIのVMが`deviceNotEligible`なら`inferenceTested: false`と記録します。SDKでコンパイルできたことや模擬応答のガード試験を、実際のAppleモデルの推論成功として扱いません。対応実機での生成・日本語品質・速度はPRマージ後の確認事項です。
+
+## 同じ音声で他方式と比較する
+
+[実機比較ガイド](real-device-comparison.md)のプリセットで、Apple／設定中のQwenと、画面情報をWhisper・補正・両方に利用する条件を選べます。比較開始時のApple利用可否も本文なしの比較レポートに含めます。
