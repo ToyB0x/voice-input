@@ -93,9 +93,10 @@ try {
   for (const [name, width, height, color, view] of [['input-light',760,940,'light','input'],['models-light',760,940,'light','models'],['settings-dark',760,940,'dark','settings'],['diagnostics-light',760,940,'light','diagnostics'],['input-narrow',360,620,'light','input']]) {
     await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: color }] });
-    await evaluate(`document.getElementById('tab-${view}').click(); window.scrollTo(0,0);`);
+    await evaluate(`document.getElementById('tab-${view}').click(); document.getElementById('tab-${view}').focus({preventScroll:true}); window.scrollTo(0,0);`);
     const layout = await evaluate(`({width:document.documentElement.scrollWidth, viewport:innerWidth, active:document.querySelectorAll('[role=tabpanel]:not([hidden])').length})`);
     assert.equal(layout.active, 1); assert.ok(layout.width <= width, 'Horizontal overflow at ' + name);
+    await evaluate(`document.fonts.ready.then(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))`);
     const capture = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     await writeFile(join(output, name+'.png'), Buffer.from(capture.data,'base64'));
   }

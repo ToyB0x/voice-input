@@ -64,6 +64,10 @@ jobs:
         run: |
           pnpm run test:ui
           pnpm run build
+      - name: Install Japanese fonts for readable evidence
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
       - name: Verify real browser navigation and render synthetic sample views
         env:
           CHROME_BIN: /usr/bin/google-chrome
