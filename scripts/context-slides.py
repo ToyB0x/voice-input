@@ -37,6 +37,7 @@ def main():
     r=json.loads(a.report.read_text());assert r.get('completed') is True, 'Incomplete experiment; do not publish measured slides'
     a.output.mkdir(parents=True,exist_ok=True)
     engine=a.engine or r.get('presentationEngine','qwen3')
+    text_only=r.get('inputKind')=='text'
     instruction_key=r.get('presentationInstruction','kanji')
     route=r.get('presentationRoute','correction' if r.get('inputKind')=='text' else 'both')
     engine_label='Apple Foundation Models' if engine=='apple-foundation' else r['models'].get('qwenName',r['models']['correction'] if 'Qwen' in r['models']['correction'] else 'Qwen（SHA-256はJSON）')
@@ -46,11 +47,13 @@ def main():
     def add(title,body): slides.append('<section><h1>'+title+'</h1>'+body+'<footer>Voice Input / '+footer_label+'による小規模実験 · '+str(len(slides)+1)+'</footer></section>')
     add('音声だけで、漢字は決まる？','<p class="lead">あめがすごいですね</p><p class="lead">雨 ☔　／　飴 🍬</p><p>音声入力＋ローカルな画面文脈で、同音語の表記を比較する。</p><p>「音声入力 → 整文」を提供する製品例：<a href="https://www.typeless.com/ja">Typeless</a>、<a href="https://wisprflow.ai/">Wispr Flow</a>。製品間の性能比較や市場成長率は本実験の対象外。</p>')
     add('日本語について、何を検証するか','<p>日本語には同音異義語と複数の表記がある。アクセントも手掛かりになるが、音声だけで意図が一意になるとは限らない。</p><p><b>仮説：</b>関連する画面文脈で、意図した表記を選びやすくなる。逆の文脈では、誤誘導も起こり得る。</p><p>「海外言語より日本語が弱い」は今回のデータでは検証していない。他言語の対照群が必要。</p>')
-    add('同じ音声・同じモデルで条件を変える',table(['項目','実験条件'],[
+    add('同じ原文・同じモデルで条件を変える' if text_only else '同じ音声・同じモデルで条件を変える',table(['項目','実験条件'],[
         ['入力',r['fixture']['utterance']+' / '+r['fixture']['voice']],
         ['音声認識',r['models']['speech']+' / '+r['models'].get('speechBackend','cpu')],['最終補正',engine_label+' / '+('OS管理' if engine=='apple-foundation' else r['models'].get('qwenBackend','cpu'))],
-        ['利用先','Whisperヒントのみ／最終補正のみ／両方'],['追加指示','標準／自然な漢字表記を希望'],
+        ['利用先','最終補正のみ（音声・Whisperなし）' if text_only else 'Whisperヒントのみ／最終補正のみ／両方'],['追加指示','標準／自然な漢字表記を希望'],
         ['反復',f'{repeats}回・偶数回目はシーンと条件の順序を反転'],['推論','直列実行 / '+('対象プロセスの通信禁止' if r.get('networkDenied') else 'ローカルモデルAPI（通信Sandboxなし）')]])+'<p class="small">同じ入力を雨／飴の2シーンへ再利用。反復は独立した話者・発話サンプルではない。</p>')
+    if text_only:
+        add('何を測っていて、何は測っていないか','<p class="lead">かな原文 → 文脈付き補正</p><p>入力は「あめがすごいですね」。音声認識を外し、文脈と追加指示による表記選択を切り分ける。</p><p>Whisperの認識精度やヒントの効果は未測定。先行CIのQwen＋合成音声とは入力・モデル・端末が異なるため、モデルの優劣を直接比較しない。</p>')
     captures=[]
     for scene,c in r['captures'].items():
         captures.append([scene,c['ax']['status'],c['ocr']['status'],len(c['ocr'].get('text','')),c['vision']['status'],c['imageOCR']['status'],len(c['imageOCR'].get('text',''))])
@@ -87,12 +90,18 @@ def main():
         return f"{value[kind]}/{value['executed']}" if value['executed'] else '未実行'
     kana=[x for x in r.get('kanaControls',[]) if x.get('engine','qwen3')==engine]
     kana_candidates=[x for x in kana if isinstance(x['result'].get('candidate'),str)]
+    kana_excerpts=[x for x in kana if isinstance(x['result'].get('candidateExcerpt'),str)]
     kana_changed=sum(x['result']['candidate'].rstrip('。')!=x['input'].rstrip('。') for x in kana_candidates)
     add('今回の実測で分かったこと',
-        '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples) or '未取得／失敗（原文はJSONを参照）')+'</b>。</p>'
-        '<p>直接テキスト＋ヒント・補正の期待語出現：台風 '+counts('storm','fixture-text')+'、キャンディ '+counts('candy','fixture-text')+'。</p>'
-        '<p>画像分類ラベル＋ヒント・補正の期待語出現：台風 '+counts('storm','vision-labels')+'、キャンディ '+counts('candy','vision-labels')+'。逆の文脈での逆語出現：台風 '+counts('storm','mismatched-text','opposite')+'、キャンディ '+counts('candy','mismatched-text','opposite')+'。</p>'
-        '<p>かな入力の分離試験：候補取得 '+str(len(kana_candidates))+'/'+str(len(kana))+'件、'+str(kana_changed)+'件で候補の表記が変化（末尾の句点を除く）。変化だけでは正しい漢字変換や意味保持の証明にならない。</p>')
+        '<p>'+('入力したかな原文：' if text_only else '文脈なしのWhisper原文：')+'<b>'+e(' / '.join(raw_examples) or '未取得／失敗（原文はJSONを参照）')+'</b>。</p>'
+        '<p>直接テキスト＋'+('最終補正' if text_only else 'ヒント・補正')+'の期待語出現：台風 '+counts('storm','fixture-text')+'、キャンディ '+counts('candy','fixture-text')+'。</p>'
+        '<p>画像分類ラベル＋'+('最終補正' if text_only else 'ヒント・補正')+'の期待語出現：台風 '+counts('storm','vision-labels')+'、キャンディ '+counts('candy','vision-labels')+'。逆の文脈での逆語出現：台風 '+counts('storm','mismatched-text','opposite')+'、キャンディ '+counts('candy','mismatched-text','opposite')+'。</p>'
+        '<p>かな入力の分離試験：候補本文 '+str(len(kana_candidates))+'件、長い候補の抜粋 '+str(len(kana_excerpts))+'件／全'+str(len(kana))+'件。完全な候補のうち'+str(kana_changed)+'件で表記が変化（末尾の句点を除く）。変化だけでは正しい変換や意味保持を保証しない。</p>')
+    # Authored interpretation stays with its frozen evidence, not future reports.
+    for note in r.get('presentationSlides',[]):
+        body=table(note['headers'],note['rows']) if note.get('headers') else ''
+        body+=''.join('<p>'+e(paragraph)+'</p>' for paragraph in note.get('paragraphs',[]))
+        add(e(note['title']),body)
     controls=[x for x in r.get('preservationControls',[]) if x.get('engine','qwen3')==engine]
     for instruction in r['instructions']:
         label='標準指示' if instruction=='default' else '追加指示 '+instruction
@@ -104,7 +113,7 @@ def main():
     apple=r['foundation']
     add('確認できた範囲と、残る検証','<p>Apple Foundation Models / この実行：<b>'+e(apple.get('availability',apple.get('failure','unknown')))+'</b>。利用不可なら推論結果は存在しない。</p><p>主試験は1入力・2シーンのパイロット。一般的な精度改善、他言語や他製品への優位性は結論にしない。</p><p>次の検証：実話者・複数の同音語・文脈が無関係／誤っている条件・直接画像を扱うローカルVLM・実機のAX／撮影。</p><p>数値・否定・名前の保持と、期待語の選択は別の評価軸。採用ガードの通過だけでは品質を保証しない。</p>')
     run=os.environ.get('EVIDENCE_RUN_URL','ローカル実行')
-    add('再現性と出典','<p>CI：'+e(run)+'</p><p>ソース：<code>'+e(r.get('sourceRevision','unknown'))+'</code></p><p>音声・画像・モデル・実行ファイルのSHA-256、実入力、全候補・棄却・時間は同梱のresults.jsonに記録。</p><p>一次資料：<a href="https://www.typeless.com/ja">Typeless</a> / <a href="https://wisprflow.ai/">Wispr Flow</a> / <a href="https://developer.apple.com/documentation/vision/vnclassifyimagerequest">Apple Vision分類</a> / <a href="https://developer.apple.com/documentation/vision/vnrecognizetextrequest">Apple Vision OCR</a> / <a href="https://developer.apple.com/documentation/foundationmodels">Foundation Models</a></p>')
+    add('再現性と出典','<p>測定元：'+e(run)+'</p><p>ソース：<code>'+e(r.get('sourceRevision','unknown'))+'</code></p><p>'+('利用者の共有結果から作成した解析用スナップショット。長い棄却候補は先頭抜粋のみ。元の全文JSONや省略部分を再構成したものではない。' if r.get('analysisSnapshot') else '音声・画像・モデル・実行ファイルのSHA-256、実入力、全候補・棄却・時間は同梱のresults.jsonに記録。')+'</p><p>一次資料：<a href="https://www.typeless.com/ja">Typeless</a> / <a href="https://wisprflow.ai/">Wispr Flow</a> / <a href="https://developer.apple.com/documentation/vision/vnclassifyimagerequest">Apple Vision分類</a> / <a href="https://developer.apple.com/documentation/vision/vnrecognizetextrequest">Apple Vision OCR</a> / <a href="https://developer.apple.com/documentation/foundationmodels">Foundation Models</a></p>')
     css='''@page{size:338.667mm 190.5mm;margin:0}*{box-sizing:border-box}body{margin:0;color:#17273d;background:#eef2f7;font:23px "Noto Sans JP","Noto Sans CJK JP",sans-serif}section{position:relative;width:1280px;height:720px;padding:42px 64px;background:white;page-break-after:always;overflow:hidden;margin:24px auto}h1{font-size:38px;margin:0 0 24px;color:#173f7a}p{line-height:1.65;margin:16px 0}.lead{font-size:64px;line-height:1.3}.small{font-size:17px}table{width:100%;border-collapse:collapse;font-size:19px}td,th{border-bottom:1px solid #d4dfec;padding:9px 10px;text-align:left}th{background:#eef4fb}footer{position:absolute;bottom:18px;left:64px;color:#617085;font-size:14px}.pictures{display:flex;gap:32px}.pictures>div{width:48%;font-size:17px}.pictures img{width:100%;height:285px;object-fit:contain}a{color:#2356a4}code{font-size:18px}@media print{body{background:white}section{margin:0}}'''
     (a.output/'slides.html').write_text('<!doctype html><html lang="ja"><meta charset="utf-8"><title>音声と画面文脈の実測</title><style>'+css+'</style><body>'+''.join(slides)+'''<script>document.fonts.ready.then(()=>{requestAnimationFrame(()=>{const clipped=[...document.querySelectorAll('section')].filter(s=>{const limit=s.querySelector('footer').getBoundingClientRect().top-8;return [...s.children].filter(c=>c.tagName!=='FOOTER').some(c=>c.getBoundingClientRect().bottom>limit)});document.documentElement.dataset.layout=clipped.length?'failed':'passed';document.documentElement.dataset.clippedSlides=clipped.map(s=>[...document.querySelectorAll('section')].indexOf(s)+1).join(',');})});</script></body></html>''')
     (a.output/'results.json').write_text(json.dumps(r,ensure_ascii=False,indent=2)+'\n')
