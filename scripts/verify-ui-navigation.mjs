@@ -105,5 +105,6 @@ try {
 } finally {
   socket?.close(); chrome.kill(); server.closeAllConnections(); server.close();
   await new Promise(r => chrome.exitCode!==null ? r() : chrome.once('exit',r));
-  await rm(profile, { recursive: true, force: true });
+  // Chromium utility processes may finish profile writes just after its parent exits.
+  await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
