@@ -139,6 +139,11 @@
           <p>必要なモデルを上で準備してください。この画面はダウンロードしません。Appleモデルの利用可否は実行時に確認します。</p>
           <label><input type="checkbox" id="compare-arm" />次の録音から比較用文脈を保持する（この起動中のみ）</label>
           <p class="hint">AX/OCRの取得元を設定で許可・保存してから有効にし、入力先のショートカットで録音してください。録音時の情報を全ケースで固定して使います。オフ・破棄・新規録音・終了で破棄します。取得元が得られない条件はスキップします。</p>
+          <label for="compare-preset-source">比較プリセットの文脈取得元</label>
+          <select id="compare-preset-source"><option value="ocr">画面OCR</option><option value="ax">入力欄AX</option><option value="both">AX + OCR</option></select>
+          <button id="compare-preset-apple">Appleモデルの比較条件を選ぶ</button>
+          <button id="compare-preset-qwen">設定中のQwenの比較条件を選ぶ</button>
+          <p class="hint">設定中の音声モデルで、補正なしと選択モデルの補正を比較します。文脈なし・Whisperヒントのみ・最終補正のみ・両方の条件を選び、同じ入力はまとめます。1実行方式あたり6条件。下のCPU / Metal選択は維持します。モデル取得・権限要求・録音は開始しません。</p>
           <label for="compare-speech">音声モデル（複数選択）</label><select id="compare-speech" multiple size="6"></select>
           <label for="compare-asr-backends">音声の実行方式</label><select id="compare-asr-backends" multiple size="2"><option value="cpu">CPU</option><option value="metal" selected>Metal</option></select>
           <label for="compare-correction">補正モデル（複数選択）</label><select id="compare-correction" multiple size="6"></select>
@@ -152,12 +157,13 @@
           <p class="hint">CERは小さいほど誤りが少なく、100%を超える場合もあります。NFKC・小文字化・空白と句読点の除去後に計算します。意味や整形の良し悪しは本文を確認してください。</p>
           <p id="compare-count"></p>
           <button id="compare-start">録音済み音声で直列比較を開始</button><button id="compare-cancel" disabled>比較を中止</button><button id="compare-clear">比較結果を破棄</button>
+          <p id="compare-foundation" role="status"></p>
           <p id="compare-progress" role="status"></p><p id="compare-message" role="alert"></p>
           <p class="hint">比較開始で通常のWhisperモデルを解放し、子プロセスを毎回終了してから次の条件へ進みます。モデルの読み込み・処理・IPCを含む時間です（事前の容量・SHA検証は除外）。OSキャッシュや温度、実行順序の影響があります。最大60秒の録音、最大2048条件、1条件はASR最大10分＋補正最大150秒です。</p>
           <div class="comparison-table"><table><thead><tr><th>条件</th><th>状態</th><th>時間</th><th>CER</th><th>本文</th></tr></thead><tbody id="compare-rows"></tbody></table></div>
           <label><input type="checkbox" id="compare-include-text" />レポートに認識・候補・最終本文を含める</label>
           <button id="compare-copy-report" disabled>比較レポートJSONをコピー</button>
-          <p class="hint">通常は条件・時間・CER・固定の失敗理由のみをコピーします。音声・取得文脈・基準文・モデルパスは含めません。本文を含める操作は明示的に選択してください。比較結果は自動入力・自動保存・送信しません。</p>
+          <p class="hint">通常はアプリ版・実行環境・条件・時間・CER・Appleモデルの利用可否・固定の失敗理由をコピーします。音声・取得文脈・基準文・モデルパスは含めません。本文を含める操作は明示的に選択してください。比較結果は自動入力・自動保存・送信しません。</p>
         </details>
       </section>
     </main>

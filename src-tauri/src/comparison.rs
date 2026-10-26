@@ -53,6 +53,13 @@ impl Row {
         }
     }
 }
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundationDiagnostic {
+    pub status: Option<crate::correction::FoundationStatus>,
+    pub error: Option<String>,
+    pub elapsed_ms: u64,
+}
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
@@ -67,6 +74,7 @@ pub struct Status {
     pub ax_characters: usize,
     pub ocr_characters: usize,
     pub has_reference: bool,
+    pub foundation: Option<FoundationDiagnostic>,
     pub rows: Vec<Row>,
     pub next: usize,
     pub more: bool,
@@ -85,6 +93,7 @@ impl Default for Status {
             ax_characters: 0,
             ocr_characters: 0,
             has_reference: false,
+            foundation: None,
             rows: Vec::new(),
             next: 0,
             more: false,
@@ -138,6 +147,11 @@ impl Comparisons {
             .into();
             if clear {
                 state.status.rows.clear();
+                state.status.foundation = None;
+                state.status.audio_ms = 0;
+                state.status.ax_characters = 0;
+                state.status.ocr_characters = 0;
+                state.status.has_reference = false;
                 state.status.completed = 0;
                 state.status.generation = self.epoch.load(Ordering::Acquire);
             }
@@ -166,6 +180,7 @@ impl Comparisons {
             ax_characters: original.ax_characters,
             ocr_characters: original.ocr_characters,
             has_reference: original.has_reference,
+            foundation: original.foundation.clone(),
             rows: Vec::new(),
             next: 0,
             more: false,
@@ -315,23 +330,50 @@ impl Comparisons {
             };
             paths.insert(id.clone(), path);
         }
-        let apple = if selection
+        let mut apple = Ok(());
+        if selection
             .corrections
             .iter()
             .any(|id| id == "apple-foundation")
         {
-            match crate::correction::probe_foundation(
+            self.message(
+                epoch,
+                "checking-apple",
+                "Appleモデルの利用可否を確認中（推論はまだ行いません）。",
+            );
+            let started = Instant::now();
+            let result = crate::correction::probe_foundation(
                 &resources.join("apple-foundation-correction"),
                 &self.epoch,
                 epoch,
-            ) {
-                Ok(status) if status.availability == "available" => Ok(()),
-                Ok(status) => Err(format!("Apple FM: {}", status.availability)),
-                Err(error) => Err(error),
+            );
+            let diagnostic = match result {
+                Ok(status) => {
+                    if status.availability != "available" {
+                        apple = Err(format!("Apple FM: {}", status.availability));
+                    }
+                    FoundationDiagnostic {
+                        status: Some(status),
+                        error: None,
+                        elapsed_ms: started.elapsed().as_millis() as u64,
+                    }
+                }
+                Err(_) => {
+                    apple = Err("foundation-probe-failed".into());
+                    FoundationDiagnostic {
+                        status: None,
+                        error: Some("foundation-probe-failed".into()),
+                        elapsed_ms: started.elapsed().as_millis() as u64,
+                    }
+                }
+            };
+            if let Ok(mut state) = self.inner.lock()
+                && state.active == Some(epoch)
+                && self.current(epoch)
+            {
+                state.status.foundation = Some(diagnostic);
             }
-        } else {
-            Err("Apple FMを選択していません。".into())
-        };
+        }
         for (index, case) in cases.iter().enumerate() {
             if !self.current(epoch) {
                 break;
@@ -428,19 +470,8 @@ fn run_case(
         row.message = "音声モデルが未準備または検証に失敗しました。".into();
         return row;
     };
-    if case.correction == "apple-foundation"
-        && let Err(reason) = apple
-    {
-        row.message = reason.clone();
-        return row;
-    }
-    if !["none", "apple-foundation"].contains(&case.correction.as_str())
-        && !paths.get(&case.correction).is_some_and(Result::is_ok)
-    {
-        row.message = "補正モデルが未準備または検証に失敗しました。".into();
-        return row;
-    }
     let started = Instant::now();
+    let mut correction_started = None;
     let outcome = (|| -> Result<(), String> {
         let hint = local_transcription::recognition_hint(if case.whisper_context() {
             context.as_str()
@@ -494,7 +525,17 @@ fn run_case(
             row.accepted = None;
             return Ok(());
         }
-        let correction_started = Instant::now();
+        if case.correction == "apple-foundation"
+            && let Err(reason) = apple
+        {
+            return Err(reason.clone());
+        }
+        if !["none", "apple-foundation"].contains(&case.correction.as_str())
+            && !paths.get(&case.correction).is_some_and(Result::is_ok)
+        {
+            return Err("correction-model-missing".into());
+        }
+        correction_started = Some(Instant::now());
         let payload=serde_json::to_vec(&serde_json::json!({"transcript":asr.text,"context":if case.correction_context(){context.as_str()}else{""}})).map_err(|_|"input-failed")?;
         let candidate = if case.correction == "apple-foundation" {
             let output = crate::correction::child_output(
@@ -583,7 +624,6 @@ fn run_case(
             }
             candidate
         };
-        row.correction_ms = Some(correction_started.elapsed().as_millis() as u64);
         if candidate.candidate.len() > 8192 || candidate.candidate.contains('\0') {
             return Err("invalid-correction-report".into());
         }
@@ -609,9 +649,13 @@ fn run_case(
         row.candidate = Some(candidate.candidate);
         Ok(())
     })();
+    row.correction_ms = correction_started.map(|time| time.elapsed().as_millis() as u64);
     row.total_ms = started.elapsed().as_millis() as u64;
     if let Err(error) = outcome {
-        row.status = if error == "metal-unavailable" {
+        row.status = if error == "metal-unavailable"
+            || error.starts_with("Apple FM: ")
+            || error == "correction-model-missing"
+        {
             "unavailable"
         } else {
             "error"
@@ -674,7 +718,7 @@ pub fn comparison_models(app: tauri::AppHandle) -> Result<Vec<Choice>, String> {
         },
         Choice {
             id: "apple-foundation".into(),
-            name: "Apple Foundation Models（OS管理）".into(),
+            name: "Apple Foundation Models（利用可否は比較時に確認）".into(),
             kind: "correction".into(),
             available: true,
         },
@@ -784,22 +828,34 @@ pub fn copy_comparison_report(
         {
             return Err("比較結果を再確認してください。".into());
         }
-        let mut rows =
-            serde_json::to_value(&state.status.rows).map_err(|_| "比較結果を読み出せません。")?;
-        if !include_text && let Some(rows) = rows.as_array_mut() {
-            for row in rows {
-                if let Some(row) = row.as_object_mut() {
-                    for key in ["raw", "candidate", "finalText"] {
-                        row.remove(key);
-                    }
-                }
-            }
-        }
-        serde_json::to_string_pretty(&serde_json::json!({"schemaVersion":1,"appVersion":env!("CARGO_PKG_VERSION"),"audioMs":state.status.audio_ms,"hasReference":state.status.has_reference,"axCharacters":state.status.ax_characters,"ocrCharacters":state.status.ocr_characters,"includesText":include_text,"rows":rows})).map_err(|_|"レポートを作成できません。")?
+        comparison_report(&state.status, include_text)?
     };
     arboard::Clipboard::new()
         .and_then(|mut c| c.set_text(report))
         .map_err(|_| "レポートをコピーできません。".into())
+}
+
+// Build from an allowlist: no audio, source context, reference or model paths are exported.
+fn comparison_report(status: &Status, include_text: bool) -> Result<String, String> {
+    let mut rows = serde_json::to_value(&status.rows).map_err(|_| "比較結果を読み出せません。")?;
+    if !include_text && let Some(rows) = rows.as_array_mut() {
+        for row in rows {
+            if let Some(row) = row.as_object_mut() {
+                for key in ["raw", "candidate", "finalText"] {
+                    row.remove(key);
+                }
+            }
+        }
+    }
+    serde_json::to_string_pretty(&serde_json::json!({
+        "schemaVersion":1, "appVersion":env!("CARGO_PKG_VERSION"),
+        "platform":std::env::consts::OS, "architecture":std::env::consts::ARCH,
+        "phase":status.phase, "planned":status.total, "completed":status.completed,
+        "audioMs":status.audio_ms, "hasReference":status.has_reference,
+        "axCharacters":status.ax_characters, "ocrCharacters":status.ocr_characters,
+        "foundation":status.foundation, "includesText":include_text, "rows":rows
+    }))
+    .map_err(|_| "レポートを作成できません。".into())
 }
 
 #[cfg(test)]
@@ -814,6 +870,49 @@ mod tests {
             source: "none".into(),
             route: "none".into(),
         }
+    }
+    #[test]
+    fn diagnostic_report_excludes_bodies_by_default_and_preserves_failure_context() {
+        let mut row = Row::new(0, case());
+        row.raw = Some("PRIVATE_TRANSCRIPT".into());
+        row.candidate = Some("PRIVATE_CANDIDATE".into());
+        row.final_text = row.raw.clone();
+        row.status = "error".into();
+        row.message = "generation-failed".into();
+        let status = Status {
+            total: 6,
+            completed: 1,
+            rows: vec![row],
+            foundation: Some(FoundationDiagnostic {
+                status: Some(
+                    serde_json::from_value(serde_json::json!({
+                        "protocol_version":1,"framework_imported":true,"os_supported":true,
+                        "availability":"modelNotReady","os_major":27,"os_minor":0,"os_patch":1
+                    }))
+                    .unwrap(),
+                ),
+                error: None,
+                elapsed_ms: 12,
+            }),
+            ..Status::default()
+        };
+        let report = comparison_report(&status, false).unwrap();
+        assert!(!report.contains("PRIVATE_"));
+        let report: serde_json::Value = serde_json::from_str(&report).unwrap();
+        for key in ["raw", "candidate", "finalText"] {
+            assert!(report["rows"][0].get(key).is_none());
+        }
+        assert_eq!(
+            report["foundation"]["status"]["availability"],
+            "modelNotReady"
+        );
+        assert_eq!(report["rows"][0]["message"], "generation-failed");
+        assert_eq!(report["planned"], 6);
+        assert!(
+            comparison_report(&status, true)
+                .unwrap()
+                .contains("PRIVATE_TRANSCRIPT")
+        );
     }
     #[test]
     fn pagination_resets_after_clear_and_cancel_waits_for_worker() {
@@ -858,6 +957,102 @@ mod routing_tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
     #[test]
+    fn apple_unavailability_failure_and_guard_rejection_keep_scored_asr() {
+        let root =
+            std::env::temp_dir().join(format!("voice-comparison-apple-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let paths = BTreeMap::from([("base".into(), Ok(root.join("speech.bin")))]);
+        let sources = crate::context::Sources {
+            ax: "CONTEXT_FIXTURE".into(),
+            ocr: String::new(),
+        };
+        let case = Case {
+            speech: "base".into(),
+            speech_backend: "cpu".into(),
+            correction: "apple-foundation".into(),
+            correction_backend: "system".into(),
+            source: "ax".into(),
+            route: "correction-only".into(),
+        };
+        let asr = r#"#!/usr/bin/python3
+import sys,json
+header=json.loads(sys.stdin.buffer.readline())
+assert header=={'samples':16000,'hint':''}
+assert len(sys.stdin.buffer.read())==64000
+print(json.dumps(dict(text='raw fixture',backend='cpu',load_ms=1,elapsed_ms=2)))
+"#;
+        let apple = r#"#!/usr/bin/python3
+import sys,json
+assert sys.argv[1:] == ['--correct']
+p=json.load(sys.stdin)
+assert p=={'transcript':'raw fixture','context':'CONTEXT_FIXTURE'}
+print(json.dumps(dict(text='candidate fixture',backend='foundation',offloaded_layers=0)))
+"#;
+        let guard = r#"#!/usr/bin/python3
+import sys,json
+assert sys.argv[1:] == ['--validate']
+assert json.load(sys.stdin)=={'transcript':'raw fixture','candidate':'candidate fixture'}
+print(json.dumps(dict(error='rejected',reason='correction changed numeric facts')))
+sys.exit(1)
+"#;
+        for (name, script) in [
+            ("compare-transcription", asr),
+            ("apple-foundation-correction", apple),
+            ("local-correction", guard),
+        ] {
+            let path = root.join(name);
+            std::fs::write(&path, script).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        for mode in [
+            "unavailable",
+            "rejected",
+            "generation-failed",
+            "missing-helper",
+        ] {
+            if mode == "generation-failed" {
+                std::fs::write(root.join("apple-foundation-correction"), "#!/usr/bin/python3\nimport sys,json\np=json.load(sys.stdin)\nprint(json.dumps(dict(error='PRIVATE_UNTRUSTED_ERROR')))\nsys.exit(1)\n").unwrap();
+            }
+            if mode == "missing-helper" {
+                std::fs::remove_file(root.join("apple-foundation-correction")).unwrap();
+            }
+            let available = if mode == "unavailable" {
+                Err("Apple FM: deviceNotEligible".into())
+            } else {
+                Ok(())
+            };
+            let row = run_case(
+                &root,
+                &case,
+                0,
+                &vec![0.0; 16000],
+                &sources,
+                &paths,
+                &available,
+                Some("raw fixture"),
+                &AtomicU64::new(1),
+                1,
+            );
+            assert_eq!(row.raw.as_deref(), Some("raw fixture"), "{mode}");
+            assert_eq!(row.final_text, row.raw, "{mode}");
+            assert_eq!(row.final_score.unwrap().cer, Some(0.0));
+            assert!(!row.message.contains("PRIVATE_UNTRUSTED_ERROR"));
+            assert!(row.asr_ms.is_some());
+            if mode == "rejected" {
+                assert_eq!(row.status, "rejected");
+                assert_eq!(row.message, "guard-numbers");
+                assert_eq!(row.candidate.as_deref(), Some("candidate fixture"));
+            } else if mode == "unavailable" {
+                assert_eq!(row.status, "unavailable");
+            } else {
+                assert_eq!(row.status, "error");
+                assert!(row.correction_ms.is_some());
+            }
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn serial_children_receive_only_the_selected_context_never_the_reference() {
         let root =
             std::env::temp_dir().join(format!("voice-comparison-routing-{}", std::process::id()));
@@ -869,60 +1064,67 @@ mod routing_tests {
         ]);
         let sources = crate::context::Sources {
             ax: "CONTEXT_FIXTURE".into(),
-            ocr: String::new(),
+            ocr: "OCR_FIXTURE".into(),
         };
-        for route in ["none", "asr-only", "correction-only", "both"] {
-            let case = Case {
-                speech: "base".into(),
-                speech_backend: "cpu".into(),
-                correction: "qwen3-1.7b".into(),
-                correction_backend: "cpu".into(),
-                source: "ax".into(),
-                route: route.into(),
-            };
-            let expected_asr = if case.whisper_context() {
-                "CONTEXT_FIXTURE"
-            } else {
-                ""
-            };
-            let expected_correction = if case.correction_context() {
-                "CONTEXT_FIXTURE"
-            } else {
-                ""
-            };
-            let marker = root.join("asr-completed");
-            let _ = std::fs::remove_file(&marker);
-            let asr = format!(
-                "#!/usr/bin/python3\nimport sys,json,struct,os,time\nh=json.loads(sys.stdin.buffer.readline())\nb=sys.stdin.buffer.read()\nassert h=={{'samples':16000,'hint':{expected_asr:?}}}\nassert b==struct.pack('<16000f',*([0.0]*16000))\nassert b'REFERENCE_PRIVATE' not in b\nopen({marker:?},'w').write(str(os.getpid()))\ntime.sleep(0.05)\nprint(json.dumps(dict(text='raw fixture',backend='cpu',load_ms=1,elapsed_ms=2)))\n",
-                marker = marker.to_str().unwrap()
-            );
-            let correction = format!(
-                "#!/usr/bin/python3\nimport sys,json,os\np=sys.stdin.buffer.read()\nassert b'REFERENCE_PRIVATE' not in p\nassert json.loads(p)=={{'transcript':'raw fixture','context':{expected_correction:?}}}\nassert os.path.isfile({marker:?})\ntry:\n os.kill(int(open({marker:?}).read()),0)\nexcept ProcessLookupError:\n pass\nelse:\n raise AssertionError('previous helper was not reaped')\nprint(json.dumps(dict(candidate='raw fixture.',accepted=True,reason=None,backend='cpu',offloaded_layers=0)))\n",
-                marker = marker.to_str().unwrap()
-            );
-            for (name, source) in [
-                ("compare-transcription", asr),
-                ("local-correction", correction),
-            ] {
-                let path = root.join(name);
-                std::fs::write(&path, source).unwrap();
-                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        for (source, context) in [
+            ("ax", "CONTEXT_FIXTURE"),
+            ("ocr", "OCR_FIXTURE"),
+            ("both", "入力欄: CONTEXT_FIXTURE\n画面OCR: OCR_FIXTURE"),
+        ] {
+            for route in ["none", "asr-only", "correction-only", "both"] {
+                let case = Case {
+                    speech: "base".into(),
+                    speech_backend: "cpu".into(),
+                    correction: "qwen3-1.7b".into(),
+                    correction_backend: "cpu".into(),
+                    source: source.into(),
+                    route: route.into(),
+                };
+                let expected_asr =
+                    local_transcription::recognition_hint(if case.whisper_context() {
+                        context
+                    } else {
+                        ""
+                    });
+                let expected_correction = if case.correction_context() {
+                    context
+                } else {
+                    ""
+                };
+                let marker = root.join("asr-completed");
+                let _ = std::fs::remove_file(&marker);
+                let asr = format!(
+                    "#!/usr/bin/python3\nimport sys,json,struct,os,time\nh=json.loads(sys.stdin.buffer.readline())\nb=sys.stdin.buffer.read()\nassert h=={{'samples':16000,'hint':{expected_asr:?}}}\nassert b==struct.pack('<16000f',*([0.0]*16000))\nassert b'REFERENCE_PRIVATE' not in b\nopen({marker:?},'w').write(str(os.getpid()))\ntime.sleep(0.05)\nprint(json.dumps(dict(text='raw fixture',backend='cpu',load_ms=1,elapsed_ms=2)))\n",
+                    marker = marker.to_str().unwrap()
+                );
+                let correction = format!(
+                    "#!/usr/bin/python3\nimport sys,json,os\np=sys.stdin.buffer.read()\nassert b'REFERENCE_PRIVATE' not in p\nassert json.loads(p)=={{'transcript':'raw fixture','context':{expected_correction:?}}}\nassert os.path.isfile({marker:?})\ntry:\n os.kill(int(open({marker:?}).read()),0)\nexcept ProcessLookupError:\n pass\nelse:\n raise AssertionError('previous helper was not reaped')\nprint(json.dumps(dict(candidate='raw fixture.',accepted=True,reason=None,backend='cpu',offloaded_layers=0)))\n",
+                    marker = marker.to_str().unwrap()
+                );
+                for (name, source) in [
+                    ("compare-transcription", asr),
+                    ("local-correction", correction),
+                ] {
+                    let path = root.join(name);
+                    std::fs::write(&path, source).unwrap();
+                    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+                }
+                let row = run_case(
+                    &root,
+                    &case,
+                    0,
+                    &vec![0.0; 16000],
+                    &sources,
+                    &paths,
+                    &Ok(()),
+                    Some("REFERENCE_PRIVATE"),
+                    &AtomicU64::new(1),
+                    1,
+                );
+                assert_eq!(row.status, "accepted", "{route}: {}", row.message);
+                assert_eq!(row.raw.as_deref(), Some("raw fixture"));
+                assert_eq!(row.final_text.as_deref(), Some("raw fixture."));
             }
-            let row = run_case(
-                &root,
-                &case,
-                0,
-                &vec![0.0; 16000],
-                &sources,
-                &paths,
-                &Ok(()),
-                Some("REFERENCE_PRIVATE"),
-                &AtomicU64::new(1),
-                1,
-            );
-            assert_eq!(row.status, "accepted", "{route}: {}", row.message);
-            assert_eq!(row.raw.as_deref(), Some("raw fixture"));
-            assert_eq!(row.final_text.as_deref(), Some("raw fixture."));
         }
         std::fs::remove_dir_all(root).unwrap();
     }
