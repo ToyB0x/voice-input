@@ -21,30 +21,9 @@ field.font = NSFont.systemFont(ofSize: 36); field.backgroundColor = .white; fiel
 field.string = text; field.isEditable = true; field.isRichText = false
 field.setAccessibilityLabel("Voice Input controlled context")
 window.contentView!.addSubview(field)
-window.makeKeyAndOrderFront(nil); window.makeFirstResponder(field); app.activate(ignoringOtherApps: true)
-RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
 func render(_ view: NSView) -> CGImage? {
     guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
     view.cacheDisplay(in: view.bounds, to: rep); return rep.cgImage
-}
-// The Rust parent reads only this child's bounded AX field while our run loop responds.
-emit(["phase": "ready", "protocolVersion": 1])
-final class ContinueSignal: @unchecked Sendable { let lock = NSLock(); var ready = false }
-let signal = ContinueSignal()
-DispatchQueue.global().async {
-    var bytes = Data()
-    while let chunk = try? FileHandle.standardInput.read(upToCount: 1), !chunk.isEmpty, bytes.count <= 128 {
-        bytes.append(chunk)
-        if chunk.first == 10 { break }
-    }
-    signal.lock.lock(); signal.ready = bytes == Data("continue\n".utf8); signal.lock.unlock()
-}
-let deadline = Date(timeIntervalSinceNow: 15)
-while true {
-    signal.lock.lock(); let ready = signal.ready; signal.lock.unlock()
-    if ready { break }
-    if Date() > deadline { finish("capture-handshake-timeout") }
-    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
 }
 func ocr(_ image: CGImage) -> [String: Any] {
     let start = ProcessInfo.processInfo.systemUptime
@@ -66,6 +45,7 @@ func ocr(_ image: CGImage) -> [String: Any] {
     }
     return ["status": "unavailable", "text": "", "reason": "vision-ocr-failed", "attempts": attempts]
 }
+func captureAndFinish() {
 guard let textImage = render(window.contentView!) else { finish("fixture-render-failed") }
 let textOCR = ocr(textImage)
 field.removeFromSuperview()
@@ -86,3 +66,35 @@ do {
 emit(["scene": scene, "fixtureText": text, "ocr": textOCR, "imageOCR": ocr(image), "vision": vision,
       "renderMethod": "Controlled AppKit window bitmap; no ScreenCaptureKit or other app capture"])
 window.orderOut(nil)
+
+    exit(0)
+}
+
+// A real NSApplication run loop serves cross-process AX; a bare RunLoop did
+// not register/respond reliably on the hosted macOS 27 fixture.
+final class FixtureDelegate: NSObject, NSApplicationDelegate {
+    var timeout: Timer?
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        window.makeKeyAndOrderFront(nil); window.makeFirstResponder(field)
+        app.activate(ignoringOtherApps: true)
+        timeout = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { _ in finish("capture-handshake-timeout") }
+        DispatchQueue.main.asyncAfter(deadline: .now()+0.3) {
+            emit(["phase": "ready", "protocolVersion": 1])
+            DispatchQueue.global().async {
+                var bytes = Data()
+                while let chunk = try? FileHandle.standardInput.read(upToCount: 1), !chunk.isEmpty, bytes.count <= 128 {
+                    bytes.append(chunk); if chunk.first == 10 { break }
+                }
+                let valid = bytes == Data("continue\n".utf8)
+                DispatchQueue.main.async {
+                    self.timeout?.invalidate()
+                    if !valid { finish("invalid-acknowledgement") }
+                    captureAndFinish()
+                }
+            }
+        }
+    }
+}
+let delegate = FixtureDelegate()
+app.delegate = delegate
+app.run()

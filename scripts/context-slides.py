@@ -86,19 +86,20 @@ def main():
         value=condition_counts(rows,scene,source,engine,instruction_key,route)
         return f"{value[kind]}/{value['executed']}" if value['executed'] else '未実行'
     kana=[x for x in r.get('kanaControls',[]) if x.get('engine','qwen3')==engine]
-    kana_changed=sum(x['result'].get('candidate','').rstrip('。')!=x['input'].rstrip('。') for x in kana if 'candidate' in x['result'])
+    kana_candidates=[x for x in kana if isinstance(x['result'].get('candidate'),str)]
+    kana_changed=sum(x['result']['candidate'].rstrip('。')!=x['input'].rstrip('。') for x in kana_candidates)
     add('今回の実測で分かったこと',
         '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples))+'</b>。</p>'
         '<p>直接テキスト＋ヒント・補正の期待語出現：台風 '+counts('storm','fixture-text')+'、キャンディ '+counts('candy','fixture-text')+'。</p>'
         '<p>画像分類ラベル＋ヒント・補正の期待語出現：台風 '+counts('storm','vision-labels')+'、キャンディ '+counts('candy','vision-labels')+'。逆の文脈での逆語出現：台風 '+counts('storm','mismatched-text','opposite')+'、キャンディ '+counts('candy','mismatched-text','opposite')+'。</p>'
-        '<p>かな入力の分離試験：'+str(len(kana))+'件中'+str(kana_changed)+'件で候補の表記が変化（末尾の句点を除く）。変化だけでは正しい漢字変換や意味保持の証明にならない。</p>')
+        '<p>かな入力の分離試験：候補取得 '+str(len(kana_candidates))+'/'+str(len(kana))+'件、'+str(kana_changed)+'件で候補の表記が変化（末尾の句点を除く）。変化だけでは正しい漢字変換や意味保持の証明にならない。</p>')
     controls=[x for x in r.get('preservationControls',[]) if x.get('engine','qwen3')==engine]
     for instruction in r['instructions']:
         label='標準指示' if instruction=='default' else '追加指示 '+instruction
         xs=[x for x in controls if x['instruction']==instruction]
         if xs:
             add('意味の保持も別に確認する：'+label,
-                table(['原文','実際の補正候補','ガード判定'],[[x['input'],x['result'].get('candidate',''), '採用' if x['result'].get('accepted') else '棄却・原文利用'] for x in xs])+
+                table(['原文','実際の補正候補','ガード判定'],[[x['input'],x['result'].get('candidate') or '未生成', '採用' if x['result'].get('accepted') is True else '棄却・原文利用' if x['result'].get('accepted') is False else '未実行／失敗・原文利用'] for x in xs])+
                 '<p class="small">採用候補の文字差分で削除された部分：'+e('、'.join('「'+x+'」' for x in omitted_fragments(controls,instruction)) or 'なし')+'。削除の有無と意味保持は別の評価軸。候補・採否・最終出力はJSONで確認できる。</p>')
     apple=r['foundation']
     add('確認できた範囲と、残る検証','<p>Apple Foundation Models / この実行：<b>'+e(apple.get('availability',apple.get('failure','unknown')))+'</b>。利用不可なら推論結果は存在しない。</p><p>主試験は1入力・2シーンのパイロット。一般的な精度改善、他言語や他製品への優位性は結論にしない。</p><p>次の検証：実話者・複数の同音語・文脈が無関係／誤っている条件・直接画像を扱うローカルVLM・実機のAX／撮影。</p><p>数値・否定・名前の保持と、期待語の選択は別の評価軸。採用ガードの通過だけでは品質を保証しない。</p>')

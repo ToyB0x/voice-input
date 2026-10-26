@@ -41,6 +41,8 @@ class ConclusionsTests(unittest.TestCase):
             self.assertIn('ローカルモデルAPI（通信Sandboxなし）',html)
             self.assertNotIn('田中さんへ資料を送ります',html)
             report['rows'][0]['status']='unavailable';report['rows'][0]['correctionMs']=None
+            report['kanaControls']=[dict(engine='apple-foundation',instruction='custom',input='あめ',result=dict(candidate=None,accepted=None,status='unavailable'))]
+            report['preservationControls']=[dict(engine='apple-foundation',instruction='custom',input='原文',result=dict(candidate=None,accepted=None,status='unavailable'))]
             source.write_text(json.dumps(report))
             with patch('sys.argv',['slides','--report',str(source),'--output',str(root/'output')]): slides.main()
             self.assertIn('未実行',(root/'output/slides.html').read_text())
