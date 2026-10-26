@@ -49,13 +49,23 @@ export function setupModels(locked: () => boolean, apply: (speech: string | unde
     progress.max = Math.max(state?.total ?? 0, 1);
     progress.value = state?.received ?? 0;
   }
+  function showPreparation() {
+    if (!state) return;
+    const progressing = ["downloading", "verifying"].includes(state.phase);
+    message.textContent = state.phase === "starting" ? "準備を開始しています…" : `${state.message}${progressing ? ` ${state.index}/${state.count} · ${(state.received / 1e6).toFixed(0)} / ${(state.total / 1e6).toFixed(0)} MB` : ""}`;
+  }
   function reset() { state = undefined; description.textContent = presets[preset.value]?.[2] ?? "準備するモデルを個別に選択できます。"; message.textContent = "準備・検証後に設定欄へ反映してください。"; render(); }
   preset.addEventListener("change", () => { const p = presets[preset.value]; if (p) { speech.value = p[0]; correction.value = p[1]; } reset(); });
   for (const field of [speech, correction]) field.addEventListener("change", () => { preset.value = "custom"; reset(); });
   async function prepare(allowDownload: boolean) {
     if (busy() || locked()) return;
     requesting = true; ignoredGeneration = -1; message.textContent = "準備を開始しています…"; render();
-    try { state = await invoke<Preparation>("prepare_models", { ids: ids(), download: allowDownload }); }
+    try {
+      state = await invoke<Preparation>("prepare_models", { ids: ids(), download: allowDownload });
+      // A cached verification or transport failure can finish before the first
+      // poll. Render the response itself instead of waiting for a state change.
+      showPreparation();
+    }
     catch (cause) { message.textContent = String(cause); }
     finally { requesting = false; render(); }
   }
@@ -81,9 +91,9 @@ export function setupModels(locked: () => boolean, apply: (speech: string | unde
     try {
       const next = await invoke<Preparation>("model_preparation_status");
       if (state && next.generation === state.generation && state.generation !== ignoredGeneration) {
-        const changed = state.phase !== next.phase || state.received !== next.received;
+        const changed = state.phase !== next.phase || state.received !== next.received || state.message !== next.message;
         state = next;
-        if (changed) message.textContent = `${state.message}${busy() ? ` ${state.index}/${state.count} · ${(state.received / 1e6).toFixed(0)} / ${(state.total / 1e6).toFixed(0)} MB` : ""}`;
+        if (changed) showPreparation();
       } else if (state && next.generation === state.generation) {
         state = next; message.textContent = "準備の反映を取り消しました。検証済みモデルは保存先に残ります。";
       }

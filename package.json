@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "tauri": "pnpm run prepare-native && tauri",
     "prepare-native": "python3 scripts/prepare-native-runtime.py",
-    "check:dependencies": "python3 scripts/check-dependency-age.py"
+    "check:dependencies": "python3 scripts/check-dependency-age.py",
+    "test:ui": "node --disable-warning=ExperimentalWarning --experimental-vm-modules --test scripts/tests/*.test.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",
