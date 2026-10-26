@@ -551,7 +551,7 @@ jobs:
           settings = json.loads((Path.home() / 'Library/Application Support/dev.toyb0x.voiceinput/settings.json').read_text())
           assert settings['recognitionContext'] is True
           assert settings['correctionEngine'] == 'qwen3'
-          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'recognitionContext', 'ocrContext', 'whisperContext', 'correctionContext', 'correctionModelPath', 'correctionBackend', 'correctionEngine'}
+          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'autoCorrection', 'recognitionContext', 'ocrContext', 'whisperContext', 'correctionContext', 'correctionModelPath', 'correctionBackend', 'correctionEngine'}
           PY
       - name: Verify trusted product insertion and cancellation guards
         if: inputs.full_integration

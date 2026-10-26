@@ -12,6 +12,8 @@ pub struct Preferences {
     #[serde(default)]
     pub auto_insert: bool,
     #[serde(default)]
+    pub auto_correction: bool,
+    #[serde(default)]
     pub recognition_context: bool,
     #[serde(default)]
     pub ocr_context: bool,
@@ -43,6 +45,7 @@ impl Default for Preferences {
             backend: "metal".into(),
             shortcut: "Command+Shift+Space".into(),
             auto_insert: false,
+            auto_correction: false,
             recognition_context: false,
             ocr_context: false,
             whisper_context: true,
@@ -146,12 +149,14 @@ mod tests {
             serde_json::from_str(r#"{"version":1,"modelPath":"","backend":"cpu","shortcut":""}"#)
                 .unwrap();
         assert!(!legacy.auto_insert);
+        assert!(!legacy.auto_correction);
         assert!(!legacy.recognition_context);
         assert!(!legacy.ocr_context && !legacy.correction_context);
         assert!(legacy.whisper_context);
         assert_eq!(legacy.correction_engine, "qwen3");
         let settings = Preferences {
             correction_engine: "apple-foundation".into(),
+            auto_correction: true,
             model_path: "/tmp/日本語モデル.bin".into(),
             shortcut: String::new(),
             ..Preferences::default()

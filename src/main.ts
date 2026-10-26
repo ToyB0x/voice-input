@@ -5,7 +5,7 @@ import { setupModels } from "./model-setup";
 import { setupInputLevel } from "./input-level";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
+type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; autoCorrection: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
 type InsertionStatus = { enabled: boolean; trusted: boolean; state: string; message: string };
 type DesktopStatus = { preferences: Preferences; shortcutRegistered: boolean; error: string | null };
 
@@ -28,6 +28,8 @@ type Snapshot = {
   working: boolean;
   recognitionPhase: string;
   transcript: string | null;
+  finalText: string | null;
+  finalSource: string;
   recognitionError: string | null;
 };
 
@@ -67,6 +69,10 @@ const shortcut = document.querySelector<HTMLInputElement>("#shortcut")!;
 const savePreferences = document.querySelector<HTMLButtonElement>("#save-preferences")!;
 const desktopStatus = document.querySelector<HTMLParagraphElement>("#desktop-status")!;
 const preferencesMessage = document.querySelector<HTMLParagraphElement>("#preferences-message")!;
+const autoCorrection = document.querySelector<HTMLInputElement>("#auto-correction")!;
+const finalText = document.querySelector<HTMLTextAreaElement>("#final-text")!;
+const finalStatus = document.querySelector<HTMLParagraphElement>("#final-status")!;
+const copyFinal = document.querySelector<HTMLButtonElement>("#copy-final")!;
 const autoInsert = document.querySelector<HTMLInputElement>("#auto-insert")!;
 const insertionStatus = document.querySelector<HTMLParagraphElement>("#insertion-status")!;
 const insertionMessage = document.querySelector<HTMLParagraphElement>("#insertion-message")!;
@@ -125,7 +131,7 @@ function render() {
   if (!snapshot) return;
   setText(permission, `マイクの許可: ${permissions[snapshot.permission]}`);
   savePreferences.disabled = busy;
-  shortcut.disabled = autoInsert.disabled = recognitionContext.disabled = accessibility.disabled = busy;
+  shortcut.disabled = autoCorrection.disabled = autoInsert.disabled = recognitionContext.disabled = accessibility.disabled = busy;
   setText(contextStatus, context?.message ?? "認識補助: 無効");
   ocrContext.disabled = whisperContext.disabled = correctionContext.disabled = screenPermission.disabled = busy;
   const foundationSelected = correctionEngine.value === "apple-foundation";
@@ -169,6 +175,14 @@ function render() {
     transcript.value = snapshot.transcript ?? "";
     copyStatus.textContent = "";
   }
+  if (finalText.value !== (snapshot.finalText ?? "")) finalText.value = snapshot.finalText ?? "";
+  copyFinal.disabled = busy || snapshot.finalSource === "correcting" || !snapshot.finalText;
+  const finalMessages: Record<string,string> = {
+    whisper:"最終結果: Whisper原文", correcting:"最終結果: 自動補正中。直接入力は補正完了まで待機します。",
+    correction:"最終結果: 補正を採用しました。", fallback:"最終結果: 補正が失敗・棄却されたためWhisper原文を使用しました。",
+    cancelled:"最終結果: 自動補正を取り消しました。直接入力は行いません。",
+  };
+  setText(finalStatus, finalMessages[snapshot.finalSource] ?? "最終結果は未作成です。");
   modelInfo.hidden = !snapshot.modelReady;
   setText(modelInfo, snapshot.modelReady ? `モデル: ${snapshot.modelName} / ${(snapshot.modelBytes / 1_000_000).toFixed(0)} MB（ファイル容量）` : "");
   const modelStates: Record<string, string> = {
@@ -226,6 +240,7 @@ async function refresh() {
         backend.value = desktop.preferences.backend;
         shortcut.value = desktop.preferences.shortcut;
         autoInsert.checked = desktop.preferences.autoInsert;
+        autoCorrection.checked = desktop.preferences.autoCorrection;
         recognitionContext.checked = desktop.preferences.recognitionContext;
         ocrContext.checked = desktop.preferences.ocrContext;
         whisperContext.checked = desktop.preferences.whisperContext;
@@ -268,14 +283,14 @@ async function action(operation: () => Promise<unknown>) {
 
 savePreferences.addEventListener("click", () => void action(async () => {
   desktop = await invoke<DesktopStatus>("save_preferences", { preferences: {
-    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
+    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, autoCorrection: autoCorrection.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
     whisperContext: whisperContext.checked, correctionContext: correctionContext.checked,
     correctionModelPath: correctionModelPath.value, correctionEngine: correctionEngine.value, correctionBackend: correctionBackend.value,
   } });
   preferencesMessage.textContent = "設定を保存しました。ショートカットは反映済みです。";
 }));
 accessibility.addEventListener("click", () => void action(() => invoke("request_accessibility")));
-for (const field of [modelPath, backend, shortcut, autoInsert, recognitionContext, ocrContext, whisperContext, correctionContext, correctionEngine, correctionModelPath, correctionBackend]) {
+for (const field of [modelPath, backend, shortcut, autoInsert, autoCorrection, recognitionContext, ocrContext, whisperContext, correctionContext, correctionEngine, correctionModelPath, correctionBackend]) {
   field.addEventListener("input", () => { preferencesMessage.textContent = "未保存の設定があります。"; });
 }
 modelPath.addEventListener("input", render);
@@ -288,6 +303,7 @@ foundationCheck.addEventListener("click", () => void action(async () => { correc
 foundationCopy.addEventListener("click", () => void action(async () => { await invoke("copy_foundation_diagnostics"); preferencesMessage.textContent = "本文を含まない診断情報をコピーしました。"; }));
 screenPermission.addEventListener("click", () => void action(() => invoke("request_screen_permission")));
 correct.addEventListener("click", () => void action(async () => { correction = await invoke<CorrectionStatus>("correct_transcript"); }));
+copyFinal.addEventListener("click", () => void action(() => invoke("copy_final_transcript")));
 copyCorrection.addEventListener("click", () => void action(() => invoke("copy_correction")));
 loadModel.addEventListener("click", () => void action(() => invoke("load_model", { path: modelPath.value, backend: backend.value })));
 transcribe.addEventListener("click", () => void action(() => invoke("transcribe_recording")));

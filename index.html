@@ -100,7 +100,9 @@
         <p class="hint">ウィンドウを閉じても常駐します。メニューバーの VI から設定・結果を表示、終了できます。</p>
       </section>
       <section aria-labelledby="correction-title">
-        <h2 id="correction-title">ローカル最終補正（実験的プレビュー）</h2>
+        <h2 id="correction-title">ローカル最終補正（実験的）</h2>
+        <label><input id="auto-correction" aria-label="Automatic correction after transcription" type="checkbox" />認識後に自動補正する（初期状態は無効）</label>
+        <p class="hint">設定保存後の認識から適用します。採用時は補正結果、失敗・棄却時はWhisper原文を最終結果にします。直接入力も有効な場合は補正完了後に一度だけ入力先を再確認して挿入します。新しい録音・破棄・設定保存・終了では取り消し、遅れた結果を入力しません。</p>
         <label for="correction-engine">補正エンジン</label>
         <select id="correction-engine" aria-label="Correction engine"><option value="qwen3">Qwen3（ローカルGGUF）</option><option value="apple-foundation">Apple Foundation Models（実験的）</option></select>
         <p class="hint">AppleモデルはmacOS 26以降とApple Intelligence対応・有効化が必要です。GGUFの指定は不要です。選択後に「設定を保存」を押してください。利用不可でも他のエンジンへ自動で切り替えません。</p>
@@ -112,6 +114,10 @@
         <button id="correct" aria-label="Preview local correction" disabled>最終補正をプレビュー</button>
         <p id="correction-status" role="status">補正は未実行です。</p>
         <textarea id="corrected" aria-label="Corrected text" rows="4" readonly placeholder="元の文字起こしは上の認識結果に保持します。"></textarea>
+        <h3>最終結果</h3>
+        <p id="final-status" role="status">最終結果は未作成です。</p>
+        <textarea id="final-text" aria-label="Final text" rows="4" readonly></textarea>
+        <button id="copy-final" disabled>最終結果をコピー</button>
         <details id="foundation-diagnostics">
           <summary>Appleモデルの診断</summary>
           <button id="foundation-check" aria-label="Check Apple model availability">Appleモデルの利用可否を確認</button>
@@ -121,7 +127,7 @@
           <p class="hint">確認操作は推論しません。診断には利用可否・OSバージョン・処理時間・固定の失敗理由を含み、音声・文字起こし・取得文脈・補正本文・モデルパスを含みません。</p>
         </details>
         <button id="copy-correction" aria-label="Copy correction" disabled>補正結果をコピー</button>
-        <p class="hint">補正結果は自動入力しません。意味・数値・否定・固有名詞が変わっていないか確認してからコピーしてください。再試行は取得テキストなしで行います。画像・取得テキスト・補正結果をファイルに保存・クラウド送信しません。</p>
+        <p class="hint">手動プレビューは自動入力しません。自動補正と直接入力の両方を有効にすると、最終結果を直接入力します。意味・数値・否定・固有名詞が変わっていないか固定サンプルで確認してから利用してください。再試行は取得テキストなしで行います。画像・取得テキスト・補正結果をファイルに保存・クラウド送信しません。</p>
       </section>
       <section aria-labelledby="updates-title">
         <h2 id="updates-title">アプリの更新</h2>

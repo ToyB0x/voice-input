@@ -27,6 +27,7 @@ fn main() {
         "load_model",
         "transcribe_recording",
         "copy_transcript",
+        "copy_final_transcript",
         "desktop_status",
         "save_preferences",
         "insertion_status",

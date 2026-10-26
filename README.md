@@ -205,3 +205,5 @@ python3 scripts/setup-updater-signing.py --key-file "$HOME/Library/Application S
 実機でのApple／Qwen比較と文脈利用先の選び方は[実機比較ガイド](docs/real-device-comparison.md)を参照してください。
 
 録音や画面取得なしでモデルの生成を確かめる場合は、[固定サンプルの補正自己診断](docs/correction-selftest.md)を利用できます。
+
+認識後の補正と入力を一連で行う場合は、[自動補正と最終結果の入力](docs/automatic-correction.md)を参照してください。自動補正は初期状態で無効です。
