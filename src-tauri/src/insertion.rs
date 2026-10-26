@@ -360,6 +360,16 @@ impl Inserter {
             },
         );
     }
+    pub(crate) fn feedback(&self) -> (bool, String) {
+        (
+            self.shared.enabled.load(Ordering::Acquire),
+            self.shared
+                .status
+                .lock()
+                .map(|status| status.0.clone())
+                .unwrap_or_default(),
+        )
+    }
     pub fn status(&self) -> Status {
         let (state, message) = self
             .shared

@@ -79,6 +79,7 @@ pub struct LevelSnapshot {
 
 #[derive(Default)]
 pub(crate) struct Capture {
+    recording_id: u64,
     pub(crate) audio: Option<AudioBuffer>,
     input_device: Option<String>,
     phase: Option<&'static str>,
@@ -197,6 +198,7 @@ impl Recorder {
             // The stream stays on its owning thread. Audio callbacks only fill
             // bounded, preallocated memory; IPC never serializes audio samples.
             let mut stream: Option<(cpal::Stream, Instant)> = None;
+            let mut recording_sequence = 0u64;
             while !worker_closing.load(Ordering::Acquire) {
                 let should_stop = stream.as_ref().is_some_and(|(_, started)| {
                     started.elapsed().as_secs() >= u64::from(MAX_SECONDS)
@@ -255,6 +257,7 @@ impl Recorder {
                             }
                             Action::Start if stream.is_some() => Err("すでに録音中です。".into()),
                             Action::Start => {
+                                recording_sequence = recording_sequence.wrapping_add(1);
                                 // Invalidate and hide the old transcript under the same
                                 // lock used to acquire correction input, before slow AX/OCR.
                                 {
@@ -263,6 +266,7 @@ impl Recorder {
                                     corrector.cancel();
                                     c.recognition.clear_result();
                                     c.phase = Some("preparing");
+                                    c.recording_id = recording_sequence;
                                     c.context_hint = None;
                                     c.correction_hint = None;
                                 }
@@ -285,6 +289,7 @@ impl Recorder {
                                     let mut recognition = std::mem::take(&mut c.recognition);
                                     recognition.clear_result();
                                     *c = Capture {
+                                        recording_id: recording_sequence,
                                         recognition,
                                         insertion_ticket: ticket,
                                         context_hint: hint,
@@ -501,6 +506,31 @@ impl Recorder {
             .ok_or("先に音声を文字起こししてください。")?;
         Ok((text, capture.correction_hint.take()))
     }
+    // Lightweight feed for the tray/overlay: no text clones or permission APIs.
+    pub(crate) fn overlay_signal(&self) -> Result<crate::overlay_state::Signal, String> {
+        let c = self
+            .capture
+            .lock()
+            .map_err(|_| "録音状態を確認できません。")?;
+        Ok(crate::overlay_state::Signal {
+            recording_id: c.recording_id,
+            phase: c.phase.unwrap_or("idle"),
+            recording_ms: c.audio.as_ref().map_or(0, AudioBuffer::elapsed_ms),
+            level: c.level_snapshot().level,
+            recognizing: c.recognition.working && c.recognition.recognition_phase == "transcribing",
+            loading: c.recognition.recognition_phase == "loading",
+            discarding: c.recognition.recognition_phase == "discarding",
+            correcting: c.recognition.final_source == "correcting",
+            has_result: c
+                .recognition
+                .final_text
+                .as_ref()
+                .is_some_and(|text| !text.is_empty()),
+            failed: c.error.is_some() || c.recognition.recognition_error.is_some(),
+            fallback: c.recognition.final_source == "fallback",
+            cancelled: c.recognition.final_source == "cancelled",
+        })
+    }
     pub(crate) fn status(&self) -> Result<Snapshot, String> {
         self.capture
             .lock()
@@ -705,6 +735,7 @@ mod tests {
         let mut audio = AudioBuffer::new(8_000, 1).unwrap();
         audio.push([0.5; 800].into_iter());
         let mut capture = Capture {
+            recording_id: 1,
             audio: Some(audio),
             input_device: Some("Test external input".into()),
             phase: Some("recording"),

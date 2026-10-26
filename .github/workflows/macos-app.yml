@@ -205,6 +205,37 @@ jobs:
           path: ${{ runner.temp }}/voice-input-app/
           retention-days: 14
           if-no-files-found: error
+      - name: Verify native overlay focus and render sample views without WebView
+        timeout-minutes: 3
+        env:
+          VOICE_INPUT_OVERLAY_FOCUS_TARGET: ${{ runner.temp }}/Overlay Focus Fixture.app
+          VOICE_INPUT_OVERLAY_EVIDENCE: ${{ runner.temp }}/voice-input-smoke
+        run: |
+          fixture="$VOICE_INPUT_OVERLAY_FOCUS_TARGET"
+          mkdir -p "$fixture/Contents/MacOS"
+          xcrun swiftc scripts/macos-overlay-focus-target.swift -o "$fixture/Contents/MacOS/overlay-focus-fixture"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string dev.toyb0x.overlayfocusfixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string overlay-focus-fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string Overlay Focus Fixture' "$fixture/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$fixture/Contents/Info.plist"
+          codesign --force --sign - "$fixture"
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --test overlay-window --no-run --message-format=json \
+            > "$RUNNER_TEMP/overlay-probe-build.jsonl"
+          python3 - <<'PYCODE'
+          import json, os, plistlib, shutil
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          artifacts = [json.loads(line) for line in (root / 'overlay-probe-build.jsonl').read_text().splitlines()]
+          binary = next(item['executable'] for item in artifacts if item.get('reason') == 'compiler-artifact' and item.get('target', {}).get('name') == 'overlay-window' and item.get('executable'))
+          bundle = root / 'Overlay Probe.app/Contents'
+          (bundle / 'MacOS').mkdir(parents=True, exist_ok=True)
+          shutil.copy2(binary, bundle / 'MacOS/overlay-probe')
+          with (bundle / 'Info.plist').open('wb') as output:
+              plistlib.dump(dict(CFBundleIdentifier='dev.toyb0x.voiceinput.overlayprobe', CFBundleExecutable='overlay-probe', CFBundleName='Overlay Probe', CFBundlePackageType='APPL', LSMinimumSystemVersion='27.0'), output)
+          PYCODE
+          codesign --force --sign - "$RUNNER_TEMP/Overlay Probe.app"
+          "$RUNNER_TEMP/Overlay Probe.app/Contents/MacOS/overlay-probe" \
+            2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/overlay-native-window.log"
       - name: Verify clean exit before the Preview window check
         timeout-minutes: 6
         run: |
@@ -551,7 +582,7 @@ jobs:
           settings = json.loads((Path.home() / 'Library/Application Support/dev.toyb0x.voiceinput/settings.json').read_text())
           assert settings['recognitionContext'] is True
           assert settings['correctionEngine'] == 'qwen3'
-          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'autoCorrection', 'recognitionContext', 'ocrContext', 'whisperContext', 'correctionContext', 'correctionModelPath', 'correctionBackend', 'correctionEngine'}
+          assert set(settings) == {'version', 'modelPath', 'backend', 'shortcut', 'autoInsert', 'autoCorrection', 'showOverlay', 'recognitionContext', 'ocrContext', 'whisperContext', 'correctionContext', 'correctionModelPath', 'correctionBackend', 'correctionEngine'}
           PY
       - name: Verify trusted product insertion and cancellation guards
         if: inputs.full_integration

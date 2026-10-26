@@ -13,7 +13,7 @@ async function setup() {
   const state = {
     snapshot: { phase: 'recorded', permission: 'authorized', elapsedMs: 1000, level: 0, sampleCount: 16000, sampleRate: 16000, inputDevice: null,
       modelReady: true, backend: 'metal', working: false, recognitionPhase: 'idle', transcript: 'Whisper原文', finalText: null, finalSource: 'correcting', recognitionError: null },
-    desktop: { preferences: { version: 1, modelPath: '/model.bin', backend: 'metal', shortcut: 'Control+Alt+KeyV', autoInsert: false, autoCorrection: false,
+    desktop: { preferences: { version: 1, modelPath: '/model.bin', backend: 'metal', shortcut: 'Control+Alt+KeyV', autoInsert: false, autoCorrection: false, showOverlay: false,
       recognitionContext: false, ocrContext: false, whisperContext: true, correctionContext: false, correctionModelPath: '', correctionEngine: 'apple-foundation', correctionBackend: 'metal' }, shortcutRegistered: true, error: null },
     correction: { working: true, checkingFoundation: false, foundation: null, text: null, error: null, elapsedMs: 0 },
   };
@@ -48,11 +48,14 @@ async function setup() {
 test('automatic correction is initially off and saved only by explicit preference action', async () => {
   const app = await setup();
   assert.equal(app.elements.get('auto-correction').checked, false);
+  assert.equal(app.elements.get('show-overlay').checked, false);
   assert.ok(app.requests.every(r => r.command.endsWith('_status')));
   app.elements.get('auto-correction').checked = true;
+  app.elements.get('show-overlay').checked = true;
   app.click('save-preferences'); await app.settle();
   const saved = app.requests.find(r => r.command === 'save_preferences').args.preferences;
   assert.equal(saved.autoCorrection, true);
+  assert.equal(saved.showOverlay, true);
   assert.equal(saved.autoInsert, false);
   assert.equal(saved.correctionEngine, 'apple-foundation');
 });

@@ -207,3 +207,5 @@ python3 scripts/setup-updater-signing.py --key-file "$HOME/Library/Application S
 録音や画面取得なしでモデルの生成を確かめる場合は、[固定サンプルの補正自己診断](docs/correction-selftest.md)を利用できます。
 
 認識後の補正と入力を一連で行う場合は、[自動補正と最終結果の入力](docs/automatic-correction.md)を参照してください。自動補正は初期状態で無効です。
+
+設定画面を閉じて録音・認識・補正の進み具合を確認する場合は、[録音ステータスの小型表示](docs/status-overlay.md)を有効にできます（初期状態は無効）。
