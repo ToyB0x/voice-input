@@ -5,6 +5,10 @@ description = "A macOS voice input app built with Tauri"
 edition = "2024"
 publish = false
 
+[features]
+# Diagnostic-only build; never enabled in release packaging.
+ci-restart-probe = []
+
 [build-dependencies]
 tauri-build = { version = "2.7.4", features = [] }
 

@@ -39,6 +39,9 @@ mod overlay_window;
 #[cfg(target_os = "macos")]
 mod updater;
 
+#[cfg(all(target_os = "macos", feature = "ci-restart-probe"))]
+mod restart_probe;
+
 fn main() {
     let builder = tauri::Builder::default();
     #[cfg(target_os = "macos")]
@@ -93,6 +96,8 @@ fn main() {
             overlay::setup()?;
             desktop::setup(app)?;
             updater::start_automatic_checks(app.handle());
+            #[cfg(feature = "ci-restart-probe")]
+            restart_probe::setup(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
