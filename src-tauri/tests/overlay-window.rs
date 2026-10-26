@@ -19,6 +19,7 @@ mod probe {
         time::{Duration, Instant},
     };
 
+    use tauri::Manager;
     fn on_main<T: Send + 'static>(
         app: &tauri::AppHandle,
         task: impl FnOnce(&tauri::AppHandle) -> Result<T, String> + Send + 'static,
@@ -60,6 +61,25 @@ mod probe {
     }
     fn run(app: &tauri::AppHandle, fixture: PathBuf) -> Result<(), String> {
         on_main(app, |app| inspect(app, false))?;
+        // The real app starts with its normal main window visible. Complete that
+        // startup activation before testing background recording HUD ordering.
+        let start = Instant::now();
+        while !on_main(app, |app| {
+            Ok(app
+                .get_webview_window("main")
+                .is_some_and(|window| window.is_focused().unwrap_or(false)))
+        })? {
+            if start.elapsed() > Duration::from_secs(10) {
+                return Err("normal main window did not finish startup activation".into());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        on_main(app, |app| {
+            app.get_webview_window("main")
+                .ok_or("main missing")?
+                .hide()
+                .map_err(|error| error.to_string())
+        })?;
         let marker = std::env::temp_dir().join(format!("overlay-focus-{}.pid", std::process::id()));
         let _ = std::fs::remove_file(&marker);
         let launched = Command::new("/usr/bin/open")
@@ -189,8 +209,8 @@ mod probe {
             println!("SKIP: native overlay focus probe requires the explicit CI fixture");
             return;
         };
-        let mut context = tauri::generate_context!();
-        context.config_mut().app.windows.clear();
+        let context = tauri::generate_context!();
+        // Use the product window configuration, including normal startup activation.
         let app = tauri::Builder::default()
             .setup(|_| {
                 super::overlay_window::initialize()?;
