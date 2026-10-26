@@ -85,7 +85,7 @@ def main():
     p.add_argument('--require-network-denied', action='store_true')
     a=p.parse_args()
     if a.require_network_denied:
-        try: socket.socket()
+        try: socket.create_connection(('127.0.0.1', 9), timeout=1)
         except PermissionError: pass
         else: raise RuntimeError('Network sandbox was not enforced')
     a.output.mkdir(parents=True,exist_ok=True)

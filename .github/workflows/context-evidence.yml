@@ -26,13 +26,15 @@ jobs:
           version: 2026.10.18
           cache: true
           cache_key: mise-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.mise/config.toml', 'rust-toolchain.toml') }}
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: engine-cache
         with:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
             crates/local-transcription/target
           key: context-evidence-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/local-correction/Cargo.lock', 'crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos27-${{ runner.arch }}-correction-runtime-v2-
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/voice-input-context-models
@@ -44,6 +46,14 @@ jobs:
           python3 scripts/build-foundation-runtime.py --output "$RUNNER_TEMP/foundation" --require-framework
           xcrun swiftc -O scripts/context-evidence-native.swift -o "$RUNNER_TEMP/context-native"
           codesign --force --sign - "$RUNNER_TEMP/context-native"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+            crates/local-transcription/target
+          key: ${{ steps.engine-cache.outputs.cache-primary-key }}
       - name: Prepare checksum verified models (setup network only)
         run: |
           mkdir -p "$HOME/.cache/voice-input-context-models"

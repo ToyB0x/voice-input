@@ -33,28 +33,59 @@ func render(_ view: NSView, _ name: String) throws -> URL {
 }
 let textImage = try render(window.contentView!, "text-window.png")
 // Real consumer AX call, no TCC DB writes, no prompt automation, no provider shortcut.
-var value: CFTypeRef?
-let own = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
-let focusCode = AXUIElementCopyAttributeValue(own, kAXFocusedUIElementAttribute as CFString, &value)
-var axText = "", rangeCode: AXError = .failure
-if focusCode == .success, let value = value {
-    let element = unsafeBitCast(value, to: AXUIElement.self)
-    var range = CFRange(location: 0, length: min(256, text.utf16.count))
-    if let parameter = AXValueCreate(.cfRange, &range) {
-        var result: CFTypeRef?
-        rangeCode = AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, parameter, &result)
-        if rangeCode == .success { axText = result as? String ?? "" }
-    }
+// The main run loop must service AX requests; calling own-app AX on it deadlocks.
+final class AXResult: @unchecked Sendable {
+    let lock = NSLock()
+    var text = ""
+    var focusCode: AXError = .failure
+    var rangeCode: AXError = .failure
 }
+let ax = AXResult(), finished = DispatchSemaphore(value: 0)
+let textLength = min(256, text.utf16.count)
+DispatchQueue.global().async {
+    var value: CFTypeRef?
+    let own = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+    AXUIElementSetMessagingTimeout(own, 2)
+    let focusCode = AXUIElementCopyAttributeValue(own, kAXFocusedUIElementAttribute as CFString, &value)
+    var axText = "", rangeCode: AXError = .failure
+    if focusCode == .success, let value = value {
+        let element = unsafeBitCast(value, to: AXUIElement.self)
+        var range = CFRange(location: 0, length: textLength)
+        if let parameter = AXValueCreate(.cfRange, &range) {
+            var result: CFTypeRef?
+            rangeCode = AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, parameter, &result)
+            if rangeCode == .success { axText = result as? String ?? "" }
+        }
+    }
+    ax.lock.lock(); ax.text = axText; ax.focusCode = focusCode; ax.rangeCode = rangeCode; ax.lock.unlock()
+    finished.signal()
+}
+let deadline = Date(timeIntervalSinceNow: 6)
+while finished.wait(timeout: .now()) != .success && Date() < deadline {
+    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+}
+ax.lock.lock()
+let axText = ax.text, focusCode = ax.focusCode, rangeCode = ax.rangeCode
+ax.lock.unlock()
 func ocr(_ url: URL) -> [String: Any] {
     let start = ProcessInfo.processInfo.systemUptime
-    let request = VNRecognizeTextRequest(); request.recognitionLevel = .accurate
-    request.recognitionLanguages = ["ja-JP", "en-US"]; request.usesLanguageCorrection = false
-    do {
-        try VNImageRequestHandler(url: url, options: [:]).perform([request])
-        let lines = request.results?.compactMap { $0.topCandidates(1).first?.string } ?? []
-        return ["status": "completed", "text": lines.joined(separator: "\n"), "elapsedMs": Int((ProcessInfo.processInfo.systemUptime-start)*1000)]
-    } catch { return ["status": "unavailable", "reason": "vision-ocr-failed", "text": ""] }
+    var attempts = [[String: Any]]()
+    for cpuOnly in [false, true] {
+        let request = VNRecognizeTextRequest(); request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["ja-JP", "en-US"]; request.usesLanguageCorrection = false
+        request.usesCPUOnly = cpuOnly
+        do {
+            try VNImageRequestHandler(url: url, options: [:]).perform([request])
+            let lines = request.results?.compactMap { $0.topCandidates(1).first?.string } ?? []
+            attempts.append(["cpuOnly": cpuOnly, "status": "completed"])
+            return ["status": "completed", "text": lines.joined(separator: "\n"), "attempts": attempts,
+                "elapsedMs": Int((ProcessInfo.processInfo.systemUptime-start)*1000)]
+        } catch {
+            let error = error as NSError
+            attempts.append(["cpuOnly": cpuOnly, "status": "failed", "domain": error.domain, "code": error.code])
+        }
+    }
+    return ["status": "unavailable", "reason": "vision-ocr-failed", "text": "", "attempts": attempts]
 }
 field.removeFromSuperview()
 let picture = NSImageView(frame: window.contentView!.bounds)
@@ -75,6 +106,6 @@ do {
 try writeJSON(["scenario": scenario, "fixtureText": text,
     "renderMethod": "AppKit view bitmap; not ScreenCaptureKit; no screen-recording permission tested",
     "ax": ["status": axText.isEmpty ? "unavailable" : "completed", "text": axText,
-           "trusted": AXIsProcessTrusted(), "focusCode": focusCode.rawValue, "rangeCode": rangeCode.rawValue],
+           "target": "own fixture process", "trusted": AXIsProcessTrusted(), "focusCode": focusCode.rawValue, "rangeCode": rangeCode.rawValue],
     "ocr": ocr(textImage), "imageOCR": ocr(image), "vision": vision], output.appendingPathComponent("capture.json"))
 window.orderOut(nil)
