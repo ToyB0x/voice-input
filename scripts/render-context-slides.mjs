@@ -15,13 +15,14 @@ const server = createServer((req, res) => {
 });
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const profile = await mkdtemp(join(tmpdir(), 'voice-context-slides-'));
-const chrome = spawn(process.env.CHROME_BIN ?? '/usr/bin/chromium', ['--headless', '--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+const chrome = spawn(process.env.CHROME_BIN ?? '/usr/bin/chromium', ['--headless', '--no-sandbox', '--disable-dev-shm-usage', '--disable-background-networking', '--no-first-run', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
 let socket;
+let chromeLog = "";
 try {
   const endpoint = await new Promise((done, reject) => {
-    const timer = setTimeout(() => reject(Error('Chromium startup deadline')), 15000);
+    const timer = setTimeout(() => reject(Error('Chromium startup deadline')), 45000);
     let log = '';
-    chrome.stderr.on('data', bytes => { log += bytes; const match = log.match(/DevTools listening on (ws:\/\/[^\s]+)/); if (match) { clearTimeout(timer); done(match[1]); } });
+    chrome.stderr.on('data', bytes => { log += bytes; chromeLog = log.slice(-12000); const match = log.match(/DevTools listening on (ws:\/\/[^\s]+)/); if (match) { clearTimeout(timer); done(match[1]); } });
     chrome.once('error', reject); chrome.once('exit', code => { clearTimeout(timer); reject(Error('Chromium exited: ' + code)); });
   });
   const targets = await (await fetch(`http://127.0.0.1:${new URL(endpoint).port}/json/list`)).json();
@@ -63,6 +64,7 @@ try {
   await writeFile(join(output, 'slides.pdf'), Buffer.from(pdf.data, 'base64'));
   console.log(JSON.stringify({ status: layout.status, slides: layout.slides.length, pdf: 'slides.pdf' }));
 } finally {
+  await writeFile(join(output, "browser.log"), chromeLog);
   socket?.close(); chrome.kill(); server.closeAllConnections(); server.close();
   await new Promise(r => chrome.exitCode !== null ? r() : chrome.once('exit', r));
   await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

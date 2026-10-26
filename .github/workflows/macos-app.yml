@@ -209,7 +209,7 @@ jobs:
           VOICE_INPUT_LAB_BIN: ${{ github.workspace }}/src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/bin/context-lab-native
           VOICE_INPUT_LAB_ASSETS: ${{ github.workspace }}/src-tauri/target/release/bundle/macos/Voice Input.app/Contents/Resources/lab
           VOICE_INPUT_LAB_EVIDENCE: ${{ runner.temp }}/voice-input-smoke/context-lab
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked controlled_context_helper_real_vision -- --ignored --nocapture
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --bin voice-input controlled_context_helper_real_vision -- --ignored --nocapture
       - name: Verify native overlay focus and render sample views without WebView
         timeout-minutes: 3
         env:
