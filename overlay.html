@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ja">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Voice Input Status</title></head>
+  <body>
+    <main id="overlay" hidden>
+      <div class="heading"><span class="brand">VOICE INPUT</span><span id="phase" role="status" aria-live="polite"></span></div>
+      <p id="timing"></p>
+      <div class="level" id="meter" role="meter" aria-label="マイク入力レベル" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"><span id="fill"></span></div>
+      <p class="hint">操作・取り消しはショートカットか設定画面から</p>
+    </main>
+    <script type="module" src="/src/overlay-entry.ts"></script>
+  </body>
+</html>

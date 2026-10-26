@@ -53,3 +53,8 @@ features = ["CGImage"]
 
 [dev-dependencies]
 tauri = { version = "2.12.5", features = ["test"] }
+
+[[test]]
+name = "overlay-window"
+path = "tests/overlay-window.rs"
+harness = false

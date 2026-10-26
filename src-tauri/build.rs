@@ -1,6 +1,7 @@
 fn main() {
     println!("cargo:rerun-if-env-changed=VOICE_INPUT_UPDATER_PUBLIC_KEY");
     let manifest = tauri_build::AppManifest::new().commands(&[
+        "overlay_status",
         "copy_comparison_report",
         "comparison_models",
         "comparison_plan",

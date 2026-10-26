@@ -29,6 +29,12 @@ mod comparison;
 #[cfg(target_os = "macos")]
 mod lifecycle;
 #[cfg(target_os = "macos")]
+mod overlay;
+#[cfg(any(target_os = "macos", test))]
+mod overlay_state;
+#[cfg(target_os = "macos")]
+mod overlay_window;
+#[cfg(target_os = "macos")]
 mod updater;
 
 fn main() {
@@ -76,11 +82,13 @@ fn main() {
         .manage(updates)
         .manage(activity)
         .manage(lifecycle::Lifecycle::default())
+        .manage(overlay::Overlay::default())
         .manage(context)
         .manage(corrector)
         .manage(inserter)
         .setup(|app| {
             lifecycle::install_native_quit_hook(app.handle())?;
+            overlay::setup(app.handle())?;
             desktop::setup(app)?;
             updater::start_automatic_checks(app.handle());
             Ok(())
@@ -92,6 +100,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            overlay::overlay_status,
             comparison::copy_comparison_report,
             comparison::comparison_models,
             comparison::comparison_plan,

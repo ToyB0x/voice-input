@@ -289,30 +289,37 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let worker = std::thread::spawn(move || {
         let mut previous = String::new();
         while !closing.load(Ordering::Acquire) {
-            if let Ok(snapshot) = handle.state::<Recorder>().status() {
+            if let Ok(snapshot) = handle.state::<Recorder>().overlay_signal() {
+                let (enabled, delivery) = handle.state::<crate::insertion::Inserter>().feedback();
+                let (overlay_enabled, desktop_failed) = handle
+                    .state::<Desktop>()
+                    .inner
+                    .lock()
+                    .map(|inner| (inner.preferences.show_overlay, inner.error.is_some()))
+                    .unwrap_or((false, true));
                 let label = if snapshot.phase == "recording" {
                     "録音中"
-                } else if snapshot.recognition.working
-                    || snapshot.recognition.final_source == "correcting"
+                } else if snapshot.recognizing
+                    || snapshot.loading
+                    || snapshot.discarding
+                    || snapshot.correcting
                 {
                     "処理中"
-                } else if snapshot.phase == "error"
-                    || snapshot.recognition.recognition_error.is_some()
-                    || snapshot.recognition.final_source == "fallback"
-                    || {
-                        let status = handle.state::<crate::insertion::Inserter>().status();
-                        status.enabled && status.state == "blocked"
-                    }
-                    || handle
-                        .state::<Desktop>()
-                        .inner
-                        .lock()
-                        .is_ok_and(|inner| inner.error.is_some())
+                } else if snapshot.failed
+                    || snapshot.fallback
+                    || (enabled && delivery == "blocked")
+                    || desktop_failed
                 {
                     "要確認"
                 } else {
                     "待機"
                 };
+                handle.state::<crate::overlay::Overlay>().tick(
+                    &handle,
+                    overlay_enabled && !handle.state::<crate::comparison::Comparisons>().working(),
+                    &snapshot,
+                    &delivery,
+                );
                 if previous != label {
                     previous = label.into();
                     let _ = state.set_text(label);
@@ -321,7 +328,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(250));
+            std::thread::sleep(Duration::from_millis(50));
         }
     });
     *app.state::<Desktop>()
