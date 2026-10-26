@@ -44,8 +44,12 @@ def sample(report, wall_ms, reused):
     p = report.get('performance', {})
     if any(type(p.get(k)) is not int or p[k] < 0 for k in PHASES):
         raise ValueError('Missing timing evidence')
-    if p.get('input_tokens', 0) <= 0 or p.get('generated_tokens', 0) <= 0:
-        raise ValueError('Expected real inference')
+    if any(type(p.get(k)) is not int or p[k] <= 0 for k in ('input_tokens', 'generated_tokens', 'peak_rss_bytes')):
+        raise ValueError('Expected real inference and numeric process memory')
+    if type(report.get('elapsed_ms')) is not int or report['elapsed_ms'] < sum(p[k] for k in PHASES):
+        raise ValueError('Invalid phase boundaries')
+    if not isinstance(report.get('text'), str) or not report['text'].strip():
+        raise ValueError('Expected a successful nonempty result')
     if reused and (p['backend_ms'] != 0 or p['model_load_ms'] != 0):
         raise ValueError('Reused request initialized the model again')
     # Strict allowlist; do not copy report.text, model metadata or native logs.

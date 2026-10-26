@@ -195,7 +195,7 @@ impl Pool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{os::unix::fs::PermissionsExt, sync::Arc};
+    use std::sync::Arc;
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     struct Fixture {
         root: std::path::PathBuf,
@@ -210,9 +210,18 @@ mod tests {
                 SEQUENCE.fetch_add(1, Ordering::Relaxed)
             ));
             std::fs::create_dir_all(&root).unwrap();
-            let runtime = root.join("helper");
+            // Invoke a stable interpreter. Executing freshly-written shebang files
+            // in parallel tests races Linux fork-inherited write FDs (ETXTBSY).
+            let interpreter = Command::new("python3")
+                .args(["-c", "import sys; print(sys.executable)"])
+                .output()
+                .unwrap();
+            assert!(interpreter.status.success());
+            let runtime =
+                std::path::PathBuf::from(String::from_utf8(interpreter.stdout).unwrap().trim());
+            let model = root.join("helper.py");
             std::fs::write(
-                &runtime,
+                &model,
                 r#"#!/usr/bin/env python3
 import json, os, pathlib, sys, time
 pathlib.Path(sys.argv[0] + '.pid').write_text(str(os.getpid()))
@@ -226,9 +235,6 @@ for count, line in enumerate(sys.stdin, 1):
 "#,
             )
             .unwrap();
-            std::fs::set_permissions(&runtime, std::fs::Permissions::from_mode(0o700)).unwrap();
-            let model = root.join("model.gguf");
-            std::fs::write(&model, b"synthetic model placeholder").unwrap();
             Self {
                 root,
                 runtime,
@@ -255,12 +261,17 @@ for count, line in enumerate(sys.stdin, 1):
             .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|_| FAILED.into()))
         }
         fn pid(&self) -> String {
-            let file = self.root.join("helper.pid");
+            let file = self.root.join("helper.py.pid");
             let start = Instant::now();
-            while !file.exists() && start.elapsed() < Duration::from_secs(5) {
+            while start.elapsed() < Duration::from_secs(5) {
+                if let Ok(pid) = std::fs::read_to_string(&file)
+                    && pid.parse::<u32>().is_ok()
+                {
+                    return pid;
+                }
                 std::thread::sleep(Duration::from_millis(10));
             }
-            std::fs::read_to_string(file).unwrap()
+            panic!("synthetic helper did not publish a PID");
         }
     }
     impl Drop for Fixture {
@@ -269,6 +280,7 @@ for count, line in enumerate(sys.stdin, 1):
         }
     }
     fn assert_reaped(pid: &str) {
+        assert!(pid.parse::<u32>().is_ok());
         assert!(
             !Command::new("/bin/kill")
                 .args(["-0", pid])
@@ -317,7 +329,13 @@ for count, line in enumerate(sys.stdin, 1):
         let b = f
             .request(&pool, "second", &epoch, 1, Duration::from_secs(5))
             .unwrap();
-        std::fs::write(&f.model, b"replacement with different size").unwrap();
+        use std::io::Write;
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&f.model)
+            .unwrap()
+            .write_all(b"\n# replacement with different size\n")
+            .unwrap();
         let c = f
             .request(&pool, "third", &epoch, 1, Duration::from_secs(5))
             .unwrap();

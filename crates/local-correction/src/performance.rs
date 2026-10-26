@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// Non-overlapping phases of a successful inference, in monotonic milliseconds.
 /// RSS is the process lifetime high-water mark, not GPU memory or a stage delta.
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct Performance {
     pub backend_ms: u64,
     pub model_load_ms: u64,

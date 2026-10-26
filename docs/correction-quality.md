@@ -44,4 +44,4 @@ Artifacts:
 - `correction-evaluation-qwen3-*`：`report.json`、`summary.md`、原文から補正候補への`cases.diff`。4Bと8Bは固定ベースラインとの`baseline.diff`も保存します。4Bは音声経由の`route-baseline.diff`と固定判定の`guards/guard-regression.json`も保存します。棄却・失敗による原文保持を各差分へ明記します。
 - `correction-quality-summary`：モデル別・利用先別のCER、事実／書式・棄却数の比較、8Bの同一9ケース、4Bの同一20ケースと一致した音声入力での変更前後、JSONと差分です。
 
-評価はモデルを明示準備した後、Linuxのseccompでネットワークを禁止して実行します。CPUのみの評価はMetalを`NOT TESTED`と記録します。Apple Foundation Modelsの実機評価・モデル選択プリセット・モデル常駐による高速化は後続作業です。証明書・公証は個人利用中は引き続き先送りします。
+評価はモデルを明示準備した後、Linuxのseccompでネットワークを禁止して実行します。CPUのみの評価はMetalを`NOT TESTED`と記録します。モデル選択プリセットと[Qwenの任意のモデル再利用](correction-reuse.md)は利用できます。Apple Foundation Modelsの実機評価と、実機での再利用による速度改善の評価は後続作業です。証明書・公証は個人利用中は引き続き先送りします。

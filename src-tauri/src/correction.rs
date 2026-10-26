@@ -822,6 +822,75 @@ mod tests {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
     #[test]
+    fn automatic_reuse_reports_timings_and_shutdown_reaps_the_idle_helper() {
+        let root = fixture_root("resident-shutdown");
+        let runtime = root.join("local-correction");
+        executable(
+            &runtime,
+            r#"#!/usr/bin/env python3
+import json, os, pathlib, sys
+pathlib.Path(sys.argv[0] + '.pid').write_text(str(os.getpid()))
+for count, line in enumerate(sys.stdin, 1):
+    request = json.loads(line)
+    print(json.dumps(dict(text=request['transcript']+'。', model='synthetic fixture', backend='cpu', offloaded_layers=0,
+        elapsed_ms=5, model_reused=count > 1, performance=dict(backend_ms=0, model_load_ms=0, context_ms=1,
+        prefill_ms=1, generation_ms=2, validation_ms=1))), flush=True)
+"#,
+        );
+        let corrector = Corrector::new();
+        for (raw, reused) in [("first synthetic", false), ("second synthetic", true)] {
+            let config = AutomaticConfig {
+                runtime: runtime.clone(),
+                model: runtime.to_string_lossy().into_owned(),
+                backend: "cpu".into(),
+                reuse_model: true,
+            };
+            let (tx, rx) = std::sync::mpsc::channel();
+            corrector
+                .start_automatic(
+                    config,
+                    raw.into(),
+                    None,
+                    corrector.generation(),
+                    move |result| {
+                        tx.send(result).unwrap();
+                    },
+                )
+                .unwrap();
+            assert_eq!(
+                rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(),
+                format!("{raw}。")
+            );
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while corrector.status().working && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let status = corrector.status();
+            assert!(!status.working);
+            assert_eq!(status.text.as_deref(), Some(format!("{raw}。").as_str()));
+            let timings = status.timings.unwrap();
+            assert_eq!(timings.model_reused, reused);
+            assert_eq!(timings.generation_ms, Some(2));
+        }
+        let pid = std::fs::read_to_string(root.join("local-correction.pid")).unwrap();
+        corrector.shutdown();
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", pid.trim()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            corrector
+                .start_job(corrector.generation(), false, |_, _| unreachable!())
+                .is_err()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn foundation_candidates_use_the_bundled_rust_guard() {
         let root = fixture_root("guard");
         let runtime = root.join("local-correction");
