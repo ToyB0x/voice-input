@@ -27,6 +27,8 @@ mod activity;
 #[cfg(target_os = "macos")]
 mod comparison;
 #[cfg(target_os = "macos")]
+mod lifecycle;
+#[cfg(target_os = "macos")]
 mod updater;
 
 fn main() {
@@ -73,10 +75,12 @@ fn main() {
         .manage(comparisons)
         .manage(updates)
         .manage(activity)
+        .manage(lifecycle::Lifecycle::default())
         .manage(context)
         .manage(corrector)
         .manage(inserter)
         .setup(|app| {
+            lifecycle::install_native_quit_hook(app.handle())?;
             desktop::setup(app)?;
             updater::start_automatic_checks(app.handle());
             Ok(())
@@ -104,6 +108,7 @@ fn main() {
             models::prepare_models,
             models::cancel_model_preparation,
             recorder::recording_status,
+            recorder::recording_level,
             recorder::request_microphone_permission,
             recorder::start_recording,
             recorder::stop_recording,
@@ -129,19 +134,13 @@ fn main() {
         .expect("failed to build Voice Input")
         .run(|app, event| {
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { .. } = event {
-                desktop::show(app);
-            }
-            #[cfg(target_os = "macos")]
-            if matches!(
-                event,
-                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
-            ) {
-                use tauri::Manager;
-                app.state::<comparison::Comparisons>().shutdown();
-                app.state::<local_models::Manager>().shutdown();
-                app.state::<context::Reader>().cancel();
-                app.state::<correction::Corrector>().shutdown();
+            match event {
+                tauri::RunEvent::Reopen { .. } => desktop::show(app),
+                tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    lifecycle::request_exit(app, api, code)
+                }
+                tauri::RunEvent::Exit => lifecycle::native_exit(),
+                _ => {}
             }
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);

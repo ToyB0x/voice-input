@@ -18,15 +18,17 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 35
     env:
-      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      MACOSX_DEPLOYMENT_TARGET: '27.0'
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.release.tag_name || github.ref }}
+      - name: Verify supported release host and SDK
+        run: python3 scripts/verify-macos-support.py --output "$RUNNER_TEMP/platform.json"
       - name: Cache immutable registry publication metadata
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -52,8 +54,8 @@ jobs:
             src-tauri/target
             crates/local-correction/target
             crates/local-transcription/target
-          key: release-${{ runner.arch }}-${{ hashFiles('src-tauri/Cargo.lock', 'crates/local-correction/Cargo.lock', 'crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: release-${{ runner.arch }}-
+          key: macos27-release-${{ runner.arch }}-${{ hashFiles('src-tauri/Cargo.lock', 'crates/local-correction/Cargo.lock', 'crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos27-release-${{ runner.arch }}-
       - name: Validate version and configure signed artifacts
         run: |
           python3 scripts/release-assets.py version --tag "$RELEASE_TAG"
@@ -88,6 +90,7 @@ jobs:
           (Path(os.environ['RUNNER_TEMP'])/'release-config.json').write_text(json.dumps(config))
           PY
           pnpm run tauri build --bundles app,dmg --ci --config "$RUNNER_TEMP/release-config.json" -- --locked
+          python3 scripts/verify-macos-support.py --app "src-tauri/target/release/bundle/macos/Voice Input.app" --output "$RUNNER_TEMP/release-platform.json"
           python3 scripts/release-assets.py package --tag "$RELEASE_TAG" --bundle src-tauri/target/release/bundle --output "$RUNNER_TEMP/release-assets"
           # Verify the actual updater archive with the official plugin before publishing.
           export VOICE_INPUT_VERIFY_UPDATE_DIR="$RUNNER_TEMP/release-assets"

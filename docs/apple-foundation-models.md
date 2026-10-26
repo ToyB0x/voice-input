@@ -6,8 +6,8 @@ Whisperによるローカル文字起こしの後に、Appleのオンデバイ�
 
 ## 実機で試す手順
 
-1. Apple Intelligenceに対応したMacで、macOS 26以降を利用します。システム設定でApple Intelligenceを有効にし、モデルの準備完了を待ちます。日本語への対応はOS・モデルの版にも依存し、ヘルパーで`supportsLocale(ja)`を確認します。
-2. 成功したCIのArtifact `voice-input-macos-ARM64-<試行番号>` をダウンロードし、`Voice-Input-macos.zip`を展開してアプリを使えます（Apple Silicon向け）。`provenance.json`にソースリビジョンとZIPのSHA-256を記録します。手元で作る場合はXcode 26以降でビルドします。署名・公証を行わない個人利用の起動手順は[利用ガイド](user-guide.md)と同じです。
+1. Apple Intelligenceに対応したMacで、macOS 27以降を利用します。システム設定でApple Intelligenceを有効にし、モデルの準備完了を待ちます。日本語への対応はOS・モデルの版にも依存し、ヘルパーで`supportsLocale(ja)`を確認します。
+2. ビルドが完了したCIのArtifact `voice-input-macos-ARM64-<試行番号>` をダウンロードし、後続のUI検証結果も確認してから`Voice-Input-macos.zip`を展開してアプリを使えます（Apple Silicon向け）。`provenance.json`にソースリビジョンとZIPのSHA-256を記録します。手元で作る場合はXcode 27以降でビルドします。署名・公証を行わない個人利用の起動手順は[利用ガイド](user-guide.md)と同じです。
 3. 最終補正欄で「Apple Foundation Models（実験的）」を選び、「設定を保存」を押します。GGUFパスとCPU / Metalの指定はAppleモデルでは利用しません。実行デバイスはOSが管理します。以前のQwen設定は保存したままです。
 4. 「Appleモデルの診断」を開き、「Appleモデルの利用可否を確認」を押します。この操作では推論しません。
 5. いつものWhisperで録音・文字起こしを行い、「最終補正をプレビュー」を押します。初めは短い日本語で試してください。
@@ -22,8 +22,8 @@ Whisperによるローカル文字起こしの後に、Appleのオンデバイ�
 | 状態・固定コード | 確認すること |
 |---|---|
 | `available` | 次に実際のプレビューで生成・原文保持チェックの成否を確認 |
-| `osTooOld` | macOS 26以降を使用 |
-| `frameworkMissingFromSDK` | Xcode 26以降を選択してヘルパーを再ビルド。古いSDKで作ったヘルパーはOS更新だけでは有効にならない |
+| `osTooOld` | アプリの対応OSはmacOS 27以降 |
+| `frameworkMissingFromSDK` | Xcode 27以降を選択してヘルパーを再ビルド。古いSDKで作ったヘルパーはOS更新だけでは有効にならない |
 | `deviceNotEligible` | Apple Intelligence対応のハードウェアか確認 |
 | `appleIntelligenceNotEnabled` | システム設定でApple Intelligenceを有効化 |
 | `modelNotReady` / `assets-unavailable` | OS側のモデル準備を待ち、再確認 |
@@ -41,12 +41,12 @@ Whisperによるローカル文字起こしの後に、Appleのオンデバイ�
 ## ビルドと固定サンプルでの確認
 
 ```sh
-# Xcode 26以降を選択した状態で実行
+# Xcode 27以降を選択した状態で実行
 pnpm install --frozen-lockfile
 pnpm run tauri build --bundles app
 ```
 
-`prepare-native-runtime.py`は、従来のRust補正ランタイムとSwiftヘルパーをアプリへ同梱します。Swiftヘルパーの最低実行OSはmacOS 14で、FoundationModelsをweak linkします。古いOSでもアプリが起動でき、Apple補正を選ぶと`osTooOld`を返します。古いSDKでも非対応を返すヘルパーはビルドできますが、Appleモデルの生成コードを含みません。
+`prepare-native-runtime.py`は、従来のRust補正ランタイムとSwiftヘルパーをアプリへ同梱します。Swiftヘルパーを含む同梱実行ファイルの最低実行OSはmacOS 27です。FoundationModelsのAPI自体は26以降で提供されていますが、このアプリは26以下をサポートしません。古いSDKでも非対応を返すソース経路は残っていますが、配布・CIでは27以降のSDKを必須にします。
 
 録音と切り離してヘルパーを確認する場合（固定の合成文のみ）:
 
@@ -65,6 +65,6 @@ printf '%s' '{"transcript":"会議は10時です","candidate":"会議は20時で
 
 Swiftヘルパーは毎回新しい`LanguageModelSession`を作り、ツールや以前の録音の履歴を渡しません。構造化出力で本文だけを生成し、その候補を既存のRustガードで検証してからプレビューへ渡します。これらのガードは意味の同一性を保証するものではなく、Appleモデルの品質がQwenより高いことも未確認です。アプリ側の約150秒の制限と、取り消し・新しい録音・エンジン変更・終了時の子プロセス停止／回収は両エンジンに適用します。
 
-通常CIでは、macOS最新SDKで生成コードを含むヘルパーをコンパイルし、macOS 26のアプリへ同梱します。最低対応OSは14のままです。任意のmacOS 14ジョブでweak linkによる起動と明示的な非対応応答を確認します。来歴とハッシュを照合した上で、旧OSでの起動・非対応応答、サイズ制限・不正入力、共通ガード32ケース、子プロセス回収、実アプリのエンジン選択・利用可否確認・診断コピーを検証します。公開・合成データ以外をCIへ送りません。
+通常CIでは、`xcode-27`上でヘルパーとアプリをビルドし、同じrunのArtifact経由で同梱します。ホストOS・SDK・アプリのInfo.plist・全同梱実行ファイルの最低OSが27以降の方針と一致することを検証します。来歴とハッシュ、サイズ制限・不正入力、共通ガード32ケース、子プロセス回収、実アプリのエンジン選択・利用可否確認・診断コピーを検証します。公開・合成データ以外をCIへ送りません。macOS 14専用の起動検証は削除しました。
 
 Artifact `apple-foundation-runtime`にSDK版・来歴・利用可否の結果、通常のMac Artifactに`foundation-runtime.json`と`foundation/diagnostics.png`・`diagnostics.json`・`interaction.json`を保存します。CIのVMが`deviceNotEligible`なら`inferenceTested: false`と記録します。SDKでコンパイルできたことや模擬応答のガード試験を、実際のAppleモデルの推論成功として扱いません。対応実機での生成・日本語品質・速度はPRマージ後の確認事項です。

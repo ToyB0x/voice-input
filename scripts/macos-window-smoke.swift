@@ -27,6 +27,16 @@ func visibleWindows(for pid: pid_t) -> [[String: Any]] {
     }
 }
 
+func waitForTermination(_ app: NSRunningApplication) -> Bool {
+    if app.isTerminated { return true }
+    guard app.terminate() else { return false }
+    let deadline = Date().addingTimeInterval(10)
+    while !app.isTerminated && Date() < deadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    }
+    return app.isTerminated
+}
+
 func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
     guard let bundle = Bundle(url: appURL),
           bundle.executableURL != nil
@@ -52,10 +62,11 @@ func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
     }
     guard let app = launched else { throw SmokeFailure(description: "Launched app was not registered with the window server") }
+    var terminationAttempted = false
     defer {
         if !app.isTerminated {
-            app.terminate()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            if !terminationAttempted { _ = waitForTermination(app) }
+            // Failure cleanup only. Successful checks below require graceful quit.
             if !app.isTerminated { app.forceTerminate() }
         }
     }
@@ -98,7 +109,15 @@ func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
                 request.recognitionLevel = .accurate
                 request.recognitionLanguages = ["en-US", "ja-JP"]
                 request.usesLanguageCorrection = false
-                try VNImageRequestHandler(url: screenshot, options: [:]).perform([request])
+                do {
+                    try VNImageRequestHandler(url: screenshot, options: [:]).perform([request])
+                } catch {
+                    // Vision can reject an initial blank frame. Keep the same bounded
+                    // deadline and require rendered page text before reporting success.
+                    lastFailure = "Vision OCR failed: \(error)"
+                    RunLoop.current.run(until: Date().addingTimeInterval(1))
+                    continue
+                }
                 let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
                 try writeJSON(lines, to: output.appendingPathComponent("ocr.json"))
                 let normalized = lines.joined().lowercased().filter { !$0.isWhitespace }
@@ -108,6 +127,10 @@ func smokeTest(appURL: URL, output: URL, scenario: String?) throws {
                 if missing.isEmpty && !app.isTerminated {
                     if let scenario {
                         try recordingInteraction(pid: app.processIdentifier, windowID: windowID, scenario: scenario, output: output)
+                    }
+                    terminationAttempted = true
+                    guard waitForTermination(app) else {
+                        throw SmokeFailure(description: "App did not terminate gracefully within 10 seconds")
                     }
                     let result: [String: Any] = [
                         "status": "passed",

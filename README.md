@@ -64,8 +64,8 @@ base / small を固定した人間の読み上げ音声と無音で比較し、�
 
 ## macOS で開発する
 
-- macOS 14 以降（アプリの対象下限。CI は macOS 14 / Apple Silicon）
-- Xcode Command Line Tools: `xcode-select --install`
+- macOS 27 以降（アプリの対象下限。アプリCIは `xcode-27` / Apple Silicon）
+- Xcode 27以降またはmacOS 27 SDKを含むCommand Line Tools（`xcrun --sdk macosx --show-sdk-version`で27以降を確認）
 - Node.js 26.12.1（`.nvmrc`）と pnpm 12.15.0（`package.json`の`packageManager`で固定）
 - CMake: `brew install cmake`（文字起こしエンジンのビルドに必要）
 - [rustup](https://rustup.rs/)（Rust は `rust-toolchain.toml` で指定）
@@ -112,13 +112,13 @@ macOS の `.app` のビルド・起動には Mac が必要です。
 
 PR と `main` への push 時に macOS 上で pnpm 依存導入、Rust のフォーマット・Clippy、
 音声処理の Rust テスト、評価器の Python テスト、モデル不要の固定補正ガード32件、
-Tauri の `.app` ビルド、短いオフライン認識、ネイティブウィンドウの表示確認を実行します。
-権限・録音・OCR・直接入力の完全テストは手動・週次実行へ、全モデル比較は手動・週次の別workflowへ分けます。
+Tauri の `.app` ビルド、短いオフライン認識、モデル読込後を含む正常終了・資源解放の確認を実行します。
+Previewの画面検証と権限・録音・OCR・直接入力の完全テストは独立した手動・週次workflowへ、全モデル比較は手動・週次の別workflowへ分けます。
 [実行範囲・週次スケジュール・対象ブランチの手動検証](docs/ci.md) を参照してください。
-ビルドした `.app` を起動してウィンドウを撮影し、Apple Vision のローカル OCR で
+独立した `macOS Preview UI` workflowでは、ビルドした `.app` を起動してウィンドウを撮影し、Apple Vision のローカル OCR で
 「Voice Input」と本文の「Rust」「Tauri」が表示されていることを検証します。
 プロセスの起動やウィンドウの存在だけでは成功にせず、本文が描画されない場合や
-画面撮影に失敗した場合も CI を失敗させます。
+画面撮影に失敗した場合も、そのworkflowを失敗させます。通常CIの成功はGUI検証の成功を意味しません。
 ログ保存用の `tee` が失敗を隠さないよう、CI のシェルを明示的に Bash に指定しています。
 さらに、不正な Swift ソースと存在しないアプリを使った失敗ケースを実行し、
 コンパイラー・検証ツールの終了コードがパイプラインから伝わることも確認します。
@@ -129,7 +129,9 @@ OS の実際の許可ダイアログを UI 操作します。許可・拒否を�
 入力レベル・停止・破棄まで検証します。製品側に CI 専用の録音・権限バイパスは設けません。
 これらの仮想デバイスや権限リセットは使い捨ての GitHub ランナー内だけで行います。
 
-GitHub Actions の実行結果の **Artifacts → `macos-window-smoke-1`**
+通常CIの **Artifacts → `macos-build-exit-1`** には、`exit/summary.json`と終了・資源解放のログを保存します。
+
+GUI workflowの実行結果の **Artifacts → `macos-window-smoke-1`**
 （末尾は再実行回数）から次の確認資料をダウンロードできます。
 
 - `window.png`: 実際のネイティブウィンドウのスクリーンショット
@@ -137,7 +139,7 @@ GitHub Actions の実行結果の **Artifacts → `macos-window-smoke-1`**
 - `app.log` / `app.stdout.log` / `capture.log` / `smoke.log` / `swift-build.log`: 起動・撮影・検証ログ
 - `windows.json`: 対象アプリの可視ウィンドウ情報
 - `expected-failures/`: 終了コードの回帰チェックで意図的に起こした失敗のログ・判定結果
-- `coverage.json`: 通常の画面スモーク / 完全結合テストの要求範囲
+- `coverage.json`: ビルド・終了 / 画面スモーク / 完全結合テストの要求範囲
 - `permission-denied/` / `permission-allowed/`（完全テスト時）: 実際の許可ダイアログ、録音状態の画像、UI 操作の検証結果
 
 失敗時も、その時点までに生成できた資料を保存します。保存期間は 14 日です。
@@ -163,7 +165,7 @@ docs/architecture.md  フレームワーク選定と後続機能
 
 ## ローカルOCR・最終補正
 
-入力先の欄をApple VisionでOCRし、取得テキストのWhisper／最終補正への利用を独立して切り替えられます。軽量なローカルQwen3による補正はプレビュー専用で、元の文字起こしを保持します。初期状態では取得元は無効、補正モデルは未設定です。[準備・権限・比較方法](docs/local-correction.md)を参照してください。macOS 26以降では、[Appleのオンデバイスモデルによる補正](docs/apple-foundation-models.md)も実験的に選べます。
+入力先の欄をApple VisionでOCRし、取得テキストのWhisper／最終補正への利用を独立して切り替えられます。軽量なローカルQwen3による補正はプレビュー専用で、元の文字起こしを保持します。初期状態では取得元は無効、補正モデルは未設定です。[準備・権限・比較方法](docs/local-correction.md)を参照してください。macOS 27以降では、[Appleのオンデバイスモデルによる補正](docs/apple-foundation-models.md)も実験的に選べます。
 
 ### 実機での一括比較
 

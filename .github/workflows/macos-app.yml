@@ -3,6 +3,10 @@ name: macOS app checks
 on:
   workflow_call:
     inputs:
+      run_ui:
+        description: Run strict Preview GUI checks in addition to build and exit checks
+        type: boolean
+        default: false
       full_integration:
         description: Run real permissions, recording, OCR and insertion scenarios
         type: boolean
@@ -13,17 +17,19 @@ permissions:
 
 jobs:
   macos:
-    name: ${{ inputs.full_integration && 'macOS full integration' || 'macOS build and window smoke' }}
-    runs-on: macos-26
+    name: ${{ inputs.full_integration && 'macOS full integration (Preview)' || inputs.run_ui && 'macOS window smoke (Preview)' || 'macOS build and clean exit' }}
+    runs-on: xcode-27
     timeout-minutes: ${{ inputs.full_integration && 60 || 30 }}
     env:
-      MACOSX_DEPLOYMENT_TARGET: "14.0"
+      MACOSX_DEPLOYMENT_TARGET: "27.0"
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify supported host and SDK
+        run: python3 scripts/verify-macos-support.py --output "$RUNNER_TEMP/platform.json"
       - name: Cache immutable registry publication metadata
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -56,19 +62,21 @@ jobs:
       - name: Record requested CI scope
         env:
           VOICE_INPUT_FULL_INTEGRATION: ${{ inputs.full_integration }}
+          VOICE_INPUT_UI_REQUESTED: ${{ inputs.run_ui || inputs.full_integration }}
         run: |
           python3 - <<'PYCODE'
           import json, os
           from pathlib import Path
           full = os.environ['VOICE_INPUT_FULL_INTEGRATION'].lower() == 'true'
-          mode = 'full-integration' if full else 'build-window-smoke'
+          ui = os.environ['VOICE_INPUT_UI_REQUESTED'].lower() == 'true'
+          mode = 'full-integration' if full else ('build-window-smoke' if ui else 'build-exit-checks')
           root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-smoke'
           root.mkdir(parents=True, exist_ok=True)
           import shutil
           shutil.copyfile(Path(os.environ['RUNNER_TEMP']) / 'foundation-runtime/host-verification.json', root / 'foundation-runtime.json')
-          (root / 'coverage.json').write_text(json.dumps(dict(requested_scope=mode, source_revision=os.environ['GITHUB_SHA']))+'\n')
+          (root / 'coverage.json').write_text(json.dumps(dict(requested_scope=mode, ui_requested=ui, source_revision=os.environ['GITHUB_SHA']))+'\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write(f'CI scope: **{mode}**. Full permission/audio/OCR/insertion scenarios run on the weekly schedule or explicit full dispatch.\n')
+              summary.write(f'CI scope: **{mode}**. GUI checks run only when explicitly requested; see the separate macOS Preview UI workflow for weekly/full runs.\n')
           PYCODE
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
@@ -82,6 +90,8 @@ jobs:
         run: rustup show
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+      - name: Test model preparation feedback with controlled IPC timing
+        run: pnpm run test:ui
       - name: Restore Rust build cache
         id: rust-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -89,22 +99,22 @@ jobs:
           path: |
             ~/.cargo/registry
             src-tauri/target
-          key: macos26-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos26-${{ runner.arch }}-app-rust-v1-
+          key: macos27-${{ runner.arch }}-app-rust-v1-${{ hashFiles('src-tauri/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos27-${{ runner.arch }}-app-rust-v1-
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: correction-cache
         with:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
-          key: macos26-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos26-${{ runner.arch }}-correction-runtime-v2-
+          key: macos27-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos27-${{ runner.arch }}-correction-runtime-v2-
       - name: Restore previous correction target cache
         if: steps.correction-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: crates/local-correction/target
-          key: macos26-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          key: macos27-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
       - name: Test evaluation helpers
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Test pinned model preparation without networking
@@ -158,6 +168,11 @@ jobs:
         run: pnpm run tauri build --bundles app --ci -- --locked
         env:
           APPLE_SIGNING_IDENTITY: "-"
+      - name: Verify packaged app and every bundled executable require macOS 27
+        run: |
+          python3 scripts/verify-macos-support.py \
+            --app "src-tauri/target/release/bundle/macos/Voice Input.app" \
+            --output "$RUNNER_TEMP/voice-input-smoke/platform.json"
       # Save after a successful build even if a later native UI check fails.
       # Cargo rechecks local sources when restoring this dependency/build cache.
       - name: Save Rust build cache
@@ -168,6 +183,36 @@ jobs:
             ~/.cargo/registry
             src-tauri/target
           key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+      - name: Package the built app for personal device debugging
+        run: |
+          mkdir -p "$RUNNER_TEMP/voice-input-app"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/macos/Voice Input.app" \
+            "$RUNNER_TEMP/voice-input-app/Voice-Input-macos.zip"
+          python3 - <<'PYCODE'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-app'
+          archive = root / 'Voice-Input-macos.zip'
+          (root / 'provenance.json').write_text(json.dumps(dict(source_revision=os.environ['GITHUB_SHA'],
+              architecture=os.environ['RUNNER_ARCH'], developer_id_signed=False, notarized=False,
+              minimum_system_version='27.0', validation='build-only; inspect CI result and macos-build-exit or macos-window-smoke evidence for runtime validation',
+              archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))+'\n')
+          PYCODE
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: voice-input-macos-${{ runner.arch }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-input-app/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Verify clean exit before the Preview window check
+        timeout-minutes: 6
+        run: |
+          python3 scripts/prepare-transcription-model.py "$RUNNER_TEMP/exit-model.bin"
+          python3 scripts/verify-macos-exit.py \
+            --app "src-tauri/target/release/bundle/macos/Voice Input.app" \
+            --model "$RUNNER_TEMP/exit-model.bin" \
+            --output "$RUNNER_TEMP/voice-input-smoke/exit"
       - name: Build observable native context fixture
         if: inputs.full_integration
         run: |
@@ -245,6 +290,7 @@ jobs:
           assert report['text'] == '' and report['offloaded_layers'] == 0
           PY
       - name: Verify native window and capture screenshot
+        if: inputs.run_ui || inputs.full_integration
         timeout-minutes: 3
         run: |
           mkdir -p "$RUNNER_TEMP/voice-input-smoke"
@@ -257,6 +303,7 @@ jobs:
             "$RUNNER_TEMP/voice-input-smoke" \
             2>&1 | tee "$RUNNER_TEMP/voice-input-smoke/smoke.log"
       - name: Verify Apple engine selection and body-free diagnostics in the actual app
+        if: inputs.run_ui || inputs.full_integration
         timeout-minutes: 3
         env:
           VOICE_INPUT_FOUNDATION_VERIFICATION: ${{ runner.temp }}/voice-input-smoke/foundation-runtime.json
@@ -265,6 +312,7 @@ jobs:
             "$PWD/src-tauri/target/release/bundle/macos/Voice Input.app" \
             "$RUNNER_TEMP/voice-input-smoke/foundation" foundation
       - name: Verify comparison screen, full condition plan and safe empty-recording rejection
+        if: inputs.run_ui || inputs.full_integration
         timeout-minutes: 3
         run: |
           "$RUNNER_TEMP/voice-input-smoke-runner" \
@@ -537,6 +585,7 @@ jobs:
           sudo sysadminctl -deleteUser voiceinput-ci >/dev/null 2>&1 || true
           rm -f "$RUNNER_TEMP/voice-input-ci-authorization.json"
       - name: Check compiler and smoke failure exit statuses
+        if: inputs.run_ui || inputs.full_integration
         run: |
           negative="$RUNNER_TEMP/voice-input-smoke/expected-failures"
           mkdir -p "$negative"
@@ -561,32 +610,11 @@ jobs:
             echo "::error::Compiler or smoke failure was not propagated through tee"
             exit 1
           fi
-      - name: Package the tested app for personal device debugging
-        run: |
-          mkdir -p "$RUNNER_TEMP/voice-input-app"
-          ditto -c -k --sequesterRsrc --keepParent \
-            "src-tauri/target/release/bundle/macos/Voice Input.app" \
-            "$RUNNER_TEMP/voice-input-app/Voice-Input-macos.zip"
-          python3 - <<'PYCODE'
-          import hashlib, json, os
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP']) / 'voice-input-app'
-          archive = root / 'Voice-Input-macos.zip'
-          (root / 'provenance.json').write_text(json.dumps(dict(source_revision=os.environ['GITHUB_SHA'],
-              architecture=os.environ['RUNNER_ARCH'], developer_id_signed=False, notarized=False,
-              archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest()))+'\n')
-          PYCODE
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: voice-input-macos-${{ runner.arch }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/voice-input-app/
-          retention-days: 14
-          if-no-files-found: error
-      - name: Upload native window evidence
+      - name: Upload native validation evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: macos-window-smoke-${{ github.run_attempt }}
+          name: ${{ (inputs.run_ui || inputs.full_integration) && 'macos-window-smoke' || 'macos-build-exit' }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/voice-input-smoke/
           retention-days: 14
           if-no-files-found: warn

@@ -6,7 +6,7 @@
 
 ## 自分のMacでビルド・配置する
 
-macOS 14以降、Xcode Command Line Tools、Node.js 26、Rust（rustup）、CMakeが必要。
+macOS 27以降、Xcode 27以降またはmacOS 27 SDKを含むCommand Line Tools、Node.js 26、Rust（rustup）、CMakeが必要。
 [開発環境の説明](../README.md#macos-で開発する) に従って導入する。
 
 ```sh
@@ -35,7 +35,7 @@ Gatekeeperが起動を止めた場合は、入手元と内容を確認し、一�
 
 ## CIで検証したアプリを使う
 
-成功したActionsのArtifact `voice-input-macos-ARM64-<試行番号>`には、Apple Silicon向けの`Voice-Input-macos.zip`と`provenance.json`を保存する。JSONのソースリビジョンとSHA-256を確認し、ZIPを展開して`Voice Input.app`を自分のApplicationsへ配置する。モデルや個人設定は含まない。Developer ID署名・公証はないため、隔離属性で起動できない場合は上記の対象アプリを「このまま開く」手順を使う。
+ビルドが完了したActionsのArtifact `voice-input-macos-ARM64-<試行番号>`には、Apple Silicon向けの`Voice-Input-macos.zip`と`provenance.json`を保存する。後続の画面テストが失敗していても保存するため、まずCI結果と画面Artifactを確認する。JSONのソースリビジョンとSHA-256を確認し、ZIPを展開して`Voice Input.app`を自分のApplicationsへ配置する。モデルや個人設定は含まない。Developer ID署名・公証はないため、隔離属性で起動できない場合は上記の対象アプリを「このまま開く」手順を使う。
 
 ## モデルを準備して設定する
 
@@ -62,6 +62,8 @@ python3 -c 'from pathlib import Path; print(Path("models/ggml-small.bin").resolv
 初期ショートカットは **Command + Shift + Space**。押して離すと録音開始、もう1回押して離すと停止し、
 モデルが準備済みならローカル文字起こしする。最大60秒で自動停止する。
 初回の録音時だけOSのマイク許可を確認する。拒否済みなら画面からシステム設定を開ける。
+「録音入力」には、その録音で実際に選んだデバイス名・サンプルレート・チャンネル数を表示する。外付けマイクを使う場合は、先にmacOSの「システム設定 → サウンド → 入力」で選び、録音を開始する。変更した場合は一度停止して録音し直す。
+入力レベルは同じ録音データのRMSをdBFSで表示する。バーの範囲は-60〜0 dBFS、数値はそれより小さい音も表示する。高速表示が利用できない場合も通常の状態取得で表示を続け、失敗理由を画面に示す。
 録音中・認識中はメニューバーの `VI 録音中` / `VI 処理中` で確認できる。
 認識中やモデル読み込み中は次の録音を始められない。
 
@@ -134,3 +136,11 @@ CIから個人Macの許可を操作することはできない。必要な初回
 アプリ内から公式モデルを準備する操作・プリセット・保存先は[モデル準備ガイド](model-setup.md)を参照してください。取得は明示操作時だけ行い、音声や画面情報は送信しません。既存の手入力パスも利用できます。
 
 Apple Intelligence対応Macで最終補正にAppleのオンデバイスモデルを試す場合は、[Apple Foundation Modelsの利用・診断手順](apple-foundation-models.md)を参照してください。音声認識は引き続きWhisperで行います。新しいTCC権限の自動付与や署名・公証は行いません。
+
+## 対応OSとCIの結果
+
+対応OSはmacOS 27以降です。macOS 26以下はサポート対象外です。アプリのビルド・表示・権限の検証とRelease生成には、GitHub ActionsのPreviewイメージ `xcode-27` を使用します。26上の音声エンジン単体テストは補助検証です。
+
+アプリArtifactはビルド完了時に保存するため、その後の画面・権限テストが失敗した場合もダウンロードできます。`provenance.json`のリビジョン・SHA-256を照合し、対応するCI結果と`macos-window-smoke` Artifactも確認してください。Artifactの存在は動作確認の成功を意味しません。
+
+実機では、起動と画面表示、マイク・アクセシビリティ・画面収録の許可と拒否、録音から文字起こし・コピー、任意の直接入力とOCRを確認します。Appleモデルは診断で実際の利用可否を確認し、利用できる場合に短い発話の補正と原文保持を試してください。GHAの`deviceNotEligible`は実機での利用不可を意味せず、CIでは推論未検証として扱います。

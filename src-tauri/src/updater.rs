@@ -224,7 +224,11 @@ fn busy(app: &tauri::AppHandle) -> Result<bool, String> {
             .contains(&app.state::<local_models::Manager>().status().phase.as_str()))
 }
 pub fn start_automatic_checks(app: &tauri::AppHandle) {
+    if PUBLIC_KEY.trim().is_empty() {
+        return;
+    }
     let handle = app.clone();
+    let activity = app.state::<crate::activity::Activity>().inner().clone();
     tauri::async_runtime::spawn(async move {
         // Do not compete with startup model loading. A busy check is retried on the next interval.
         let mut next = std::time::Instant::now() + Duration::from_secs(30);
@@ -234,6 +238,9 @@ pub fn start_automatic_checks(app: &tauri::AppHandle) {
                 std::thread::sleep(Duration::from_secs(30))
             })
             .await;
+            if activity.is_closing() {
+                break;
+            }
             if std::time::Instant::now() >= next {
                 let updates = handle.state::<Updates>();
                 if updates.check(handle.clone()).is_ok() {

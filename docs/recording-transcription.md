@@ -54,7 +54,7 @@ Artifacts の `macos-window-smoke-1/transcription/` に各状態の画面、公�
 クリップボード一致と破棄の判定を保存する（末尾は実行回数、保存14日）。音声・モデルは含めない。
 音声の出典・利用条件は [fixtureの説明](../crates/local-transcription/tests/fixtures/README.md) を参照。
 
-CIは仮想マイク・公開音声・macOS 14のApple Silicon環境での検証。
+アプリのCIは仮想マイク・公開音声・macOS 27のApple Silicon環境で検証する。Previewランナーの制限と実機での確認項目は[CIの範囲](ci.md)を参照。
 自然発話の精度、物理マイク固有の挙動、他のOS・デバイスでの性能は後続で評価する。
 今回、人による権限確認を前提にした未完了の検証は設けない。
 

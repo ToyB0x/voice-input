@@ -22,8 +22,9 @@ section {
 h2 { margin-top: 0; font-size: 1rem; }
 section p { margin-bottom: 0; font-size: 0.9rem; }
 .privacy, .hint { color: #526177; font-size: 0.85rem; }
-.level { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0; font-size: 0.85rem; }
-meter { flex: 1; min-width: 3rem; }
+.level { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 1rem 0; font-size: 0.85rem; }
+#input-level { flex: 1; min-width: 3rem; height: 0.65rem; background: #dbe0e8; border-radius: 0.35rem; overflow: hidden; }
+#input-level-fill { display: block; width: 0%; height: 100%; background: #315fba; border-radius: inherit; transition: width 45ms linear; }
 output { min-width: 4rem; text-align: right; font-variant-numeric: tabular-nums; }
 .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 button { font: inherit; padding: 0.65rem 1rem; border: 1px solid #b7c3d7; border-radius: 8px; cursor: pointer; }
@@ -37,7 +38,13 @@ button:focus-visible { outline: 3px solid #5485e6; outline-offset: 2px; }
   :root { color: #e5eaf2; background: #171c24; }
   .eyebrow, .privacy, .hint { color: #aab8ce; }
   section { border-color: #364154; background: #202733; }
+  #input-level { background: #364154; }
+  #input-level-fill { background: #5485e6; }
   #error { color: #ffa3a3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #input-level-fill { transition: none; }
 }
 
 label { font-size: 0.85rem; }
@@ -65,3 +72,5 @@ details { margin: 0.75rem 0; }
 .comparison-table th, .comparison-table td { padding: .5rem; text-align: left; vertical-align: top; border-bottom: 1px solid #8885; white-space: pre-wrap; }
 .comparison-table pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 28rem; }
 #comparison-panel select { width: 100%; }
+
+#input-device, #input-level-status { overflow-wrap: anywhere; }

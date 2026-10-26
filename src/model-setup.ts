@@ -33,21 +33,31 @@ export function setupModels(locked: () => boolean, apply: (speech: string | unde
   const busy = () => requesting || !!state && ["starting", "downloading", "verifying"].includes(state.phase);
   const onlyDisableCorrection = () => speech.value === "" && correction.value === "";
   const matches = () => !!state && state.phase === "ready" && state.generation !== ignoredGeneration && state.prepared.map(m => m.id).join() === ids().join();
+  function setText(element: HTMLElement, value: string) {
+    if (element.textContent !== value) element.textContent = value;
+  }
   function render() {
     const unavailable = !isTauri() || !models.length;
     preset.disabled = speech.disabled = correction.disabled = unavailable || busy() || locked();
     download.disabled = unavailable || !ids().length || busy() || locked();
     verify.disabled = unavailable || !ids().length || busy() || locked() || ids().some(id => !models.find(m => m.id === id)?.cached);
     applyButton.disabled = !(matches() || onlyDisableCorrection()) || busy() || locked();
-    applyButton.textContent = onlyDisableCorrection() ? "補正を無効にして設定欄へ反映" : "検証済みモデルを設定欄へ反映";
+    setText(applyButton, onlyDisableCorrection() ? "補正を無効にして設定欄へ反映" : "検証済みモデルを設定欄へ反映");
     cancel.disabled = requesting || !busy();
     const chosen = ids().map(id => models.find(m => m.id === id)).filter((m): m is Model => !!m);
     const total = chosen.reduce((n, m) => n + m.bytes, 0);
-    download.textContent = `ダウンロードして準備（最大 ${(total / 1e9).toFixed(2)} GB）`;
-    information.textContent = chosen.map(m => `${m.name} / ${(m.bytes / 1e9).toFixed(2)} GB / ${m.license} / ${m.cached ? "保存あり・使用前に検証" : "未取得"}。${m.memoryHint}`).join("\n");
+    // This render runs with recorder polling too. Preserve the existing text
+    // nodes while a native pointer/keyboard interaction may be in progress.
+    setText(download, `ダウンロードして準備（最大 ${(total / 1e9).toFixed(2)} GB）`);
+    setText(information, chosen.map(m => `${m.name} / ${(m.bytes / 1e9).toFixed(2)} GB / ${m.license} / ${m.cached ? "保存あり・使用前に検証" : "未取得"}。${m.memoryHint}`).join("\n"));
     progress.hidden = !busy();
     progress.max = Math.max(state?.total ?? 0, 1);
     progress.value = state?.received ?? 0;
+  }
+  function showPreparation() {
+    if (!state) return;
+    const progressing = ["downloading", "verifying"].includes(state.phase);
+    message.textContent = state.phase === "starting" ? "準備を開始しています…" : `${state.message}${progressing ? ` ${state.index}/${state.count} · ${(state.received / 1e6).toFixed(0)} / ${(state.total / 1e6).toFixed(0)} MB` : ""}`;
   }
   function reset() { state = undefined; description.textContent = presets[preset.value]?.[2] ?? "準備するモデルを個別に選択できます。"; message.textContent = "準備・検証後に設定欄へ反映してください。"; render(); }
   preset.addEventListener("change", () => { const p = presets[preset.value]; if (p) { speech.value = p[0]; correction.value = p[1]; } reset(); });
@@ -55,7 +65,12 @@ export function setupModels(locked: () => boolean, apply: (speech: string | unde
   async function prepare(allowDownload: boolean) {
     if (busy() || locked()) return;
     requesting = true; ignoredGeneration = -1; message.textContent = "準備を開始しています…"; render();
-    try { state = await invoke<Preparation>("prepare_models", { ids: ids(), download: allowDownload }); }
+    try {
+      state = await invoke<Preparation>("prepare_models", { ids: ids(), download: allowDownload });
+      // A cached verification or transport failure can finish before the first
+      // poll. Render the response itself instead of waiting for a state change.
+      showPreparation();
+    }
     catch (cause) { message.textContent = String(cause); }
     finally { requesting = false; render(); }
   }
@@ -81,9 +96,9 @@ export function setupModels(locked: () => boolean, apply: (speech: string | unde
     try {
       const next = await invoke<Preparation>("model_preparation_status");
       if (state && next.generation === state.generation && state.generation !== ignoredGeneration) {
-        const changed = state.phase !== next.phase || state.received !== next.received;
+        const changed = state.phase !== next.phase || state.received !== next.received || state.message !== next.message;
         state = next;
-        if (changed) message.textContent = `${state.message}${busy() ? ` ${state.index}/${state.count} · ${(state.received / 1e6).toFixed(0)} / ${(state.total / 1e6).toFixed(0)} MB` : ""}`;
+        if (changed) showPreparation();
       } else if (state && next.generation === state.generation) {
         state = next; message.textContent = "準備の反映を取り消しました。検証済みモデルは保存先に残ります。";
       }

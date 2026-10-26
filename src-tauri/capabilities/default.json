@@ -7,6 +7,7 @@
   ],
   "permissions": [
     "allow-recording-status",
+    "allow-recording-level",
     "allow-request-microphone-permission",
     "allow-start-recording",
     "allow-stop-recording",

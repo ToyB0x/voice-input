@@ -1,0 +1,31 @@
+name: macOS Preview UI
+
+on:
+  schedule:
+    - cron: '7 18 * * 0'
+  workflow_dispatch:
+    inputs:
+      full_integration:
+        description: Include real permission, recording, OCR and insertion scenarios
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-preview-ui-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  foundation:
+    name: Apple model runtime
+    uses: ./.github/workflows/apple-foundation.yml
+
+  macos:
+    name: Experimental Preview GUI
+    needs: foundation
+    uses: ./.github/workflows/macos-app.yml
+    with:
+      run_ui: true
+      full_integration: ${{ github.event_name == 'schedule' || inputs.full_integration }}

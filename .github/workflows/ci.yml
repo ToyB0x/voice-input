@@ -4,16 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron: '7 18 * * 0'
   workflow_dispatch:
     inputs:
       full_integration:
         description: Run the full macOS permission/audio/OCR/insertion suite
-        type: boolean
-        default: true
-      legacy_macos14:
-        description: Check legacy macOS 14 startup before its 2026-11-02 runner retirement
         type: boolean
         default: false
       release_validation:
@@ -44,15 +38,13 @@ jobs:
   foundation:
     name: Apple model runtime
     uses: ./.github/workflows/apple-foundation.yml
-    with:
-      verify_legacy: ${{ github.event_name == 'workflow_dispatch' && inputs.legacy_macos14 }}
 
   macos:
     name: macOS app
     needs: [foundation, dependency-policy]
     uses: ./.github/workflows/macos-app.yml
     with:
-      full_integration: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_integration) }}
+      full_integration: ${{ github.event_name == 'workflow_dispatch' && inputs.full_integration }}
 
   transcription:
     name: Offline Japanese ASR (macOS)
@@ -127,8 +119,8 @@ jobs:
           if-no-files-found: warn
 
   metal-capability:
-    name: Inspect Metal capability (latest macOS)
-    runs-on: macos-latest
+    name: Inspect Metal capability (macOS 27)
+    runs-on: xcode-27
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
