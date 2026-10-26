@@ -530,6 +530,48 @@ print(json.dumps(dict(text=p['transcript']+'。',model='fixture',backend='cpu',o
                 _ => assert!(capture.recognition.final_text.is_none()),
             }
         }
+        // A settings change during ASR invalidates the queued correction before
+        // it can reserve a worker. It must not insert a raw fallback either.
+        closing.store(false, Ordering::Release);
+        std::fs::remove_file(&started).unwrap();
+        let generation = shared.lock().unwrap().recognition.begin("transcribing");
+        let request = AutomaticRequest {
+            config: config.clone(),
+            generation: corrector.generation(),
+            hint: None,
+        };
+        corrector.cancel();
+        finish_recognition(
+            &shared,
+            &inserter,
+            &corrector,
+            &closing,
+            generation,
+            Ok("stale settings".into()),
+            false,
+            Some(request),
+        );
+        {
+            let capture = shared.lock().unwrap();
+            assert_eq!(capture.recognition.final_source, "cancelled");
+            assert_eq!(
+                capture.recognition.final_text.as_deref(),
+                Some("stale settings")
+            );
+        }
+        assert!(!started.exists());
+        let generation = shared.lock().unwrap().recognition.begin("transcribing");
+        finish_recognition(
+            &shared,
+            &inserter,
+            &corrector,
+            &closing,
+            generation,
+            Ok("plain ASR".into()),
+            false,
+            None,
+        );
+        assert_eq!(shared.lock().unwrap().recognition.final_source, "whisper");
         corrector.shutdown();
         std::fs::remove_dir_all(root).unwrap();
     }
