@@ -597,8 +597,8 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     }
     defer { if let restarted, !restarted.isTerminated { restarted.forceTerminate() } }
     let restored = AXUIElementCreateApplication(restarted!.processIdentifier)
-    revealProductControl(restored, "Recording shortcut")
     try waitForUI("persisted preferences and automatic CPU model load", seconds: 120) {
+        revealProductControl(restored, "Recording shortcut")
         let text = uiText(restored)
         return text.contains("Control+Alt+KeyV（登録済み）") && text.contains("モデル準備完了（CPUを選択）")
             && textField(restored, label: "Model path").flatMap { axValue($0, kAXValueAttribute) as? String } == model
