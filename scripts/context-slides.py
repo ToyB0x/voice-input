@@ -2,6 +2,7 @@
 """Generate a standalone Japanese slide deck only from a completed measured report."""
 import argparse
 import base64
+import difflib
 from collections import Counter
 import html
 import json
@@ -15,6 +16,19 @@ def e(x): return html.escape(str(x))
 def image(path): return 'data:image/png;base64,'+base64.b64encode(path.read_bytes()).decode()
 def table(headers,rows):
     return '<table><thead><tr>'+''.join('<th>'+e(h)+'</th>' for h in headers)+'</tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+e(c)+'</td>' for c in row)+'</tr>' for row in rows)+'</tbody></table>'
+def condition_counts(rows, scene, source):
+    selected=[x for x in rows if x.get('scene')==scene and x.get('source')==source and x.get('engine')=='qwen3' and x.get('instruction')=='kanji' and x.get('route')==('none' if source=='none' else 'both')]
+    return dict(executed=len(selected),target=sum(x.get('judgment')=='target' for x in selected),opposite=sum(x.get('judgment')=='opposite' for x in selected))
+
+def omitted_fragments(controls, instruction):
+    removed=[]
+    for item in controls:
+        if item['instruction']!=instruction or not item['result'].get('accepted'): continue
+        original,candidate=item['input'],item['result'].get('candidate','')
+        for tag,i,j,_,_ in difflib.SequenceMatcher(None,original,candidate,autojunk=False).get_opcodes():
+            if tag=='delete' and original[i:j].strip(): removed.append(original[i:j])
+    return list(dict.fromkeys(removed))
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--report',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
     r=json.loads(a.report.read_text());assert r.get('completed') is True, 'Incomplete experiment; do not publish measured slides'
@@ -59,18 +73,23 @@ def main():
     # Show observed failures as first-class findings, not just aggregate scores.
     actual=[x for x in rows if x.get('engine')=='none' and x.get('source')=='none']
     raw_examples=list(dict.fromkeys(x.get('raw','') for x in actual))
+    def counts(scene,source,kind='target'):
+        value=condition_counts(rows,scene,source)
+        return f"{value[kind]}/{value['executed']}" if value['executed'] else '未実行'
+    kana=r.get('kanaControls',[])
+    kana_changed=sum(x['result'].get('candidate','').rstrip('。')!=x['input'].rstrip('。') for x in kana if 'candidate' in x['result'])
     add('今回の実測で分かったこと',
-        '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples))+'</b>。最初から「雨／飴」の二択として認識できていたわけではない。</p>'
-        '<p>天気テキストのヒントで「雨」に変わる一方、キャンディ文脈や画像分類だけでは期待した変換に到達しなかった。</p>'
-        '<p>キャンディを画像分類できたことと、音声認識・補正を改善できたことは別。逆の文脈で意図しない「雨」になる条件もあった。</p>'
-        '<p>かな入力の分離テストでも、Qwenは「あめ」のまま出力。追加指示の希望どおりに変換するとは限らない。</p>')
+        '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples))+'</b>。</p>'
+        '<p>直接テキスト＋ヒント・補正の期待語出現：台風 '+counts('storm','fixture-text')+'、キャンディ '+counts('candy','fixture-text')+'。</p>'
+        '<p>画像分類ラベル＋ヒント・補正の期待語出現：台風 '+counts('storm','vision-labels')+'、キャンディ '+counts('candy','vision-labels')+'。逆の文脈での逆語出現：台風 '+counts('storm','mismatched-text','opposite')+'、キャンディ '+counts('candy','mismatched-text','opposite')+'。</p>'
+        '<p>かな入力の分離試験：'+str(len(kana))+'件中'+str(kana_changed)+'件で表記が変化（末尾の句点を除く）。変化だけでは正しい漢字変換や意味保持の証明にならない。</p>')
     controls=r.get('preservationControls',[])
     for instruction,label in [('default','標準指示'),('kanji','漢字表記の追加指示')]:
         xs=[x for x in controls if x['instruction']==instruction]
         if xs:
             add('意味の保持も別に確認する：'+label,
                 table(['原文','実際の補正候補','ガード判定'],[[x['input'],x['result'].get('candidate',''), '採用' if x['result'].get('accepted') else '棄却・原文利用'] for x in xs])+
-                '<p class="small">標準条件では「本番には」「田中さんへ」が脱落しても採用された。否定語・数字のチェックだけでは意味保持を保証できない。追加指示で改善した例も、この4件を超える品質保証にはならない。</p>')
+                '<p class="small">採用候補の文字差分で削除された部分：'+e('、'.join('「'+x+'」' for x in omitted_fragments(controls,instruction)) or 'なし')+'。削除の有無と意味保持は別の評価軸。候補・採否・最終出力はJSONで確認できる。</p>')
     apple=r['foundation']
     add('確認できた範囲と、残る検証','<p>Apple Foundation Models / CI：<b>'+e(apple.get('availability',apple.get('failure','unknown')))+'</b>。利用不可なら推論結果は存在しない。</p><p>この実験は1発話・2シーンのパイロット。一般的な精度改善、他言語や他製品への優位性は結論にしない。</p><p>次の検証：実話者・複数の同音語・文脈が無関係／誤っている条件・直接画像を扱うローカルVLM・実機のAX／撮影。</p><p>数値・否定・名前の保持と、期待語の選択は別の評価軸。採用ガードの通過だけでは品質を保証しない。</p>')
     run=os.environ.get('EVIDENCE_RUN_URL','ローカル実行')
