@@ -34,6 +34,7 @@ def main():
     r=json.loads(a.report.read_text());assert r.get('completed') is True, 'Incomplete experiment; do not publish measured slides'
     a.output.mkdir(parents=True,exist_ok=True)
     rows=r['rows'];slides=[]
+    repeats=len({x['repeat'] for x in rows if 'repeat' in x})
     def add(title,body): slides.append('<section><h1>'+title+'</h1>'+body+'<footer>Voice Input / 合成音声による小規模実験 · '+str(len(slides)+1)+'</footer></section>')
     add('音声だけで、漢字は決まる？','<p class="lead">あめがすごいですね</p><p class="lead">雨 ☔　／　飴 🍬</p><p>音声入力＋ローカルな画面文脈で、同音語の表記を比較する。</p><p>「音声入力 → 整文」を提供する製品例：<a href="https://www.typeless.com/ja">Typeless</a>、<a href="https://wisprflow.ai/">Wispr Flow</a>。製品間の性能比較や市場成長率は本実験の対象外。</p>')
     add('日本語について、何を検証するか','<p>日本語には同音異義語と複数の表記がある。アクセントも手掛かりになるが、音声だけで意図が一意になるとは限らない。</p><p><b>仮説：</b>関連する画面文脈で、意図した表記を選びやすくなる。逆の文脈では、誤誘導も起こり得る。</p><p>「海外言語より日本語が弱い」は今回のデータでは検証していない。他言語の対照群が必要。</p>')
@@ -41,7 +42,7 @@ def main():
         ['音声',r['fixture']['utterance']+' / '+r['fixture']['voice']+' / 合成音声1本'],
         ['音声認識',r['models']['speech']+' / CPU'],['最終補正',r['models']['correction']+' / CPU'],
         ['利用先','Whisperヒントのみ／最終補正のみ／両方'],['追加指示','標準／自然な漢字表記を希望'],
-        ['反復','2回・2回目はシーンと条件の順序を反転'],['推論','直列実行・対象プロセスのネットワーク禁止']])+'<p class="small">同じ合成音声を雨／飴の2シーンへ再利用。反復は独立した話者・発話サンプルではない。</p>')
+        ['反復',f'{repeats}回・偶数回目はシーンと条件の順序を反転'],['推論','直列実行・対象プロセスのネットワーク禁止']])+'<p class="small">同じ合成音声を雨／飴の2シーンへ再利用。反復は独立した話者・発話サンプルではない。</p>')
     captures=[]
     for scene,c in r['captures'].items():
         captures.append([scene,c['ax']['status'],c['ocr']['status'],len(c['ocr'].get('text','')),c['vision']['status'],c['imageOCR']['status'],len(c['imageOCR'].get('text',''))])
@@ -82,7 +83,7 @@ def main():
         '<p>文脈なしのWhisper原文：<b>'+e(' / '.join(raw_examples))+'</b>。</p>'
         '<p>直接テキスト＋ヒント・補正の期待語出現：台風 '+counts('storm','fixture-text')+'、キャンディ '+counts('candy','fixture-text')+'。</p>'
         '<p>画像分類ラベル＋ヒント・補正の期待語出現：台風 '+counts('storm','vision-labels')+'、キャンディ '+counts('candy','vision-labels')+'。逆の文脈での逆語出現：台風 '+counts('storm','mismatched-text','opposite')+'、キャンディ '+counts('candy','mismatched-text','opposite')+'。</p>'
-        '<p>かな入力の分離試験：'+str(len(kana))+'件中'+str(kana_changed)+'件で表記が変化（末尾の句点を除く）。変化だけでは正しい漢字変換や意味保持の証明にならない。</p>')
+        '<p>かな入力の分離試験：'+str(len(kana))+'件中'+str(kana_changed)+'件で候補の表記が変化（末尾の句点を除く）。変化だけでは正しい漢字変換や意味保持の証明にならない。</p>')
     controls=r.get('preservationControls',[])
     for instruction,label in [('default','標準指示'),('kanji','漢字表記の追加指示')]:
         xs=[x for x in controls if x['instruction']==instruction]

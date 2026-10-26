@@ -183,9 +183,9 @@ def main():
                 final=result.get('candidate',raw) if result.get('accepted') else raw
                 report['preservationControls'].append(dict(input=raw,instruction=name,result=result,
                     markers=markers,finalText=final,markersPreserved=all(x in final for x in markers)))
-        report['completed']=True;save()
     finally: resident.close()
     if resident.child.returncode!=0: raise RuntimeError('Resident helper did not exit cleanly')
+    report['completed']=True;save()
     print('Completed real context evidence; results.json is authoritative.')
 
 if __name__=='__main__': main()
