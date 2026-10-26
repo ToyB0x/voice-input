@@ -79,3 +79,8 @@ Previewでの画面撮影・描画・権限操作は通常PR CIから独立し�
 実モデルの評価は明示実行です。CI workflowの `correction_reuse` を有効にするか、Correction model reuseを実行します。固定Qwen 1.7Bを検証して準備後、macOS 26のネットワーク禁止sandboxでCPU推論を行います。毎回読込と同一プロセスのA→B→Aを比較し、重みの読込省略・発話間の分離・同一入力の出力一致・EOFでの終了を検証します。`correction-reuse-cpu/reuse.json`は本文やモデルパスを含まない数値証跡です。通常のPR・pushで重いモデル取得・評価を実行しません。
 
 OSキャッシュ・試行順序の影響があり、一定の高速化率は要求しません。プロセスのピークRSSはGPUメモリではなく、実機MetalやAppleモデルの性能を示しません。
+
+
+## UIナビゲーションと表示
+
+通常PR CIの `Browser navigation and layout` で、実Chromiumを使った画面切替・入力保持・共有保存・キーボード／マウス操作・狭い画面での横幅を検証します。`ui-navigation` Artifactに合成サンプルの各画面PNGと検証JSONを保存します。追加のnpm／Pythonブラウザライブラリは導入せず、Nodeの標準WebSocketでCDPを操作します。macOSの権限・実音声・WebKitとは別の検証です。詳細は[画面の使い分け](navigation.md)を参照してください。

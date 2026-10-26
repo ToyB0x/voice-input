@@ -1,189 +1,308 @@
 <!doctype html>
 <html lang="ja">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light dark" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     <title>Voice Input</title>
   </head>
   <body>
     <main>
-      <p class="eyebrow">macOS · Rust + Tauri</p>
-      <h1>Voice Input</h1>
-      <p>話すことから、入力をはじめる。</p>
-      <p class="privacy">音声はこの Mac のメモリ内だけに保持し、外部へ送信しません。</p>
-      <section aria-labelledby="prepare-title">
-        <h2 id="prepare-title">モデルの準備・選択</h2>
-        <label for="model-preset">準備するモデルの組み合わせ</label>
-        <select id="model-preset" aria-label="Model preset"><option value="custom">個別に選択</option><option value="light">軽量（base）</option><option value="accurate">認識重視（medium）</option><option value="turbo">大きい音声モデル（turbo）</option><option value="format">整形比較（medium + 4B）</option></select>
-        <p id="preset-info" class="hint">準備するモデルを個別に選択できます。</p>
-        <label for="managed-speech">音声モデル</label>
-        <select id="managed-speech" aria-label="Managed speech model"><option value="">現在の音声設定を維持</option></select>
-        <label for="managed-correction">最終補正モデル</label>
-        <select id="managed-correction" aria-label="Managed correction model"><option value="keep">現在の補正設定を維持</option><option value="">補正を使わない</option></select>
-        <p id="managed-info" class="hint"></p>
-        <div class="controls">
-          <button id="download-models" aria-label="Download selected models" disabled>ダウンロードして準備</button>
-          <button id="verify-models" aria-label="Verify cached models" disabled>保存済みモデルを検証</button>
-          <button id="cancel-models" aria-label="Cancel model preparation" disabled>準備を取り消す</button>
-          <button id="apply-models" aria-label="Apply prepared models" disabled>検証済みモデルを設定欄へ反映</button>
+      <header class="app-header">
+        <h1>Voice Input</h1>
+        <p class="tagline">音声から、整った文章へ。</p>
+        <p class="privacy">音声・画面情報・補正はこのMac内で処理します。</p>
+      </header>
+      <nav aria-label="画面の切り替え" class="view-navigation">
+        <div role="tablist" aria-label="作業メニュー">
+          <button id="tab-input" type="button" role="tab" aria-controls="panel-input" aria-selected="true" tabindex="0">音声入力</button>
+          <button id="tab-models" type="button" role="tab" aria-controls="panel-models" aria-selected="false" tabindex="-1">モデル</button>
+          <button id="tab-settings" type="button" role="tab" aria-controls="panel-settings" aria-selected="false" tabindex="-1">設定</button>
+          <button id="tab-diagnostics" type="button" role="tab" aria-controls="panel-diagnostics" aria-selected="false" tabindex="-1">比較・診断</button>
         </div>
-        <progress id="model-progress" aria-label="Model preparation progress" max="1" value="0" hidden></progress>
-        <p id="managed-status" role="status">取得操作時だけ公式配布元へ接続します。音声や画面情報は送信しません。</p>
-        <p class="hint">容量・SHA-256を検証してこのMacへ保存します。保存済みモデルの検証は通信しません。プリセットの選択では画面情報の取得・利用先や権限は変更しません。手入力のモデルパスも引き続き利用できます。</p>
-      </section>
-      <section aria-labelledby="model-title">
-        <h2 id="model-title">ローカル文字起こしモデル</h2>
-        <label for="model-path">モデルの絶対パス（多言語版 ggml .bin）</label>
-        <input id="model-path" aria-label="Model path" type="text" placeholder="/Users/you/Models/ggml-model.bin" spellcheck="false" autocomplete="off" />
-        <div class="controls model-controls">
-          <label for="backend">実行方式</label>
-          <select id="backend" aria-label="Inference backend"><option value="metal">GPU（Metal）</option><option value="cpu">CPU</option></select>
-          <button id="load-model" aria-label="Load local model" disabled>モデルを読み込む</button>
-        </div>
-        <p id="model-status" role="status">モデル未読み込み。録音のみ利用できます。</p>
-        <p id="model-info" aria-label="Loaded model information" hidden></p>
-        <p class="hint">自動ダウンロードは行いません。設定を保存すると次回起動時に読み込みます。音声・認識結果は保存しません。</p>
-      </section>
-      <section aria-labelledby="recording-title">
-        <h2 id="recording-title">ローカル録音</h2>
-        <p id="permission">マイクの許可を確認しています…</p>
+      </nav>
+      <div aria-label="アプリの状態" class="session-summary">
         <p id="status" role="status" aria-live="polite">準備中…</p>
-        <p id="input-device" class="hint">録音入力: 録音開始時にmacOSの既定入力を使用します。</p>
-        <div class="level">
-          <span id="input-level-label">入力レベル</span>
-          <div id="input-level" role="meter" aria-labelledby="input-level-label" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0">
-            <span id="input-level-fill" aria-hidden="true"></span>
-          </div>
-          <output id="input-level-value" aria-label="入力音量">停止中</output>
-          <output id="duration" aria-label="録音時間">0.0 秒</output>
-        </div>
-        <p id="input-level-status" class="hint"></p>
-        <div class="controls">
-          <button id="start" aria-label="Start recording" disabled>録音を開始</button>
-          <button id="stop" aria-label="Stop recording" disabled>停止</button>
-          <button id="transcribe" aria-label="Transcribe recording" disabled>文字起こし・再試行</button>
-          <button id="clear" aria-label="Discard recording" disabled>破棄</button>
-        </div>
+        <p id="model-status" role="status">モデル未読み込み。録音のみ利用できます。</p>
+        <details id="session-details">
+          <summary aria-label="Session details">状態の詳細</summary>
+          <p id="model-info" aria-label="Loaded model information" hidden></p>
+          <p id="desktop-status" role="status"></p>
+          <p id="insertion-status" role="status">直接入力: 無効</p>
+          <p id="insertion-message" role="status"></p>
+          <p id="context-status" role="status">認識補助: 無効</p>
+          <p id="ocr-status" role="status">OCR: 無効</p>
+        </details>
+      </div>
+      <div class="global-feedback">
         <p id="error" role="alert" hidden></p>
-        <button id="settings" aria-label="Open microphone settings" hidden>マイクのシステム設定を開く</button>
-        <p class="hint">最大 60 秒。新しい録音・破棄・アプリ終了で音声を消去します。</p>
-      </section>
-      <section aria-labelledby="result-title">
-        <h2 id="result-title">認識結果</h2>
-        <textarea id="transcript" aria-label="Transcription result" rows="3" readonly placeholder="モデル読み込み後、録音を停止すると文字起こしします。"></textarea>
-        <button id="copy" aria-label="Copy transcript" disabled>結果をコピー</button>
-        <span id="copy-status" role="status" aria-live="polite"></span>
-        <p class="hint">コピーした結果はクリップボードに残ります。新しい録音・破棄・終了でアプリ内の結果を消去します。</p>
-      </section>
-      <section aria-labelledby="desktop-title">
-        <h2 id="desktop-title">常駐・ショートカット設定</h2>
-        <label for="shortcut">録音開始 / 停止（空欄で無効）</label>
-        <input id="shortcut" aria-label="Recording shortcut" type="text" value="Command+Shift+Space" spellcheck="false" autocomplete="off" />
-        <label class="check"><input id="auto-insert" aria-label="Automatic text insertion" type="checkbox" />認識結果を録音開始時の入力欄へ直接入力する（初期状態は無効）</label>
-        <label class="check"><input id="recognition-context" aria-label="Local recognition context" type="checkbox" />Accessibilityで入力欄の周辺テキストを取得する（初期状態は無効）</label>
-        <label class="check"><input id="ocr-context" aria-label="Local OCR context" type="checkbox" />入力先の欄だけを撮影し、このMac内でOCRする（初期状態は無効）</label>
-        <label class="check"><input id="whisper-context" aria-label="Use context in Whisper" type="checkbox" checked />取得テキストをWhisperの認識ヒントに使う</label>
-        <label class="check"><input id="correction-context" aria-label="Use context in correction" type="checkbox" />取得テキストを最終補正に使う（初期状態は無効）</label>
-        <p id="ocr-status" role="status">OCR: 無効</p>
-        <button id="screen-permission" aria-label="Request screen permission">画面収録の許可を確認・設定</button>
-        <p id="context-status" role="status">認識補助: 無効</p>
-        <p class="hint">取得元と利用先を選んで保存してください。利用先が両方無効なら取得しません。取得テキストは保存・送信せず、最終補正へ使う場合はその録音の初回補正まで保持します。Whisperの再試行はヒントなしです。誤認識が増える場合は無効にしてください。</p>
-        <p id="insertion-status" role="status">直接入力: 無効</p>
-        <p id="insertion-message" role="status"></p>
-        <button id="accessibility" aria-label="Request accessibility permission">アクセシビリティの許可を確認・設定</button>
-        <p class="hint">設定保存後に有効になります。入力先でショートカットを使ってください。入力先・位置・内容が変わった場合やパスワード欄では挿入せず、結果を保持します。</p>
-        <label><input id="show-overlay" aria-label="Recording status overlay" type="checkbox" />録音ステータスを小型表示する（初期状態は無効）</label>
-        <p class="hint">設定保存後、次の録音からメインディスプレイの下部に状態を表示します。操作やフォーカスを受け取らず、本文・画面情報は表示しません。完了・見送りは4秒後に隠れます。</p>
-        <button id="save-preferences" aria-label="Save preferences" disabled>設定を保存</button>
-        <p id="desktop-status" role="status"></p>
-        <p id="preferences-message" role="status"></p>
-        <p class="hint">モデルのパス・実行方式・ショートカット・取得元と利用先の設定だけを保存します。モデルの変更は「モデルを読み込む」か次回起動で反映します。</p>
-        <p class="hint">ウィンドウを閉じても常駐します。メニューバーの VI から設定・結果を表示、終了できます。</p>
-      </section>
-      <section aria-labelledby="correction-title">
-        <h2 id="correction-title">ローカル最終補正（実験的）</h2>
-        <label><input id="auto-correction" aria-label="Automatic correction after transcription" type="checkbox" />認識後に自動補正する（初期状態は無効）</label>
-        <p class="hint">設定保存後の認識から適用します。採用時は補正結果、失敗・棄却時はWhisper原文を最終結果にします。直接入力も有効な場合は補正完了後に一度だけ入力先を再確認して挿入します。新しい録音・破棄・設定保存・終了では取り消し、遅れた結果を入力しません。</p>
-        <label for="correction-engine">補正エンジン</label>
-        <select id="correction-engine" aria-label="Correction engine"><option value="qwen3">Qwen3（ローカルGGUF）</option><option value="apple-foundation">Apple Foundation Models（実験的）</option></select>
-        <p class="hint">AppleモデルはmacOS 26以降とApple Intelligence対応・有効化が必要です。GGUFの指定は不要です。選択後に「設定を保存」を押してください。利用不可でも他のエンジンへ自動で切り替えません。</p>
-        <label for="correction-model-path">補正モデルの絶対パス（Qwen3 GGUF）</label>
-        <input id="correction-model-path" aria-label="Correction model path" type="text" placeholder="/Users/you/Models/Qwen3-1.7B-Q8_0.gguf" spellcheck="false" autocomplete="off" />
-        <label for="correction-backend">補正の実行方式</label>
-        <select id="correction-backend" aria-label="Correction backend"><option value="metal">GPU（Metal）</option><option value="cpu">CPU</option></select>
-        <p class="hint">上の「設定を保存」で反映します。モデルは自動ダウンロードしません。音声の認識結果と、設定で許可したテキストだけをこのMac内で補正します。</p>
-        <button id="correct" aria-label="Preview local correction" disabled>最終補正をプレビュー</button>
-        <label><input id="reuse-correction-model" aria-label="Reuse Qwen correction model" type="checkbox" />Qwen補正モデルを再利用する（初期状態は無効）</label>
-        <p class="note">重みだけを再利用し、発話ごとの文脈は保持しません。5分間未使用・設定保存・処理中の取り消し・終了時に解放します。Appleモデルには適用しません。</p>
-        <p id="processing-timings" role="status">処理時間は未計測です。</p>
-        <button id="foundation-copy" aria-label="Copy processing diagnostics">処理時間・診断情報をコピー（本文なし）</button>
-        <p id="correction-status" role="status">補正は未実行です。</p>
-        <textarea id="corrected" aria-label="Corrected text" rows="4" readonly placeholder="元の文字起こしは上の認識結果に保持します。"></textarea>
-        <h3>最終結果</h3>
-        <p id="final-status" role="status">最終結果は未作成です。</p>
-        <textarea id="final-text" aria-label="Final text" rows="4" readonly></textarea>
-        <button id="copy-final" disabled>最終結果をコピー</button>
-        <details id="foundation-diagnostics">
-          <summary>Appleモデルの診断</summary>
-          <button id="foundation-check" aria-label="Check Apple model availability">Appleモデルの利用可否を確認</button>
-          <p id="foundation-info" role="status">Appleモデルの利用可否は未確認です。</p>
-          <pre id="foundation-detail" aria-label="Apple model diagnostics"></pre>
-          <p class="hint">確認操作は推論しません。診断には利用可否・OSバージョン・処理時間・固定の失敗理由を含み、音声・文字起こし・取得文脈・補正本文・モデルパスを含みません。</p>
-        </details>
-        <button id="copy-correction" aria-label="Copy correction" disabled>補正結果をコピー</button>
-        <p class="hint">手動プレビューは自動入力しません。自動補正と直接入力の両方を有効にすると、最終結果を直接入力します。意味・数値・否定・固有名詞が変わっていないか固定サンプルで確認してから利用してください。再試行は取得テキストなしで行います。画像・取得テキスト・補正結果をファイルに保存・クラウド送信しません。</p>
-      </section>
-      <section aria-labelledby="updates-title">
-        <h2 id="updates-title">アプリの更新</h2>
-        <p id="update-info" role="status">macOSアプリで利用できます。</p>
-        <button id="update-check" disabled>更新を確認</button>
-        <button id="update-install" disabled>更新をインストールして再起動</button>
         <p id="update-error" role="alert"></p>
-        <p class="hint">起動後と6時間ごとに、処理中を避けてGitHub Releasesを確認します。音声・取得文脈・入力本文は送信しません。署名とバージョンを検証し、適用はボタン操作で実行します。録音と比較結果は先に破棄してください。</p>
-      </section>
-      <section aria-labelledby="comparison-title">
-        <h2 id="comparison-title">実機で一括比較（実験的）</h2>
-        <button id="compare-open">比較画面を開く・閉じる</button>
-        <details id="comparison-panel">
-          <summary>同じ録音で各方式を直列比較する</summary>
-          <h3>録音不要の補正自己診断</h3>
-          <p>数字・否定・言い直し・句読点・箇条書きの固定文5件で、Appleの実推論を確認します。音声モデルやマイク・アクセシビリティ・画面収録の許可は不要です。</p>
-          <button id="compare-selftest-apple">Appleモデルの固定サンプル診断</button>
-          <button id="compare-selftest-both">AppleとQwenの固定サンプル比較</button>
-          <p class="hint">Appleのみ5件、Qwenとの比較は10件を直列実行します。Qwenは保存済みの補正モデルとCPU / Metal設定を使います。通常の音声モデルは解放し、下の比較結果を置き換えます。固定原文・候補・採否・時間は下の一覧に表示します。中止・破棄・レポートコピーも共通です。生成の成功やガードの採用は品質保証ではありません。通常入力に戻る前に音声モデルを再読み込みしてください。</p>
-          <h3>録音済み音声の比較</h3>
-          <p>必要なモデルを上で準備してください。この画面はダウンロードしません。Appleモデルの利用可否は実行時に確認します。</p>
-          <label><input type="checkbox" id="compare-arm" />次の録音から比較用文脈を保持する（この起動中のみ）</label>
-          <p class="hint">AX/OCRの取得元を設定で許可・保存してから有効にし、入力先のショートカットで録音してください。録音時の情報を全ケースで固定して使います。オフ・破棄・新規録音・終了で破棄します。取得元が得られない条件はスキップします。</p>
-          <label for="compare-preset-source">比較プリセットの文脈取得元</label>
-          <select id="compare-preset-source"><option value="ocr">画面OCR</option><option value="ax">入力欄AX</option><option value="both">AX + OCR</option></select>
-          <button id="compare-preset-apple">Appleモデルの比較条件を選ぶ</button>
-          <button id="compare-preset-qwen">設定中のQwenの比較条件を選ぶ</button>
-          <p class="hint">設定中の音声モデルで、補正なしと選択モデルの補正を比較します。文脈なし・Whisperヒントのみ・最終補正のみ・両方の条件を選び、同じ入力はまとめます。1実行方式あたり6条件。下のCPU / Metal選択は維持します。モデル取得・権限要求・録音は開始しません。</p>
-          <label for="compare-speech">音声モデル（複数選択）</label><select id="compare-speech" multiple size="6"></select>
-          <label for="compare-asr-backends">音声の実行方式</label><select id="compare-asr-backends" multiple size="2"><option value="cpu">CPU</option><option value="metal" selected>Metal</option></select>
-          <label for="compare-correction">補正モデル（複数選択）</label><select id="compare-correction" multiple size="6"></select>
-          <label for="compare-correction-backends">Qwenの実行方式</label><select id="compare-correction-backends" multiple size="2"><option value="cpu">CPU</option><option value="metal" selected>Metal</option></select>
-          <label for="compare-sources">文脈の取得元</label><select id="compare-sources" multiple size="4"><option value="none" selected>なし</option><option value="ax">AX</option><option value="ocr">OCR</option><option value="both">AX + OCR</option></select>
-          <label for="compare-routes">文脈の利用先</label><select id="compare-routes" multiple size="4"><option value="none" selected>なし</option><option value="asr-only">Whisperヒントのみ</option><option value="correction-only">最終補正のみ</option><option value="both">両方</option></select>
-          <p class="hint">複数選択は⌘クリック。Appleの実行方式はOS管理で固定です。同一入力になる組み合わせは除外します。</p>
-          <button id="compare-all">すべてのパターンを選択</button><button id="compare-refresh-models">モデルの準備状況を再取得</button>
-          <label><input type="checkbox" id="compare-use-reference" />基準文を使ってCERを測定する</label>
-          <textarea id="compare-reference" spellcheck="false" autocomplete="off" rows="3" maxlength="2048" placeholder="自分で確認した正しい文字起こし（モデルには渡しません）。空欄の基準文は無音テストです。"></textarea>
-          <p class="hint">CERは小さいほど誤りが少なく、100%を超える場合もあります。NFKC・小文字化・空白と句読点の除去後に計算します。意味や整形の良し悪しは本文を確認してください。</p>
-          <p id="compare-count"></p>
-          <button id="compare-start">録音済み音声で直列比較を開始</button><button id="compare-cancel" disabled>比較を中止</button><button id="compare-clear">比較結果を破棄</button>
-          <p id="compare-foundation" role="status"></p>
-          <p id="compare-progress" role="status"></p><p id="compare-message" role="alert"></p>
-          <p class="hint">比較開始で通常のWhisperモデルを解放し、子プロセスを毎回終了してから次の条件へ進みます。モデルの読み込み・処理・IPCを含む時間です（事前の容量・SHA検証は除外）。OSキャッシュや温度、実行順序の影響があります。最大60秒の録音、最大2048条件、1条件はASR最大10分＋補正最大150秒です。</p>
-          <div class="comparison-table"><table><thead><tr><th>条件</th><th>状態</th><th>時間</th><th>CER</th><th>本文</th></tr></thead><tbody id="compare-rows"></tbody></table></div>
-          <label><input type="checkbox" id="compare-include-text" />レポートに認識・候補・最終本文を含める</label>
-          <button id="compare-copy-report" disabled>比較レポートJSONをコピー</button>
-          <p class="hint">通常はアプリ版・実行環境・条件・時間・CER・Appleモデルの利用可否・固定の失敗理由をコピーします。音声・取得文脈・基準文・モデルパスは含めません。本文を含める操作は明示的に選択してください。比較結果は自動入力・自動保存・送信しません。</p>
-        </details>
-      </section>
+      </div>
+      <div id="panel-input" role="tabpanel" aria-labelledby="tab-input" tabindex="0">
+        <section aria-labelledby="recording-title">
+          <h2 id="recording-title">録音</h2>
+          <p id="permission">マイクの許可を確認しています…</p>
+          <p id="input-device" class="hint">録音入力: 録音開始時にmacOSの既定入力を使用します。</p>
+          <div class="level">
+            <span id="input-level-label">入力レベル</span>
+            <div id="input-level" role="meter" aria-labelledby="input-level-label" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0">
+              <span id="input-level-fill" aria-hidden="true"></span>
+            </div>
+            <output id="input-level-value" aria-label="入力音量">停止中</output>
+            <output id="duration" aria-label="録音時間">0.0 秒</output>
+          </div>
+          <p id="input-level-status" class="hint"></p>
+          <div class="controls">
+            <button id="start" aria-label="Start recording" disabled>録音を開始</button>
+            <button id="stop" aria-label="Stop recording" disabled>停止</button>
+            <button id="transcribe" aria-label="Transcribe recording" disabled>文字起こし・再試行</button>
+            <button id="clear" aria-label="Discard recording" disabled>破棄</button>
+          </div>
+          <button id="settings" aria-label="Open microphone settings" hidden>マイクのシステム設定を開く</button>
+          <p class="hint">最大 60 秒。新しい録音・破棄・アプリ終了で音声を消去します。</p>
+          <p class="hint">初回はモデルを準備してください。<button type="button" data-view-target="models" class="text-button">モデルを準備する</button>
+          </p>
+        </section>
+        <section aria-labelledby="result-title">
+          <h2 id="result-title">最終結果</h2>
+          <p id="final-status" role="status">最終結果は未作成です。</p>
+          <textarea id="final-text" aria-label="Final text" rows="4" readonly></textarea>
+          <button id="copy-final" disabled>最終結果をコピー</button>
+          <p id="correction-status" role="status">補正は未実行です。</p>
+          <details id="raw-result">
+            <summary aria-label="Raw transcript details">Whisperの原文を確認・コピー</summary>
+            <textarea id="transcript" aria-label="Transcription result" rows="3" readonly placeholder="モデル読み込み後、録音を停止すると文字起こしします。"></textarea>
+            <button id="copy" aria-label="Copy transcript" disabled>結果をコピー</button>
+            <span id="copy-status" role="status" aria-live="polite"></span>
+            <p class="hint">コピーした結果はクリップボードに残ります。新しい録音・破棄・終了でアプリ内の結果を消去します。</p>
+          </details>
+          <details id="manual-preview">
+            <summary aria-label="Manual correction details">手動の補正プレビュー</summary>
+            <button id="correct" aria-label="Preview local correction" disabled>最終補正をプレビュー</button>
+            <textarea id="corrected" aria-label="Corrected text" rows="4" readonly placeholder="元の文字起こしは上の認識結果に保持します。"></textarea>
+            <button id="copy-correction" aria-label="Copy correction" disabled>補正結果をコピー</button>
+            <p class="hint">手動プレビューは自動入力しません。自動補正と直接入力の両方を有効にすると、最終結果を直接入力します。意味・数値・否定・固有名詞が変わっていないか固定サンプルで確認してから利用してください。再試行は取得テキストなしで行います。画像・取得テキスト・補正結果をファイルに保存・クラウド送信しません。</p>
+          </details>
+        </section>
+      </div>
+      <div id="panel-models" role="tabpanel" aria-labelledby="tab-models" tabindex="0" hidden="">
+        <section aria-labelledby="prepare-title">
+          <h2 id="prepare-title">1. モデルを準備</h2>
+          <label for="model-preset">準備するモデルの組み合わせ</label>
+          <select id="model-preset" aria-label="Model preset">
+            <option value="custom">個別に選択</option>
+            <option value="light">軽量（base）</option>
+            <option value="accurate">認識重視（medium）</option>
+            <option value="turbo">大きい音声モデル（turbo）</option>
+            <option value="format">整形比較（medium + 4B）</option>
+          </select>
+          <p id="preset-info" class="hint">準備するモデルを個別に選択できます。</p>
+          <label for="managed-speech">音声モデル</label>
+          <select id="managed-speech" aria-label="Managed speech model">
+            <option value="">現在の音声設定を維持</option>
+          </select>
+          <label for="managed-correction">最終補正モデル</label>
+          <select id="managed-correction" aria-label="Managed correction model">
+            <option value="keep">現在の補正設定を維持</option>
+            <option value="">補正を使わない</option>
+          </select>
+          <p id="managed-info" class="hint"></p>
+          <div class="controls">
+            <button id="download-models" aria-label="Download selected models" disabled>ダウンロードして準備</button>
+            <button id="verify-models" aria-label="Verify cached models" disabled>保存済みモデルを検証</button>
+            <button id="cancel-models" aria-label="Cancel model preparation" disabled>準備を取り消す</button>
+            <button id="apply-models" aria-label="Apply prepared models" disabled>検証済みモデルを設定欄へ反映</button>
+          </div>
+          <progress id="model-progress" aria-label="Model preparation progress" max="1" value="0" hidden></progress>
+          <p id="managed-status" role="status">取得操作時だけ公式配布元へ接続します。音声や画面情報は送信しません。</p>
+          <p class="hint">容量・SHA-256を検証してこのMacへ保存します。保存済みモデルの検証は通信しません。プリセットの選択では画面情報の取得・利用先や権限は変更しません。手入力のモデルパスも引き続き利用できます。</p>
+        </section>
+        <section aria-labelledby="model-title">
+          <h2 id="model-title">2. 音声モデルを読み込む</h2>
+          <label for="model-path">モデルの絶対パス（多言語版 ggml .bin）</label>
+          <input id="model-path" aria-label="Model path" type="text" placeholder="/Users/you/Models/ggml-model.bin" spellcheck="false" autocomplete="off">
+          <div class="controls model-controls">
+            <label for="backend">実行方式</label>
+            <select id="backend" aria-label="Inference backend">
+              <option value="metal">GPU（Metal）</option>
+              <option value="cpu">CPU</option>
+            </select>
+            <button id="load-model" aria-label="Load local model" disabled>モデルを読み込む</button>
+          </div>
+          <p class="hint">自動ダウンロードは行いません。設定を保存すると次回起動時に読み込みます。音声・認識結果は保存しません。</p>
+        </section>
+        <section aria-labelledby="correction-title">
+          <h2 id="correction-title">3. 補正モデルを選ぶ</h2>
+          <label for="correction-engine">補正エンジン</label>
+          <select id="correction-engine" aria-label="Correction engine">
+            <option value="qwen3">Qwen3（ローカルGGUF）</option>
+            <option value="apple-foundation">Apple Foundation Models（実験的）</option>
+          </select>
+          <p class="hint">AppleモデルはmacOS 26以降とApple Intelligence対応・有効化が必要です。GGUFの指定は不要です。選択後に「設定を保存」を押してください。利用不可でも他のエンジンへ自動で切り替えません。</p>
+          <label for="correction-model-path">補正モデルの絶対パス（Qwen3 GGUF）</label>
+          <input id="correction-model-path" aria-label="Correction model path" type="text" placeholder="/Users/you/Models/Qwen3-1.7B-Q8_0.gguf" spellcheck="false" autocomplete="off">
+          <label for="correction-backend">補正の実行方式</label>
+          <select id="correction-backend" aria-label="Correction backend">
+            <option value="metal">GPU（Metal）</option>
+            <option value="cpu">CPU</option>
+          </select>
+          <p class="hint">下部の「設定を保存」で反映します。モデルは自動ダウンロードしません。音声の認識結果と、設定で許可したテキストだけをこのMac内で補正します。</p>
+          <label>
+            <input id="reuse-correction-model" aria-label="Reuse Qwen correction model" type="checkbox">Qwen補正モデルを再利用する（初期状態は無効）</label>
+          <p class="note">重みだけを再利用し、発話ごとの文脈は保持しません。5分間未使用・設定保存・処理中の取り消し・終了時に解放します。Appleモデルには適用しません。</p>
+        </section>
+      </div>
+      <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" hidden="">
+        <section aria-labelledby="input-settings-title">
+          <h2 id="input-settings-title">入力と自動補正</h2>
+          <label class="check">
+            <input id="auto-insert" aria-label="Automatic text insertion" type="checkbox">認識結果を録音開始時の入力欄へ直接入力する（初期状態は無効）</label>
+          <button id="accessibility" aria-label="Request accessibility permission">アクセシビリティの許可を確認・設定</button>
+          <label>
+            <input id="auto-correction" aria-label="Automatic correction after transcription" type="checkbox">認識後に自動補正する（初期状態は無効）</label>
+          <p class="hint">設定保存後の認識から適用します。採用時は補正結果、失敗・棄却時はWhisper原文を最終結果にします。直接入力も有効な場合は補正完了後に一度だけ入力先を再確認して挿入します。新しい録音・破棄・設定保存・終了では取り消し、遅れた結果を入力しません。</p>
+          <p class="hint">設定保存後に有効になります。入力先でショートカットを使ってください。入力先・位置・内容が変わった場合やパスワード欄では挿入せず、結果を保持します。</p>
+        </section>
+        <section aria-labelledby="desktop-title">
+          <h2 id="desktop-title">ショートカットと表示</h2>
+          <label for="shortcut">録音開始 / 停止（空欄で無効）</label>
+          <input id="shortcut" aria-label="Recording shortcut" type="text" value="Command+Shift+Space" spellcheck="false" autocomplete="off">
+          <label>
+            <input id="show-overlay" aria-label="Recording status overlay" type="checkbox">録音ステータスを小型表示する（初期状態は無効）</label>
+          <p class="hint">設定保存後、次の録音からメインディスプレイの下部に状態を表示します。操作やフォーカスを受け取らず、本文・画面情報は表示しません。完了・見送りは4秒後に隠れます。</p>
+          <p class="hint">ウィンドウを閉じても常駐します。メニューバーの VI から設定・結果を表示、終了できます。</p>
+        </section>
+        <section aria-labelledby="context-settings-title">
+          <h2 id="context-settings-title">画面情報による認識補助</h2>
+          <label class="check">
+            <input id="recognition-context" aria-label="Local recognition context" type="checkbox">Accessibilityで入力欄の周辺テキストを取得する（初期状態は無効）</label>
+          <label class="check">
+            <input id="ocr-context" aria-label="Local OCR context" type="checkbox">入力先の欄だけを撮影し、このMac内でOCRする（初期状態は無効）</label>
+          <label class="check">
+            <input id="whisper-context" aria-label="Use context in Whisper" type="checkbox" checked>取得テキストをWhisperの認識ヒントに使う</label>
+          <label class="check">
+            <input id="correction-context" aria-label="Use context in correction" type="checkbox">取得テキストを最終補正に使う（初期状態は無効）</label>
+          <button id="screen-permission" aria-label="Request screen permission">画面収録の許可を確認・設定</button>
+          <p class="hint">取得元と利用先を選んで保存してください。利用先が両方無効なら取得しません。取得テキストは保存・送信せず、最終補正へ使う場合はその録音の初回補正まで保持します。Whisperの再試行はヒントなしです。誤認識が増える場合は無効にしてください。</p>
+        </section>
+        <section aria-labelledby="updates-title">
+          <h2 id="updates-title">アプリの更新</h2>
+          <p id="update-info" role="status">macOSアプリで利用できます。</p>
+          <button id="update-check" disabled>更新を確認</button>
+          <button id="update-install" disabled>更新をインストールして再起動</button>
+          <p class="hint">起動後と6時間ごとに、処理中を避けてGitHub Releasesを確認します。音声・取得文脈・入力本文は送信しません。署名とバージョンを検証し、適用はボタン操作で実行します。録音と比較結果は先に破棄してください。</p>
+        </section>
+      </div>
+      <div id="panel-diagnostics" role="tabpanel" aria-labelledby="tab-diagnostics" tabindex="0" hidden="">
+        <section aria-labelledby="diagnostic-title">
+          <h2 id="diagnostic-title">処理時間とモデルの診断</h2>
+          <p id="processing-timings" role="status">処理時間は未計測です。</p>
+          <button id="foundation-copy" aria-label="Copy processing diagnostics">処理時間・診断情報をコピー（本文なし）</button>
+          <details id="foundation-diagnostics">
+            <summary>Appleモデルの診断</summary>
+            <button id="foundation-check" aria-label="Check Apple model availability">Appleモデルの利用可否を確認</button>
+            <p id="foundation-info" role="status">Appleモデルの利用可否は未確認です。</p>
+            <pre id="foundation-detail" aria-label="Apple model diagnostics"></pre>
+            <p class="hint">確認操作は推論しません。診断には利用可否・OSバージョン・処理時間・固定の失敗理由を含み、音声・文字起こし・取得文脈・補正本文・モデルパスを含みません。</p>
+          </details>
+        </section>
+        <section aria-labelledby="comparison-title">
+          <h2 id="comparison-title">方式の比較（実験的）</h2>
+          <p class="hint">同じ録音を各方式で順番に処理します。録音不要の固定サンプル診断も利用できます。</p>
+          <button id="compare-open">比較画面を開く・閉じる</button>
+          <details id="comparison-panel">
+            <summary>同じ録音で各方式を直列比較する</summary>
+            <h3>録音不要の補正自己診断</h3>
+            <p>数字・否定・言い直し・句読点・箇条書きの固定文5件で、Appleの実推論を確認します。音声モデルやマイク・アクセシビリティ・画面収録の許可は不要です。</p>
+            <button id="compare-selftest-apple">Appleモデルの固定サンプル診断</button>
+            <button id="compare-selftest-both">AppleとQwenの固定サンプル比較</button>
+            <p class="hint">Appleのみ5件、Qwenとの比較は10件を直列実行します。Qwenは保存済みの補正モデルとCPU / Metal設定を使います。通常の音声モデルは解放し、下の比較結果を置き換えます。固定原文・候補・採否・時間は下の一覧に表示します。中止・破棄・レポートコピーも共通です。生成の成功やガードの採用は品質保証ではありません。通常入力に戻る前に音声モデルを再読み込みしてください。</p>
+            <h3>録音済み音声の比較</h3>
+            <p>必要なモデルを上で準備してください。この画面はダウンロードしません。Appleモデルの利用可否は実行時に確認します。</p>
+            <label>
+              <input type="checkbox" id="compare-arm">次の録音から比較用文脈を保持する（この起動中のみ）</label>
+            <p class="hint">AX/OCRの取得元を設定で許可・保存してから有効にし、入力先のショートカットで録音してください。録音時の情報を全ケースで固定して使います。オフ・破棄・新規録音・終了で破棄します。取得元が得られない条件はスキップします。</p>
+            <label for="compare-preset-source">比較プリセットの文脈取得元</label>
+            <select id="compare-preset-source">
+              <option value="ocr">画面OCR</option>
+              <option value="ax">入力欄AX</option>
+              <option value="both">AX + OCR</option>
+            </select>
+            <button id="compare-preset-apple">Appleモデルの比較条件を選ぶ</button>
+            <button id="compare-preset-qwen">設定中のQwenの比較条件を選ぶ</button>
+            <p class="hint">設定中の音声モデルで、補正なしと選択モデルの補正を比較します。文脈なし・Whisperヒントのみ・最終補正のみ・両方の条件を選び、同じ入力はまとめます。1実行方式あたり6条件。下のCPU / Metal選択は維持します。モデル取得・権限要求・録音は開始しません。</p>
+            <label for="compare-speech">音声モデル（複数選択）</label>
+            <select id="compare-speech" multiple size="6"></select>
+            <label for="compare-asr-backends">音声の実行方式</label>
+            <select id="compare-asr-backends" multiple size="2">
+              <option value="cpu">CPU</option>
+              <option value="metal" selected>Metal</option>
+            </select>
+            <label for="compare-correction">補正モデル（複数選択）</label>
+            <select id="compare-correction" multiple size="6"></select>
+            <label for="compare-correction-backends">Qwenの実行方式</label>
+            <select id="compare-correction-backends" multiple size="2">
+              <option value="cpu">CPU</option>
+              <option value="metal" selected>Metal</option>
+            </select>
+            <label for="compare-sources">文脈の取得元</label>
+            <select id="compare-sources" multiple size="4">
+              <option value="none" selected>なし</option>
+              <option value="ax">AX</option>
+              <option value="ocr">OCR</option>
+              <option value="both">AX + OCR</option>
+            </select>
+            <label for="compare-routes">文脈の利用先</label>
+            <select id="compare-routes" multiple size="4">
+              <option value="none" selected>なし</option>
+              <option value="asr-only">Whisperヒントのみ</option>
+              <option value="correction-only">最終補正のみ</option>
+              <option value="both">両方</option>
+            </select>
+            <p class="hint">複数選択は⌘クリック。Appleの実行方式はOS管理で固定です。同一入力になる組み合わせは除外します。</p>
+            <button id="compare-all">すべてのパターンを選択</button>
+            <button id="compare-refresh-models">モデルの準備状況を再取得</button>
+            <label>
+              <input type="checkbox" id="compare-use-reference">基準文を使ってCERを測定する</label>
+            <textarea id="compare-reference" spellcheck="false" autocomplete="off" rows="3" maxlength="2048" placeholder="自分で確認した正しい文字起こし（モデルには渡しません）。空欄の基準文は無音テストです。"></textarea>
+            <p class="hint">CERは小さいほど誤りが少なく、100%を超える場合もあります。NFKC・小文字化・空白と句読点の除去後に計算します。意味や整形の良し悪しは本文を確認してください。</p>
+            <p id="compare-count"></p>
+            <button id="compare-start">録音済み音声で直列比較を開始</button>
+            <button id="compare-cancel" disabled>比較を中止</button>
+            <button id="compare-clear">比較結果を破棄</button>
+            <p id="compare-foundation" role="status"></p>
+            <p id="compare-progress" role="status"></p>
+            <p id="compare-message" role="alert"></p>
+            <p class="hint">比較開始で通常のWhisperモデルを解放し、子プロセスを毎回終了してから次の条件へ進みます。モデルの読み込み・処理・IPCを含む時間です（事前の容量・SHA検証は除外）。OSキャッシュや温度、実行順序の影響があります。最大60秒の録音、最大2048条件、1条件はASR最大10分＋補正最大150秒です。</p>
+            <div class="comparison-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>条件</th>
+                    <th>状態</th>
+                    <th>時間</th>
+                    <th>CER</th>
+                    <th>本文</th>
+                  </tr>
+                </thead>
+                <tbody id="compare-rows"></tbody>
+              </table>
+            </div>
+            <label>
+              <input type="checkbox" id="compare-include-text">レポートに認識・候補・最終本文を含める</label>
+            <button id="compare-copy-report" disabled>比較レポートJSONをコピー</button>
+            <p class="hint">通常はアプリ版・実行環境・条件・時間・CER・Appleモデルの利用可否・固定の失敗理由をコピーします。音声・取得文脈・基準文・モデルパスは含めません。本文を含める操作は明示的に選択してください。比較結果は自動入力・自動保存・送信しません。</p>
+          </details>
+        </section>
+      </div>
+      <footer aria-label="設定の保存" class="save-bar" hidden>
+        <p id="unsaved-status" role="status"></p>
+        <button id="save-preferences" aria-label="Save preferences" disabled>設定を保存</button>
+        <p id="preferences-message" role="status"></p>
+        <p class="hint">モデル・設定タブの変更をまとめて保存します。タブ切替では保存しません。</p>
+      </footer>
     </main>
     <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/navigation.ts"></script>
   </body>
 </html>

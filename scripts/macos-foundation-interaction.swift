@@ -38,6 +38,7 @@ func foundationInteraction(pid: pid_t, output: URL) throws {
           diagnostics["reuse_model_enabled"] as? Bool == false,
           resultText(root) == original else { throw SmokeFailure(description: "Unsafe or incomplete Apple model diagnostics") }
     try writeJSON(diagnostics, to: output.appendingPathComponent("diagnostics.json"))
+    revealProductControl(root, "Check Apple model availability")
     try interactionScreenshot(output, name: "diagnostics.png")
     // Subsequent full audio/OCR scenarios retain their original Qwen configuration.
     try chooseModelOption(root, label: "Correction engine", title: "Qwen3（ローカルGGUF）")

@@ -30,8 +30,43 @@ func uiText(_ root: AXUIElement) -> String {
     axElements(root).map(axText).joined(separator: "\n")
 }
 
+// Test-driver locators follow the same tabs/disclosures as a user. No DOM/IPC bypass.
+func revealProductControl(_ root: AXUIElement, _ label: String) {
+    var pid: pid_t = 0
+    guard AXUIElementGetPid(root, &pid) == .success,
+          NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == "dev.toyb0x.voiceinput" else { return }
+    let models = ["Model path", "Inference backend", "Load local model", "Model preset", "Managed speech model", "Managed correction model", "Correction engine", "Correction model path", "Correction backend", "Reuse Qwen correction model", "Download selected models", "Verify cached models", "Cancel model preparation", "Apply prepared models"]
+    let settings = ["Recording shortcut", "Automatic text insertion", "Automatic correction after transcription", "Recording status overlay", "Local recognition context", "Local OCR context", "Use context in Whisper", "Use context in correction", "Request accessibility permission", "Request screen permission", "更新を確認", "更新をインストールして再起動"]
+    let input = ["Start recording", "録音を開始", "Stop recording", "Transcribe recording", "Discard recording", "Copy transcript", "Transcription result", "Final text", "Corrected text", "Preview local correction", "Copy correction", "Open microphone settings"]
+    let diagnostics = ["Check Apple model availability", "Copy processing diagnostics", "比較画面を開く・閉じる", "すべてのパターンを選択", "Appleモデルの比較条件を選ぶ", "設定中のQwenの比較条件を選ぶ", "録音済み音声で直列比較を開始", "比較レポートJSONをコピー", "比較結果を破棄", "Appleモデルの固定サンプル診断", "AppleとQwenの固定サンプル比較"]
+    let view = models.contains(label) ? "モデル" : settings.contains(label) ? "設定" : input.contains(label) ? "音声入力" : diagnostics.contains(label) ? "比較・診断" : nil
+    do {
+        if let view {
+            let candidates = axElements(root).filter { element in
+                ["AXButton", "AXRadioButton", "AXTab"].contains(axValue(element,kAXRoleAttribute) as? String ?? "") &&
+                [kAXTitleAttribute,kAXDescriptionAttribute].contains { axValue(element,$0) as? String == view }
+            }
+            if let target = candidates.first, (axValue(target, "AXSelected") as? NSNumber)?.boolValue != true {
+                try press(target)
+            }
+        }
+        let disclosures = ["Session details"] + (["Transcription result", "Copy transcript"].contains(label) ? ["Raw transcript details"] : []) + (["Corrected text", "Preview local correction", "Copy correction"].contains(label) ? ["Manual correction details"] : [])
+        for name in disclosures {
+            if let disclosure = axElements(root).first(where: { axText($0).contains(name) && ["AXDisclosureTriangle", "AXButton"].contains(axValue($0,kAXRoleAttribute) as? String ?? "") }),
+               (axValue(disclosure,"AXExpanded") as? NSNumber)?.boolValue == false { try press(disclosure) }
+        }
+    } catch { fatalError("Native test could not navigate to the requested product control") }
+}
+
 func uiButton(_ root: AXUIElement, _ names: [String]) -> AXUIElement? {
-    axElements(root).first { element in
+    if names.contains("Save preferences"), !axElements(root).contains(where: { element in
+        axValue(element, kAXRoleAttribute) as? String == kAXButtonRole &&
+        [kAXTitleAttribute,kAXDescriptionAttribute].contains { axValue(element,$0) as? String == "Save preferences" }
+    }) {
+        // A clean Input view intentionally hides the shared save bar.
+        revealProductControl(root, "Recording shortcut")
+    } else if let name = names.first { revealProductControl(root, name) }
+    return axElements(root).first { element in
         guard axValue(element, kAXRoleAttribute) as? String == kAXButtonRole,
               (axValue(element, kAXEnabledAttribute) as? Bool) == true else { return false }
         let fields = [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute]
@@ -232,7 +267,8 @@ func waitForCIVirtualAudioDrain() throws {
 }
 
 func textField(_ root: AXUIElement, label: String) -> AXUIElement? {
-    axElements(root).first { element in
+    revealProductControl(root, label)
+    return axElements(root).first { element in
         guard let role = axValue(element, kAXRoleAttribute) as? String,
               ["AXTextField", "AXTextArea"].contains(role) else { return false }
         return [kAXTitleAttribute, kAXDescriptionAttribute].contains {
@@ -568,6 +604,7 @@ func desktopInteraction(pid: pid_t, windowID: NSNumber, output: URL) throws {
     defer { if let restarted, !restarted.isTerminated { restarted.forceTerminate() } }
     let restored = AXUIElementCreateApplication(restarted!.processIdentifier)
     try waitForUI("persisted preferences and automatic CPU model load", seconds: 120) {
+        revealProductControl(restored, "Recording shortcut")
         let text = uiText(restored)
         return text.contains("Control+Alt+KeyV（登録済み）") && text.contains("モデル準備完了（CPUを選択）")
             && textField(restored, label: "Model path").flatMap { axValue($0, kAXValueAttribute) as? String } == model

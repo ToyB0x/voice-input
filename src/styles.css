@@ -74,3 +74,53 @@ details { margin: 0.75rem 0; }
 #comparison-panel select { width: 100%; }
 
 #input-device, #input-level-status { overflow-wrap: anywhere; }
+
+/* Navigation keeps routine input separate from setup and experiments. */
+[hidden] { display: none !important; }
+main { max-width: 46rem; padding-bottom: 0; }
+.app-header { padding: .25rem 0 .5rem; }
+.app-header h1 { margin: .25rem 0; font-size: 1.6rem; }
+.tagline { font-size: .9rem; }
+.app-header .privacy { margin-top: .2rem; }
+.view-navigation { position: sticky; top: 0; z-index: 2; padding: .65rem 0; background: #f6f7f9; }
+[role="tablist"] { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .35rem; }
+[role="tab"] { padding: .65rem .25rem; font-size: .9rem; background: transparent; }
+[role="tab"][aria-selected="true"] { background: #315fba; border-color: #315fba; color: white; }
+[role="tabpanel"] { outline-offset: .25rem; padding-bottom: 1rem; }
+.session-summary { border-left: 3px solid #315fba; padding: .1rem .75rem; margin: .25rem 0 .5rem; }
+.session-summary p { font-size: .8rem; line-height: 1.5; }
+#status { font-weight: 600; }
+.save-bar { position: sticky; bottom: 0; z-index: 2; padding: .75rem 0; border-top: 1px solid #dbe0e8; background: #f6f7f9; }
+.save-bar button { float: right; margin-left: .5rem; }
+.save-bar p { font-size: .8rem; min-height: 1.2em; line-height: 1.5; }
+.save-bar::after { content: ""; display: block; clear: both; }
+#preferences-message { font-weight: 600; }
+#copy-final { color: white; background: #315fba; border-color: #315fba; }
+#final-text { min-height: 6rem; }
+label:has(input[type="checkbox"]) { display: flex; align-items: flex-start; gap: .5rem; margin: .8rem 0; line-height: 1.6; }
+input[type="checkbox"] { display: inline-block; width: auto; flex: none; margin: .25rem 0 0; }
+section > label:not(:has(input[type="checkbox"])) { display: block; margin-top: .75rem; }
+section > select { width: 100%; margin: .4rem 0; }
+summary { cursor: pointer; font-size: .9rem; font-weight: 600; padding: .5rem 0; }
+details > p, .note { font-size: .85rem; line-height: 1.6; }
+.text-button { padding: .2rem .5rem; margin-left: .25rem; font-size: .8rem; }
+button, select, input, textarea, summary { scroll-margin-top: 5rem; scroll-margin-bottom: 7rem; }
+@media (prefers-color-scheme: dark) {
+  .view-navigation, .save-bar { background: #171c24; }
+  .save-bar { border-color: #364154; }
+  .session-summary { border-color: #5485e6; }
+}
+@media (max-width: 420px) {
+  main { padding: .75rem .75rem 0; }
+  [role="tab"] { font-size: .8rem; }
+  section { padding: .85rem; }
+  .save-bar .hint { max-width: 65%; }
+}
+#unsaved-status:empty, #preferences-message:empty { display: none; }
+#unsaved-status { font-weight: 600; color: #805510; }
+@media (prefers-color-scheme: dark) { #unsaved-status { color: #f0c57a; } }
+@media (max-width: 420px) {
+  .tagline { display: none; }
+  .app-header .privacy { font-size: .75rem; line-height: 1.5; }
+  .app-header h1 { font-size: 1.4rem; }
+}

@@ -15,7 +15,9 @@ func comparisonInteraction(pid: pid_t, output: URL) throws {
     try waitForUI("full Cartesian plan") { uiText(root).contains("1128 件を直列に実行") }
     try press(uiButton(root,["録音済み音声で直列比較を開始"])!)
     try waitForUI("empty audio rejected safely") { uiText(root).contains("先に比較する音声を録音してください") }
+    revealProductControl(root, "更新を確認")
     try waitForUI("development updater reports missing signing configuration") {uiText(root).contains("更新署名キー未設定")}
+    revealProductControl(root, "比較画面を開く・閉じる")
     try interactionScreenshot(output,name:"comparison.png")
     try uiText(root).write(to:output.appendingPathComponent("comparison-state.txt"),atomically:true,encoding:.utf8)
     let selftestInferenceTested = try fixedCorrectionInteraction(root:root,output:output)

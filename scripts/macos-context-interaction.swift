@@ -3,7 +3,8 @@ import ApplicationServices
 import Foundation
 
 func contextCheckbox(_ root: AXUIElement) -> AXUIElement? {
-    axElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Local recognition context") }
+    revealProductControl(root, "Local recognition context")
+    return axElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Local recognition context") }
 }
 func pressContextButton(_ root: AXUIElement, _ label: String) throws {
     var button: AXUIElement?
@@ -30,7 +31,8 @@ func contextInteraction(pid: pid_t, scenario: String, output: URL) throws {
     let voice = AXUIElementCreateApplication(pid)
     if scenario == "context-restore" {
         try waitForUI("context preference restored", seconds: 120) {
-            uiText(voice).contains("認識補助: 有効。次の録音") && resultText(voice).isEmpty
+            revealProductControl(voice, "Local recognition context")
+            return uiText(voice).contains("認識補助: 有効。次の録音") && resultText(voice).isEmpty
                 && (contextCheckbox(voice).flatMap { axValue($0, kAXValueAttribute) as? NSNumber })?.intValue == 1
         }
         try writeJSON(["status": "passed", "preferenceRestored": true, "noPendingHintOrTranscript": true], to: output.appendingPathComponent("interaction.json"))

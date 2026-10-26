@@ -3,6 +3,7 @@ import ApplicationServices
 import Foundation
 
 func chooseModelOption(_ root: AXUIElement, label:String, title:String) throws {
+    revealProductControl(root, label)
     guard let popup=axElements(root).first(where:{axValue($0,kAXRoleAttribute) as? String == "AXPopUpButton" && axText($0).contains(label)}) else {throw SmokeFailure(description:"Missing model popup: "+label)}
     try press(popup)
     let normalizedTitle = title.precomposedStringWithCompatibilityMapping
@@ -67,6 +68,7 @@ func modelTransportRunning(_ pid:pid_t)->Bool {
 }
 func modelInteraction(pid:pid_t,scenario:String,output:URL) throws {
     let root=AXUIElementCreateApplication(pid)
+    revealProductControl(root, "Model preset")
     let storage=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/dev.toyb0x.voiceinput/models")
     func noPartial()->Bool {((try? FileManager.default.contentsOfDirectory(atPath:storage.path)) ?? []).allSatisfy{!$0.hasSuffix(".part")}}
     func value(_ label:String)->String {textField(root,label:label).flatMap{axValue($0,kAXValueAttribute) as? String} ?? ""}

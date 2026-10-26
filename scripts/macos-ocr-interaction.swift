@@ -4,7 +4,8 @@ import Foundation
 import Darwin
 
 func checkBox(_ root:AXUIElement,_ label:String)->AXUIElement? {
-    axElements(root).first {axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains(label)}
+    revealProductControl(root, label)
+    return axElements(root).first {axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains(label)}
 }
 func setCheckBox(_ root:AXUIElement,_ label:String,_ value:Bool) throws {
     guard let control=checkBox(root,label) else {throw SmokeFailure(description:"Missing preference: "+label)}

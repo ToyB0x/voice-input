@@ -3,7 +3,8 @@ import ApplicationServices
 import Foundation
 
 func insertionCheckbox(_ root: AXUIElement) -> AXUIElement? {
-    axElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Automatic text insertion") }
+    revealProductControl(root, "Automatic text insertion")
+    return axElements(root).first { axValue($0, kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Automatic text insertion") }
 }
 func configureInsertion(_ root: AXUIElement) throws {
     try waitForUI("restored model", seconds: 120) { uiText(root).contains("モデル準備完了") }
@@ -266,12 +267,12 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
     try waitForUI("product accessibility trust") { uiText(voice).contains(shouldBeTrusted ? "アクセシビリティ許可済み" : "アクセシビリティ未許可") }
     var originalCorrectionPath = ""
     if !shouldBeTrusted {
-        guard let automatic = axElements(voice).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Automatic correction after transcription") }),
-              let pathField = axElements(voice).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXTextField" && axText($0).contains("Correction model path") })
+        guard let pathField = textField(voice, label: "Correction model path")
         else {throw SmokeFailure(description:"Automatic correction controls missing")}
         originalCorrectionPath = axValue(pathField,kAXValueAttribute) as? String ?? ""
         try chooseModelOption(voice,label:"Correction engine",title:"Qwen3（ローカルGGUF）")
         try typeField(voice,label:"Correction model path",value:"/missing/voice-input-auto-correction.gguf")
+        guard let automatic = checkBox(voice, "Automatic correction after transcription") else {throw SmokeFailure(description:"Missing automatic correction flag")}
         try press(automatic)
         try press(uiButton(voice,["Save preferences"])!)
         try waitForUI("automatic correction saved") {uiText(voice).contains("設定を保存しました")}
@@ -290,7 +291,7 @@ func insertionInteraction(pid: pid_t, windowID: NSNumber, scenario: String, outp
               axValue(final,kAXValueAttribute) as? String == resultText(voice)
         else {throw SmokeFailure(description:"Automatic fallback lost the raw transcript")}
         try typeField(voice,label:"Correction model path",value:originalCorrectionPath)
-        if let automatic = axElements(voice).first(where: { axValue($0,kAXRoleAttribute) as? String == "AXCheckBox" && axText($0).contains("Automatic correction after transcription") }) {try press(automatic)}
+        if let automatic = checkBox(voice, "Automatic correction after transcription") {try press(automatic)}
         try press(uiButton(voice,["Save preferences"])!)
         try waitForUI("automatic fallback preferences restored") {uiText(voice).contains("設定を保存しました") && uiButton(voice,["Request accessibility permission"]) != nil}
         // Register the product in System Settings through its real prompt API.
