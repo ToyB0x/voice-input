@@ -3,7 +3,7 @@
 use crate::Request;
 use serde::{Deserialize, Serialize};
 
-pub const REVISION: &str = "dictionary-selection-v4";
+pub const REVISION: &str = "dictionary-selection-v5";
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Entry {
@@ -126,6 +126,17 @@ pub fn candidates(request: &Request) -> Result<Vec<Candidate>, &'static str> {
     // Explicit self-correction is stronger evidence of intent than a screen.
     // The conservative repair recognizer may also cause harmless abstentions.
     if crate::explicit_repair(&request.transcript).is_some() {
+        return Ok(result);
+    }
+    // Different explicit named participants make the relevance of screen text
+    // uncertain. This conservative policy can decline valid cross-person work;
+    // absence of names or a shared mention is not proof of relevance.
+    let spoken_names = crate::named_mentions(&request.transcript);
+    let context_names = crate::named_mentions(&request.context);
+    if !spoken_names.is_empty()
+        && !context_names.is_empty()
+        && spoken_names.is_disjoint(&context_names)
+    {
         return Ok(result);
     }
     let evidence = usable_context(&request.context);
@@ -497,6 +508,20 @@ mod tests {
                 .is_err()
         );
     }
+    #[test]
+    fn disjoint_named_participants_decline_context_edits() {
+        let mut r = request();
+        r.context = "鈴木さんが用意した飴の写真です。".into();
+        assert!(candidates(&r).unwrap().is_empty());
+        r.context = "田中さんが用意した飴の写真です。".into();
+        assert!(!candidates(&r).unwrap().is_empty());
+        r.context = "飴の写真です。".into();
+        assert!(!candidates(&r).unwrap().is_empty());
+        r.transcript = "雨の写真を送ります。".into();
+        r.context = "鈴木さんが用意した飴の写真です。".into();
+        assert!(!candidates(&r).unwrap().is_empty());
+    }
+
     #[test]
     fn instructions_and_negative_evidence_do_not_authorize_edits() {
         let mut r = request();

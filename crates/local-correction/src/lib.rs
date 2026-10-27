@@ -194,12 +194,6 @@ fn parse_answer_with_scope(
 /// recognition: kana-only names and names without a suffix can remain ambiguous.
 /// Restricted replacement mode additionally preserves every unselected byte.
 fn preserve_named_mentions(original: &str, candidate: &str) -> Result<(), &'static str> {
-    fn name_char(c: char) -> bool {
-        ('\u{3400}'..='\u{9fff}').contains(&c)
-            || ('ァ'..='ヶ').contains(&c)
-            || c == 'ー'
-            || c.is_ascii_alphanumeric()
-    }
     // Retired alternatives in an explicit self-repair are allowed to disappear.
     // The existing repair guard independently requires the final target. Decline
     // entity extraction from the ambiguous prefix, while retaining other clauses.
@@ -216,6 +210,23 @@ fn preserve_named_mentions(original: &str, candidate: &str) -> Result<(), &'stat
     let original = source_clauses.join("。");
     let original = original.as_str();
     let candidate = normalized(candidate);
+    let mentions = named_mentions(original);
+    let source = normalized(original);
+    for mention in mentions {
+        if candidate.matches(&mention).count() < source.matches(&mention).count() {
+            return Err("correction removed or changed a named mention");
+        }
+    }
+    Ok(())
+}
+
+fn named_mentions(original: &str) -> std::collections::BTreeSet<String> {
+    fn name_char(c: char) -> bool {
+        ('\u{3400}'..='\u{9fff}').contains(&c)
+            || ('ァ'..='ヶ').contains(&c)
+            || c == 'ー'
+            || c.is_ascii_alphanumeric()
+    }
     let mut mentions = std::collections::BTreeSet::new();
     for suffix in ["さん", "様", "氏", "先生"] {
         for (index, _) in original.match_indices(suffix) {
@@ -233,13 +244,7 @@ fn preserve_named_mentions(original: &str, candidate: &str) -> Result<(), &'stat
             }
         }
     }
-    let source = normalized(original);
-    for mention in mentions {
-        if candidate.matches(&mention).count() < source.matches(&mention).count() {
-            return Err("correction removed or changed a named mention");
-        }
-    }
-    Ok(())
+    mentions
 }
 
 /// Reject new repeated sentences, while preserving intentional repetition in speech.
