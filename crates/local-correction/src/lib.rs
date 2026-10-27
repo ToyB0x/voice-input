@@ -1052,7 +1052,16 @@ mod tests {
             "../../../evaluation/correction-guard-cases.json"
         ))
         .unwrap();
-        for case in fixture["cases"].as_array().unwrap() {
+        let names: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../evaluation/correction-named-guard-cases.json"
+        ))
+        .unwrap();
+        for case in fixture["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .chain(names["cases"].as_array().unwrap())
+        {
             let json = serde_json::to_vec(&Answer {
                 text: case["candidate"].as_str().unwrap().into(),
             })

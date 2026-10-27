@@ -32,7 +32,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang libclang-dev libseccomp2
           rustup show
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: build-cache
         with:
           path: |
             ~/.cargo/registry
@@ -44,6 +45,13 @@ jobs:
           cargo clippy --manifest-path crates/local-correction/Cargo.toml --locked --all-targets -- -D warnings
           cargo test --manifest-path crates/local-correction/Cargo.toml --locked
           cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked --bin local-correction
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
       - name: Prepare pinned model (explicit setup only)
         run: python3 scripts/prepare-correction-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/model.gguf"
       - name: Measure original rewrite baseline offline

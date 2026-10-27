@@ -223,62 +223,6 @@
       "candidate": "本館、または別館を使います。",
       "should_accept": true,
       "category": "lexical"
-    },
-    {
-      "id": "drop-recipient",
-      "original": "田中さんへ資料を送ります",
-      "candidate": "資料を送ります",
-      "should_accept": false,
-      "category": "named-mention"
-    },
-    {
-      "id": "swap-recipient",
-      "original": "田中さんへ資料を送ります",
-      "candidate": "山田さんへ資料を送ります",
-      "should_accept": false,
-      "category": "named-mention"
-    },
-    {
-      "id": "drop-later-recipient",
-      "original": "資料を確認して次に田中さんへ連絡します",
-      "candidate": "資料を確認して次に連絡します",
-      "should_accept": false,
-      "category": "named-mention"
-    },
-    {
-      "id": "retain-recipient-filler",
-      "original": "えー田中さんへ資料を送ります",
-      "candidate": "田中さんへ資料を送ります。",
-      "should_accept": true,
-      "category": "named-mention"
-    },
-    {
-      "id": "retain-recipient-format",
-      "original": "田中さんへ資料を送ります",
-      "candidate": "田中さんへ資料を送ります。",
-      "should_accept": true,
-      "category": "named-mention"
-    },
-    {
-      "id": "repair-recipient",
-      "original": "宛先は山田さんいや鈴木さんです",
-      "candidate": "宛先は鈴木さんです。",
-      "should_accept": true,
-      "category": "named-mention"
-    },
-    {
-      "id": "drop-katakana-name",
-      "original": "スミスさんに連絡します",
-      "candidate": "連絡します",
-      "should_accept": false,
-      "category": "named-mention"
-    },
-    {
-      "id": "drop-recipient-twice",
-      "original": "田中さんへ資料を送ります。田中さんへ結果も送ります",
-      "candidate": "田中さんへ資料を送ります。結果も送ります",
-      "should_accept": false,
-      "category": "named-mention"
     }
   ]
 }

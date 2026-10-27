@@ -35,10 +35,15 @@ def main():
     if baseline['cases_sha256']!=checksum(path):raise ValueError('Frozen guard inputs changed')
     result=subprocess.run([str(args.binary.resolve())],input=path.read_text(),text=True,capture_output=True,check=True,timeout=20)
     after=json.loads(result.stdout)
+    supplemental_path=ROOT/'evaluation/correction-named-guard-cases.json'
+    supplemental_cases=json.loads(supplemental_path.read_text())['cases']
+    supplemental_run=subprocess.run([str(args.binary.resolve())],input=supplemental_path.read_text(),text=True,capture_output=True,check=True,timeout=20)
+    supplemental=json.loads(supplemental_run.stdout)
     report=dict(source_revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
                 runtime_source_sha256=checksum(ROOT/'crates/local-correction/src/lib.rs'),binary_sha256=checksum(args.binary),
                 cases_sha256=checksum(path),baseline_sha256=checksum(saved),network_denied=args.require_network_denied,
                 before=metrics(cases,baseline['results']),after=metrics(cases,after),results=after,
+                named_mentions=metrics(supplemental_cases,supplemental),named_results=supplemental,named_cases_sha256=checksum(supplemental_path),
                 limitation='Fixed public/synthetic expected decisions, not a semantic guarantee or an estimate of real-world error rates. A valid negative self-repair rejected by conservative policy is counted separately, not as a harmful candidate.')
     args.output.mkdir(parents=True,exist_ok=True)
     (args.output/'guard-regression.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
@@ -46,8 +51,9 @@ def main():
            '|---|---:|---:|---:|---:|---:|']
     for version in ['before','after']:
         m=report[version];lines.append(f"| {version} | {m['accepted_valid']}/{m['valid_cases']} | {m['false_rejections']} | {m['rejected_harmful']}/{m['harmful_cases']} | {m['false_accepts']} | {m['policy_rejected']}/{m['policy_cases']} |")
-    lines+=['',report['limitation']]
+    lines+=['', 'New named-mention cases (no historical baseline): '+json.dumps(report['named_mentions']), '',report['limitation']]
     (args.output/'summary.md').write_text('\n'.join(lines)+'\n');print('\n'.join(lines))
+    if report['named_mentions']['false_rejections'] or report['named_mentions']['false_accepts']:raise ValueError('Named mention regression')
     if report['after']['false_rejections'] or report['after']['false_accepts'] or report['after']['policy_rejected']!=report['after']['policy_cases']:raise ValueError('Guard regression; inspect fixed decisions')
 
 if __name__=='__main__':main()

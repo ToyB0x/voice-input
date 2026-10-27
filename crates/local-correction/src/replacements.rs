@@ -113,10 +113,13 @@ pub fn apply(request: &Request, selection: &Selection) -> Result<String, &'stati
     output.push_str(&request.transcript[end..]);
     // Shared numeric, negation, name, repetition and content-loss backstops.
     crate::parse_answer(
-        &serde_json::to_vec(&crate::Answer { text: output })
-            .map_err(|_| "invalid correction JSON")?,
+        &serde_json::to_vec(&crate::Answer {
+            text: output.clone(),
+        })
+        .map_err(|_| "invalid correction JSON")?,
         &request.transcript,
-    )
+    )?;
+    Ok(output)
 }
 
 pub fn prompt(request: &Request) -> Result<String, &'static str> {
@@ -161,6 +164,15 @@ mod tests {
             apply(&r, &Selection { edits: vec![0] }).unwrap(),
             "田中さんへ飴の写真を3枚送ります。雨ですね。"
         );
+        assert_eq!(
+            apply(&r, &Selection { edits: vec![] }).unwrap(),
+            r.transcript
+        );
+    }
+    #[test]
+    fn keeps_outer_whitespace() {
+        let mut r = request();
+        r.transcript = format!("  {}\n", r.transcript);
         assert_eq!(
             apply(&r, &Selection { edits: vec![] }).unwrap(),
             r.transcript
