@@ -1,0 +1,313 @@
+{
+  "schema_version": 1,
+  "status": "archived-not-promoted",
+  "reports": [
+    {
+      "id": "full-8b",
+      "run_url": "https://github.com/ToyB0x/voice-input/actions/runs/40499627290",
+      "report_sha256": "856d286a61ed63efe2020d40c2a9416ef438a78f7a7894b60b33ca671f6e7c39",
+      "source_revision": "d254598ae15d59db9cb2276473f644feff8e7b40",
+      "model": "qwen3-8b",
+      "model_sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+      "binary_sha256": "966ea5845b4c5a7e8704ee83458148e3ee5d1a2ee954bcdafadda09589c4f0c4",
+      "fixture": "replacement-cases.json",
+      "fixture_sha256": "16d0305b1a6a66974b014192cce3b576d058b405ef6538006e373b0d2194e195",
+      "complete": true,
+      "quality_pass": false,
+      "backend": "cpu",
+      "network_denied": true,
+      "repeats": 2,
+      "gate_passed": 80,
+      "gate_total": 84,
+      "groups": {
+        "abstention": {
+          "passed": 28,
+          "total": 28
+        },
+        "adversarial-context": {
+          "passed": 2,
+          "total": 2
+        },
+        "functional": {
+          "passed": 38,
+          "total": 42
+        },
+        "preservation": {
+          "passed": 14,
+          "total": 14
+        }
+      },
+      "decision_paths": {
+        "model-inference": {
+          "passed": 42,
+          "total": 44
+        },
+        "deterministic-no-authorized-edits": {
+          "passed": 40,
+          "total": 42
+        }
+      },
+      "unstable_cases": [],
+      "failures": [
+        {
+          "id": "candy-original",
+          "repeat": 0,
+          "group": "functional",
+          "gate": true,
+          "expected": "飴が降っています。",
+          "final_text": "雨が降っています。"
+        },
+        {
+          "id": "extended-reading-recipient",
+          "repeat": 0,
+          "group": "functional",
+          "gate": true,
+          "expected": "佐藤さんへ仕様を送ります。",
+          "final_text": "佐藤さんへしようを送ります。"
+        },
+        {
+          "id": "extended-reading-recipient",
+          "repeat": 1,
+          "group": "functional",
+          "gate": true,
+          "expected": "佐藤さんへ仕様を送ります。",
+          "final_text": "佐藤さんへしようを送ります。"
+        },
+        {
+          "id": "candy-original",
+          "repeat": 1,
+          "group": "functional",
+          "gate": true,
+          "expected": "飴が降っています。",
+          "final_text": "雨が降っています。"
+        }
+      ]
+    },
+    {
+      "id": "full-14b",
+      "run_url": "https://github.com/ToyB0x/voice-input/actions/runs/40496915814",
+      "report_sha256": "d78419da3d47a894feab38968a9023cef3312d76f9ca791c33185ee9440a6625",
+      "source_revision": "524a6a138ea78bcc8287b9a1d08072cd2e02ea43",
+      "model": "qwen3-14b",
+      "model_sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0",
+      "binary_sha256": "966ea5845b4c5a7e8704ee83458148e3ee5d1a2ee954bcdafadda09589c4f0c4",
+      "fixture": "replacement-cases.json",
+      "fixture_sha256": "16d0305b1a6a66974b014192cce3b576d058b405ef6538006e373b0d2194e195",
+      "complete": true,
+      "quality_pass": false,
+      "backend": "cpu",
+      "network_denied": true,
+      "repeats": 2,
+      "gate_passed": 80,
+      "gate_total": 84,
+      "groups": {
+        "abstention": {
+          "passed": 28,
+          "total": 28
+        },
+        "adversarial-context": {
+          "passed": 0,
+          "total": 2
+        },
+        "functional": {
+          "passed": 38,
+          "total": 42
+        },
+        "preservation": {
+          "passed": 14,
+          "total": 14
+        }
+      },
+      "decision_paths": {
+        "model-inference": {
+          "passed": 40,
+          "total": 44
+        },
+        "deterministic-no-authorized-edits": {
+          "passed": 40,
+          "total": 42
+        }
+      },
+      "unstable_cases": [],
+      "failures": [
+        {
+          "id": "wrong-context-unresolvable",
+          "repeat": 0,
+          "group": "adversarial-context",
+          "gate": false,
+          "expected": "雨が降っています。",
+          "final_text": "飴が降っています。"
+        },
+        {
+          "id": "negated-dictionary-spelling",
+          "repeat": 0,
+          "group": "functional",
+          "gate": true,
+          "expected": "冷凍肉を解凍しないでください。",
+          "final_text": "冷凍肉を回答しないでください。"
+        },
+        {
+          "id": "extended-reading-recipient",
+          "repeat": 0,
+          "group": "functional",
+          "gate": true,
+          "expected": "佐藤さんへ仕様を送ります。",
+          "final_text": "佐藤さんへしようを送ります。"
+        },
+        {
+          "id": "extended-reading-recipient",
+          "repeat": 1,
+          "group": "functional",
+          "gate": true,
+          "expected": "佐藤さんへ仕様を送ります。",
+          "final_text": "佐藤さんへしようを送ります。"
+        },
+        {
+          "id": "negated-dictionary-spelling",
+          "repeat": 1,
+          "group": "functional",
+          "gate": true,
+          "expected": "冷凍肉を解凍しないでください。",
+          "final_text": "冷凍肉を回答しないでください。"
+        },
+        {
+          "id": "wrong-context-unresolvable",
+          "repeat": 1,
+          "group": "adversarial-context",
+          "gate": false,
+          "expected": "雨が降っています。",
+          "final_text": "飴が降っています。"
+        }
+      ]
+    },
+    {
+      "id": "confirmation-8b",
+      "run_url": "https://github.com/ToyB0x/voice-input/actions/runs/40496828995",
+      "report_sha256": "f651865ce999bb114c3d194e446147c854681f949537c29b9ee4f08a193e00bb",
+      "source_revision": "d254598ae15d59db9cb2276473f644feff8e7b40",
+      "model": "qwen3-8b",
+      "model_sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+      "binary_sha256": "966ea5845b4c5a7e8704ee83458148e3ee5d1a2ee954bcdafadda09589c4f0c4",
+      "fixture": "replacement-confirmation-cases.json",
+      "fixture_sha256": "37ad3c85844af56e04fbcf89e70ef24485eb8dcead1843fd97afff022d16a571",
+      "complete": true,
+      "quality_pass": false,
+      "backend": "cpu",
+      "network_denied": true,
+      "repeats": 2,
+      "gate_passed": 22,
+      "gate_total": 28,
+      "groups": {
+        "abstention": {
+          "passed": 8,
+          "total": 14
+        },
+        "functional": {
+          "passed": 14,
+          "total": 14
+        }
+      },
+      "decision_paths": {
+        "model-inference": {
+          "passed": 14,
+          "total": 20
+        },
+        "deterministic-no-authorized-edits": {
+          "passed": 8,
+          "total": 8
+        }
+      },
+      "unstable_cases": [],
+      "failures": [
+        {
+          "id": "unrelated-negation",
+          "repeat": 0,
+          "group": "abstention",
+          "gate": true,
+          "expected": "本人の意思を無視しません。",
+          "final_text": "本人の医師を無視しません。"
+        },
+        {
+          "id": "unrelated-numbers",
+          "repeat": 0,
+          "group": "abstention",
+          "gate": true,
+          "expected": "鑑賞した作品を3点送りました。",
+          "final_text": "干渉した作品を3点送りました。"
+        },
+        {
+          "id": "unrelated-action",
+          "repeat": 0,
+          "group": "abstention",
+          "gate": true,
+          "expected": "進行は止めません。",
+          "final_text": "信仰は止めません。"
+        },
+        {
+          "id": "unrelated-action",
+          "repeat": 1,
+          "group": "abstention",
+          "gate": true,
+          "expected": "進行は止めません。",
+          "final_text": "信仰は止めません。"
+        },
+        {
+          "id": "unrelated-numbers",
+          "repeat": 1,
+          "group": "abstention",
+          "gate": true,
+          "expected": "鑑賞した作品を3点送りました。",
+          "final_text": "干渉した作品を3点送りました。"
+        },
+        {
+          "id": "unrelated-negation",
+          "repeat": 1,
+          "group": "abstention",
+          "gate": true,
+          "expected": "本人の意思を無視しません。",
+          "final_text": "本人の医師を無視しません。"
+        }
+      ]
+    },
+    {
+      "id": "confirmation-14b",
+      "run_url": "https://github.com/ToyB0x/voice-input/actions/runs/40499631479",
+      "report_sha256": "8f00279c0c7688523266ae9ea89d75e14b204cb719ede7d509eb2a1dc9eb216e",
+      "source_revision": "c191bba82a651120045e301a16a749d22272c784",
+      "model": "qwen3-14b",
+      "model_sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0",
+      "binary_sha256": "966ea5845b4c5a7e8704ee83458148e3ee5d1a2ee954bcdafadda09589c4f0c4",
+      "fixture": "replacement-confirmation-cases.json",
+      "fixture_sha256": "37ad3c85844af56e04fbcf89e70ef24485eb8dcead1843fd97afff022d16a571",
+      "complete": true,
+      "quality_pass": true,
+      "backend": "cpu",
+      "network_denied": true,
+      "repeats": 2,
+      "gate_passed": 28,
+      "gate_total": 28,
+      "groups": {
+        "abstention": {
+          "passed": 14,
+          "total": 14
+        },
+        "functional": {
+          "passed": 14,
+          "total": 14
+        }
+      },
+      "decision_paths": {
+        "model-inference": {
+          "passed": 20,
+          "total": 20
+        },
+        "deterministic-no-authorized-edits": {
+          "passed": 8,
+          "total": 8
+        }
+      },
+      "unstable_cases": [],
+      "failures": []
+    }
+  ]
+}
