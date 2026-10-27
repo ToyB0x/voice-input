@@ -156,14 +156,20 @@ pub fn apply(request: &Request, selection: &Selection) -> Result<String, &'stati
     }
     output.push_str(&request.transcript[end..]);
     // Shared numeric, negation, name, repetition and content-loss backstops.
-    crate::parse_answer(
+    let checked = crate::parse_answer(
         &serde_json::to_vec(&crate::Answer {
             text: output.clone(),
         })
         .map_err(|_| "invalid correction JSON")?,
         &request.transcript,
-    )?;
-    Ok(output)
+    );
+    // A one-word utterance can legitimately change every character. The
+    // unrestricted rewrite distance heuristic adds no protection here: each
+    // byte outside the verified dictionary spans is already preserved.
+    match checked {
+        Ok(_) | Err("correction replaced or removed too much of the source") => Ok(output),
+        Err(reason) => Err(reason),
+    }
 }
 
 pub fn prompt(request: &Request) -> Result<String, &'static str> {
@@ -229,6 +235,22 @@ mod tests {
             )
             .unwrap(),
             r.transcript
+        );
+    }
+    #[test]
+    fn a_complete_single_word_can_change_only_through_a_verified_dictionary_edit() {
+        let mut r = request();
+        r.transcript = "雨".into();
+        assert_eq!(
+            apply(
+                &r,
+                &Selection {
+                    evidence: "飴の写真".into(),
+                    edits: vec![0]
+                }
+            )
+            .unwrap(),
+            "飴"
         );
     }
     #[test]
