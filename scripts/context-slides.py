@@ -11,7 +11,7 @@ from pathlib import Path
 import statistics
 
 ROOT=Path(__file__).resolve().parents[1]
-LABELS={'none':'文脈なし','fixture-text':'テキスト直接入力（対照）','ax':'AX API','ocr':'文字画像→OCR','image-ocr':'文字なし画像→OCR','vision-labels':'画像→Vision分類','mismatched-text':'逆の文脈（負の対照）'}
+LABELS={'none':'文脈なし','fixture-text':'テキスト直接入力（対照）','ax':'AX API','ocr':'文字画像→OCR','image-ocr':'文字なし画像→OCR','vision-labels':'画像→Vision全体分類','vision-regions':'画像→Vision領域分類','mismatched-text':'逆の文脈（負の対照）'}
 def e(x): return html.escape(str(x))
 def image(path): return 'data:image/png;base64,'+base64.b64encode(path.read_bytes()).decode()
 def table(headers,rows):
@@ -85,9 +85,9 @@ def main():
         c=r['captures'][scene]
         labels=c['vision'].get('labels',[])
         pics.append('<div><img src="'+image(ROOT/'evaluation/context-evidence/assets'/f'{scene}.png')+'"><p>'+e(', '.join(f"{x['label']} {x['confidence']:.2f}" for x in labels[:5]) or '分類未取得')+'</p></div>')
-    add('文字のない画像は、OCRだけでは足りる？','<div class="pictures">'+''.join(pics)+'</div><p>画像 → Apple Vision分類ラベル → テキスト補正。正解語への手動マッピングは行っていない。</p><p>画像はAI生成の合成刺激。画像を直接LLMへ渡すVLMの試験や、画面全体を読む製品機能ではない。</p>')
+    add('文字のない画像は、OCRだけでは足りる？','<div class="pictures">'+''.join(pics)+'</div><p>画像 → Apple Vision分類ラベル → テキスト補正。領域条件は固定3×3／5×5分割で、小物を調べる別条件。正解語への手動マッピングは行っていない。</p><p>画像はAI生成の合成刺激。画像を直接LLMへ渡すVLMの試験や、画面全体を読む製品機能ではない。</p>')
     route_rows=[]
-    for source in ['fixture-text','ocr','vision-labels','mismatched-text']:
+    for source in ['fixture-text','ocr','vision-labels','vision-regions','mismatched-text']:
         for route_name in ['hint','correction','both']:
             for instruction in r['instructions']:
                 xs=[x for x in rows if x.get('source')==source and x.get('route')==route_name and x.get('instruction')==instruction and x.get('engine')==engine and x.get('status') not in ['unavailable','asr-failed','error'] and x.get('finalText') is not None]

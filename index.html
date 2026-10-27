@@ -252,7 +252,7 @@
             <label for="lab-instruction">検証用の追加指示（通常の設定は変更しません）</label>
             <textarea id="lab-instruction" rows="3" maxlength="512">文脈から判断できる同音語は自然な漢字表記にしてください。判断できない場合は推測せず元の表記を保ってください。</textarea>
             <label class="check"><input id="lab-compare-instruction" type="checkbox" checked>追加指示なしの標準条件も比較する</label>
-            <p class="hint">文脈なし・直接テキスト・AX・文字OCR・文字なし画像OCR・画像分類ラベル・逆の文脈を比較します。音声がある場合はWhisperヒント／補正／両方へ振り分けます。かな原文モードは最終補正だけを比較します。数値・否定・人名・フィラーなどの補助試験も行います。期待語の出現やガード採用は意味保持の保証ではありません。</p>
+            <p class="hint">文脈なし・直接テキスト・AX・文字OCR・画像単体OCR・画像全体／固定グリッド領域の分類ラベル・逆の文脈を比較します。音声がある場合はWhisperヒント／補正／両方へ振り分けます。かな原文モードは最終補正だけを比較します。数値・否定・人名・フィラーなどの補助試験も行います。期待語の出現やガード採用は意味保持の保証ではありません。</p>
             <button id="lab-start">実機で直列検証を開始</button><button id="lab-cancel" disabled>検証を中止</button><button id="lab-clear">結果を破棄</button>
             <p id="lab-progress" role="status"></p><p id="lab-final-status" role="status"></p><p id="lab-message" role="alert" aria-live="assertive"></p>
             <div class="table-scroll"><table><thead><tr><th>条件</th><th>状態・期待語</th><th>時間</th><th>原文・候補・最終</th></tr></thead><tbody id="lab-rows"></tbody></table></div>

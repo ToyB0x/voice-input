@@ -35,7 +35,7 @@ function render(){
     speech?`Whisper: ${ready("current-speech")?"保存済みモデルあり":"未準備／保存済みパスの参照先なし"}`:"Whisper: 不要（かな原文のみ）",
     qwen?`Qwen: ${ready("current-correction")?"保存済みモデルあり":"未準備／保存済みパスの参照先なし。「モデル」で準備・検証 → 設定欄へ反映 → 設定を保存"}`:"Qwen: 比較しない",
   ].join("\n"));
-  setText("lab-final-status",(state?.finalTestSummary??[]).filter(x=>x.source==="vision-labels"&&x.route==="correction").map(x=>`画像分類→補正 / ${x.engine} / ${x.inputForm}: ${x.status}（文全体 ${x.passed}/${x.required}）`).join("\n"));
+  setText("lab-final-status",(state?.finalTestSummary??[]).filter(x=>["vision-labels","vision-regions"].includes(x.source)&&x.route==="correction").map(x=>`画像分類 ${x.source==="vision-regions"?"領域":"全体"}→補正 / ${x.engine} / ${x.inputForm}: ${x.status}（文全体 ${x.passed}/${x.required}）`).join("\n"));
   setText("lab-message",message);
   setText("lab-progress",state?`${state.phase}: ${state.completed}/${state.planned}\n${state.message}\nAFM: ${state.foundation?.status?.availability??state.foundation?.error??"未確認"}`:"未実行。実行ボタンを押すまで取得・推論は行いません。");
   setText("lab-copy-part",`分割JSONをコピー（${part+1}/${Math.max(1,state?.parts??1)}）`);

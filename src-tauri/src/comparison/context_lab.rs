@@ -178,7 +178,7 @@ impl Comparisons {
             json!({"custom":options.instruction})
         };
         let variants = instructions.as_object().unwrap().len();
-        let per_scene = if options.input == "text" { 7 } else { 19 };
+        let per_scene = if options.input == "text" { 8 } else { 22 };
         let forms = if options.input_form == "both" { 2 } else { 1 };
         let engines = usize::from(options.apple) * forms + usize::from(options.qwen);
         let total = options.repeats * 2 * per_scene * (1 + variants * engines)
@@ -657,7 +657,7 @@ fn final_test_summary(rows: &[Value], repeats: usize) -> Value {
         BTreeMap::new();
     for r in rows {
         if r["engine"] == "none"
-            || !["fixture-text", "ocr", "vision-labels"]
+            || !["fixture-text", "ocr", "vision-labels", "vision-regions"]
                 .contains(&r["source"].as_str().unwrap_or(""))
             || !["correction", "both"].contains(&r["route"].as_str().unwrap_or(""))
         {
@@ -791,31 +791,22 @@ fn scene_sources(c: &Value, other: &Value) -> Vec<(&'static str, Option<String>)
             None
         }
     }
-    let labels = if c["vision"]["status"] == "completed" {
-        c["vision"]["labels"]
-            .as_array()
-            .filter(|a| !a.is_empty())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|x| {
-                        Some(format!(
-                            "{} ({:.3})",
-                            x["label"].as_str()?,
-                            x["confidence"].as_f64()?
-                        ))
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })
-    } else {
-        None
-    };
+    fn labels(v: &Value, regional: bool) -> Option<String> {
+        if v["status"] != "completed" {
+            return None;
+        }
+        v["labels"].as_array().filter(|a|!a.is_empty()).map(|a| {
+            let body = a.iter().filter_map(|x|Some(format!("{} ({:.3})",x["label"].as_str()?,x["confidence"].as_f64()?))).collect::<Vec<_>>().join("\n");
+            if regional {format!("画像の固定グリッド領域の分類。数値は各ラベルの領域内スコア最大値で、画面全体や単語選択の確率ではありません。\n{body}")} else {body}
+        })
+    }
     vec![
         ("fixture-text", c["fixtureText"].as_str().map(str::to_owned)),
         ("ax", text(&c["ax"])),
         ("ocr", text(&c["ocr"])),
         ("image-ocr", text(&c["imageOCR"])),
-        ("vision-labels", labels),
+        ("vision-labels", labels(&c["vision"], false)),
+        ("vision-regions", labels(&c["visionRegions"], true)),
         (
             "mismatched-text",
             other["fixtureText"].as_str().map(str::to_owned),
@@ -1449,7 +1440,7 @@ else:
                 1,
             )
             .expect("native controlled capture");
-            for key in ["ax", "ocr", "imageOCR", "vision"] {
+            for key in ["ax", "ocr", "imageOCR", "vision", "visionRegions"] {
                 assert!(
                     ["completed", "unavailable"]
                         .contains(&captured[key]["status"].as_str().unwrap_or("invalid"))

@@ -99,6 +99,37 @@ func ocr(_ image: CGImage) -> [String: Any] {
     }
     return ["status": "unavailable", "text": "", "reason": "vision-ocr-failed", "attempts": attempts]
 }
+// Fixed multiscale grid, independent of scene ID and expected answer. Small
+// objects can disappear in whole-frame classifications dominated by people/sky.
+func regionalClassification(_ image: CGImage) -> [String: Any] {
+    let started = ProcessInfo.processInfo.systemUptime
+    var regions = [[String: Any]](), best = [String: (Float, Int)]()
+    var failures = 0
+    for grid in [3, 5] {
+        for y in 0..<grid { for x in 0..<grid {
+            let x0 = image.width*x/grid, y0 = image.height*y/grid
+            let rect = CGRect(x: x0, y: y0, width: image.width*(x+1)/grid-x0, height: image.height*(y+1)/grid-y0)
+            guard let crop = image.cropping(to: rect) else { failures += 1; continue }
+            let request = VNClassifyImageRequest()
+            do {
+                try VNImageRequestHandler(cgImage: crop, options: [:]).perform([request])
+                let labels = Array((request.results ?? []).prefix(3))
+                regions.append(["grid": grid, "x": x, "y": y,
+                    "labels": labels.map { ["label": $0.identifier, "confidence": $0.confidence] as [String: Any] }])
+                for label in labels {
+                    let previous = best[label.identifier] ?? (0, 0)
+                    best[label.identifier] = (max(previous.0, label.confidence), previous.1 + 1)
+                }
+            } catch { failures += 1 }
+        }}
+    }
+    let labels = best.sorted { $0.value.0 == $1.value.0 ? $0.key < $1.key : $0.value.0 > $1.value.0 }.prefix(24)
+        .map { ["label": $0.key, "confidence": $0.value.0, "regions": $0.value.1] as [String: Any] }
+    return ["status": regions.isEmpty ? "unavailable" : "completed", "labels": labels, "regions": regions,
+        "failedRegions": failures, "method": "fixed-grid-3x3-5x5-top3-maxpool24-v1",
+        "confidenceMeaning": "maximum region classifier score, not whole-scene or word-selection probability",
+        "elapsedMs": Int((ProcessInfo.processInfo.systemUptime-started)*1000)]
+}
 func captureAndFinish() {
 guard let textImage = render(window.contentView!) else { finish("fixture-render-failed") }
 let textOCR = ocr(textImage)
@@ -117,7 +148,7 @@ do {
     let labels = (request.results ?? []).prefix(8).map { ["label": $0.identifier, "confidence": $0.confidence] as [String: Any] }
     vision = ["status": "completed", "labels": labels, "elapsedMs": Int((ProcessInfo.processInfo.systemUptime-started)*1000)]
 } catch { vision = ["status": "unavailable", "labels": [], "reason": "vision-classification-failed"] }
-emit(["scene": scene, "fixtureText": text, "ocr": textOCR, "imageOCR": ocr(image), "vision": vision,
+emit(["scene": scene, "fixtureText": text, "ocr": textOCR, "imageOCR": ocr(image), "vision": vision, "visionRegions": regionalClassification(image),
       "renderMethod": "Controlled AppKit window bitmap; no ScreenCaptureKit or other app capture"])
 window.orderOut(nil)
 
