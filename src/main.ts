@@ -317,11 +317,14 @@ async function action(operation: () => Promise<unknown>) {
 }
 
 function preferencesFromFields(): Preferences {
-  return {
+  const preferences: Preferences = {
     version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, autoCorrection: autoCorrection.checked, reuseCorrectionModel: reuseCorrectionModel.checked, showOverlay: showOverlay.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
     whisperContext: whisperContext.checked, correctionContext: correctionContext.checked,
     correctionInstruction: correctionInstruction.value, correctionModelPath: correctionModelPath.value, correctionEngine: correctionEngine.value, correctionBackend: correctionBackend.value,
   };
+  const related: (keyof Preferences)[] = ["modelPath","backend","autoCorrection","reuseCorrectionModel","recognitionContext","ocrContext","whisperContext","correctionContext","correctionInstruction","correctionModelPath","correctionEngine","correctionBackend"];
+  preferences.usagePreset = desktop?.preferences.usagePreset && related.every(key=>preferences[key]===desktop!.preferences[key]) ? desktop.preferences.usagePreset : null;
+  return preferences;
 }
 savePreferences.addEventListener("click", () => void action(async () => {
   desktop = await invoke<DesktopStatus>("save_preferences", { preferences: preferencesFromFields() });

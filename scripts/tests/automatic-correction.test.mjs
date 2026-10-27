@@ -119,3 +119,12 @@ test('preset application saves current unrelated fields and loads the verified m
   assert.equal(app.elements.get('auto-correction').checked,false);
   assert.equal(app.requests.filter(x=>x.command==='save_preferences').length,0);
 });
+
+test('saving unchanged preset settings retains its name and changing a preset field returns to custom',async()=>{
+  const app=await setup();await app.applyUsage('asr-first',7);
+  app.click('save-preferences');await app.settle();
+  assert.equal(app.requests.filter(x=>x.command==='save_preferences').at(-1).args.preferences.usagePreset,'asr-first');
+  app.elements.get('model-path').value='/manual/model.bin';
+  app.click('save-preferences');await app.settle();
+  assert.equal(app.requests.filter(x=>x.command==='save_preferences').at(-1).args.preferences.usagePreset,null);
+});
