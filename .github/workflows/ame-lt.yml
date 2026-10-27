@@ -57,13 +57,21 @@ jobs:
         with:
           name: ame-lt-asr
           path: asr
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang libseccomp2
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5
+        with:
+          version: 2026.10.19
+          cache: true
+          cache_key: mise-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.mise/config.toml', 'rust-toolchain.toml') }}
+      - name: Check runner build and sandbox prerequisites
+        run: |
+          cmake --version
+          make --version
+          c++ --version
+          python3 -c 'import ctypes; ctypes.CDLL("libseccomp.so.2")'
       - run: python3 scripts/prepare-vlm-evidence.py --directory "$RUNNER_TEMP/models" --source "$RUNNER_TEMP/llama.cpp"
       - name: Build the fixed CPU text and vision runtime
         run: |
-          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build" -G Ninja             -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF             -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DMTMD_VIDEO=OFF
+          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build"             -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF             -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DMTMD_VIDEO=OFF
           cmake --build "$RUNNER_TEMP/llama-build" --target llama-mtmd-cli llama-completion -j 4
       - name: Compare the three stages offline
         run: |

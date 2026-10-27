@@ -2,7 +2,7 @@
 """Measured LT-only bounded choice: audio alone, audio+text, audio+image."""
 import argparse,json,platform,re,socket,subprocess,time
 from pathlib import Path
-from ame_lt import ROOT,SCHEMA,config,prompt_for,parse_runtime_choice,apply_spelling,normalized,validate_asr
+from ame_lt import ROOT,SCHEMA,IMAGE_SCHEMA,config,prompt_for,parse_runtime_choice,apply_spelling,normalized,validate_asr
 from transcription_models import checksum
 from evaluate_correction import run_inference
 def main():
@@ -31,7 +31,7 @@ def main():
     report=dict(complete=False,kind='ame-lt-three-stages',source_revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         config=c,config_sha256=checksum(ROOT/'evaluation/ame-lt/scenarios.json'),asr=asr,asr_report_sha256=checksum(a.asr),
         model=spec,binary_sha256=checksum(a.binary),text_binary_sha256=checksum(text_binary),backend='cpu',network_denied=True,platform=platform.platform(),
-        output_schema=SCHEMA,rows=[],limitation='LT-only rain/candy choice on one reused synthetic audio and constructed helpful contexts. Not general dictation accuracy or acoustic accent recognition. A text/vision model receives ASR text, not audio bytes. No OCR or authored caption is used in image mode.')
+        input_form='target-reading',output_schema={'text':SCHEMA,'image':IMAGE_SCHEMA},rows=[],limitation='LT-only rain/candy choice on one reused synthetic audio and constructed helpful contexts. Not general dictation accuracy or acoustic accent recognition. A text/vision model receives ASR text, not audio bytes. No OCR or authored caption is used in image mode.')
     def save():(a.output/'results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     save()
     for repeat in range(2):
@@ -41,7 +41,7 @@ def main():
         for stage,case in cases if repeat==0 else reversed(cases):
             prompt=prompt_for(raw,stage,case);image_copy=a.output/'input.png'
             command=[str(a.binary.resolve()),'-m',str(paths['model']),'--mmproj',str(paths['projector']),
-                '-c','8192','-n','128','--temp','0','--seed','0','--json-schema',json.dumps(SCHEMA),
+                '-c','8192','-n','128','--temp','0','--seed','0','--json-schema',json.dumps(IMAGE_SCHEMA),
                 '--threads','4','--image-max-tokens','4096','--no-warmup','-ngl','0','--no-mmproj-offload']
             if stage=='image':
                 image_copy.write_bytes((ROOT/case['file']).read_bytes());command+=['--image',str(image_copy.resolve()),'-p',prompt]
@@ -60,6 +60,7 @@ def main():
                 if result.returncode:raise ValueError('Model runtime failure')
                 if any(int(n)>0 for n in re.findall(r'offloaded (\d+)/\d+ layers to GPU',result.stderr)):raise ValueError('Unexpected GPU')
                 spelling=parse_runtime_choice(result.stdout,stage);final=apply_spelling(raw,spelling)
+                if stage=='image':row['observation']=json.loads(result.stdout)['observation']
                 row.update(status='completed',spelling=spelling,final=final,passed=spelling!='不明' and normalized(final)==row['expected'])
             except (ValueError,subprocess.TimeoutExpired) as e:row['error']=str(e)[:300]
             finally:image_copy.unlink(missing_ok=True)

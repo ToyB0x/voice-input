@@ -11,6 +11,9 @@ class LTTest(unittest.TestCase):
     def test_text_prompt_only_uses_authored_hint(self):
         a=prompt_for('雨がすごいですね。','text',{'text':'今日は台風だ。','expected':'飴','id':'secret'})
         self.assertIn('今日は台風だ。',a);self.assertNotIn('secret',a)
+    def test_context_choice_does_not_inherit_asr_spelling(self):
+        self.assertEqual(prompt_for('雨がすごいですね','image',{}),prompt_for('飴がすごいですね','image',{}))
+        self.assertIn('あめがすごいですね',prompt_for('雨がすごいですね','image',{}))
     def test_only_target_word_changes(self):
         self.assertEqual(apply_spelling('雨がすごいですね。','飴'),'飴がすごいですね。')
         self.assertEqual(apply_spelling('雨がすごいですね。','不明'),'雨がすごいですね。')
@@ -20,6 +23,10 @@ class LTTest(unittest.TestCase):
         self.assertEqual(parse_choice('{"spelling":"飴"}'),'飴')
         for raw in ['{"spelling":"飴","text":"お祭りです"}','{"spelling":"お祭り"}','null']:
             with self.assertRaises(ValueError):parse_choice(raw)
+    def test_image_observation_keeps_the_spelling_bounded(self):
+        self.assertEqual(parse_runtime_choice('{"observation":"色とりどりのお菓子","spelling":"飴"}','image'),'飴')
+        for raw in ['{"spelling":"飴"}', '{"observation":"","spelling":"雨"}', '{"observation":"屋根","spelling":"お祭り"}']:
+            with self.assertRaises(ValueError):parse_runtime_choice(raw,'image')
     def test_text_runtime_marker_does_not_relax_json_validation(self):
         self.assertEqual(parse_runtime_choice('{"spelling":"雨"} [end of text]\n','text'),'雨')
         for raw in ['{"spelling":"雨"}', '説明 {"spelling":"雨"} [end of text]', '{"spelling":"雨"} {} [end of text]']:

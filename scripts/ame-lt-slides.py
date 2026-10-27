@@ -34,7 +34,7 @@ def main():
         cards.append('<article class="'+color+'"><img alt="実験に使用した文字なし画像" src="'+data(ROOT/case['file'],'image/png')+'"><div class="answer">'+output('image',case['id'])+'</div></article>')
     add('Lv.3　絵だけのヒント','今度は、絵を見せる。','<div class="cards images">'+''.join(cards)+'</div><p class="bottom">入力：同じ音声 ＋ 文字のない画像。人が付けた説明文は渡しません。</p>')
     add('仕組みは、小さく分ける','同じ声から、漢字を選び直す。',
-        '<div class="flow"><div>音声<span>Whisper</span></div><b>→</b><div>「あめ」<span>音声認識結果</span></div><b>→</b><div class="accent">雨 ／ 飴 ／ 不明<span>文章・画像の手がかり</span></div></div>'
+        '<div class="flow"><div>音声<span>Whisper</span></div><b>→</b><div>「あめ」<span>対象語だけ読みへ戻す</span></div><b>→</b><div class="accent">雨 ／ 飴 ／ 不明<span>文章・画像の手がかり</span></div></div>'
         '<p class="explain">文章と画像は、同じローカルモデルに渡します。</p>'
         '<p>モデルが選ぶのは「あめ」の表記。文の残りはコードで保持します。</p>')
     context_rows=[x for x in rows if x['stage']!='audio'];count=sum(x['passed'] for x in context_rows)
@@ -50,7 +50,7 @@ def main():
     a.output.mkdir(parents=True,exist_ok=True)
     (a.output/'slides.html').write_text('<!doctype html><html lang="ja"><meta charset="utf-8"><title>この「あめ」、どっち？</title><style>'+css+'</style><body>'+''.join(slides)+'<audio src="'+audio+'"></audio><script>'+js+'</script></body></html>')
     (a.output/'results.json').write_text(json.dumps(r,ensure_ascii=False,indent=2)+'\n')
-    notes=['# LTメモ（約3〜4分）','','1. 音声を再生。「どちらのあめを想像しましたか？」','2. 音声だけの実出力を見せる。正解・不正解は付けない。','3. 台風とハロウィンの短い文章を見せ、同じ声で結果を比較。','4. 次は画像だけ。人間が画像の説明を書いて渡していないことを説明。','5. 音声認識後、手がかりで漢字を選び直す仕組み。雨／飴／不明の候補はあらかじめ与える。','6. 実測結果をそのまま紹介。一般精度ではなく、同じ声の解釈が変わる小さなデモ。','','実験では2回のASR結果を全条件で共有。画像モデルが生の音声を聞く構成ではない。','文章ヒントは意図的に分かりやすくした。想定どおりにならない出力も隠さない。']
+    notes=['# LTメモ（約3〜4分）','','1. 音声を再生。「どちらのあめを想像しましたか？」','2. 音声だけの実出力を見せる。正解・不正解は付けない。','3. 台風とハロウィンの短い文章を見せ、同じ声で結果を比較。','4. 次は画像だけ。人間が画像の説明を書いて渡していないことを説明。','5. 音声認識後、「あめ」の部分だけをひらがなに戻し、手がかりで漢字を選び直す仕組み。雨／飴／不明の候補はあらかじめ与える。','6. 実測結果をそのまま紹介。一般精度ではなく、同じ声の解釈が変わる小さなデモ。','','実験では2回のASR結果を全条件で共有。画像モデルが生の音声を聞く構成ではない。','文章ヒントは意図的に分かりやすくした。想定どおりにならない出力も隠さない。']
     (a.output/'speaker-notes.md').write_text('\n'.join(notes)+'\n')
     (a.output/'summary.md').write_text(f'# この「あめ」、どっち？\n\n文章・画像条件の全文一致: {count}/{len(context_rows)}\n\nQuality gate: {r["quality_pass"]}\n\n'+r['limitation']+'\n')
 if __name__=='__main__':main()
