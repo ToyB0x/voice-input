@@ -17,10 +17,32 @@ const TEXTS: [(&str, &str); 2] = [
         "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
     ),
 ];
+const FALLING_TEXTS: [(&str, &str); 2] = [
+    (
+        "rainfall",
+        "住宅街で雨が降っています。屋根から雨水が滴り、道路に水たまりができています。",
+    ),
+    (
+        "candy-shower",
+        "お祭りの飴まきです。屋根の上からカラフルな飴やキャンディをばらまいています。",
+    ),
+];
+fn default_dataset() -> String {
+    "ame-sugoi-v1".into()
+}
+fn default_input_form() -> String {
+    "original".into()
+}
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Options {
     pub input: String,
+    #[serde(default = "default_dataset")]
+    pub dataset: String,
+    #[serde(default = "default_input_form")]
+    pub input_form: String,
+    #[serde(default)]
+    pub kana_hint: bool,
     pub apple: bool,
     pub qwen: bool,
     pub ax: bool,
@@ -37,10 +59,14 @@ const FOUNDATION_PROFILES: &[&str] = &[
     "legacy-structured-v1",
     "grounded-structured-v2",
     "grounded-text-v2",
+    "screen-reading-v3",
 ];
 impl Options {
     fn validate(&self) -> Result<(), String> {
         if !["bundled", "recorded", "text"].contains(&self.input.as_str())
+            || !["ame-sugoi-v1", "ame-falling-v1"].contains(&self.dataset.as_str())
+            || !["original", "reading", "both"].contains(&self.input_form.as_str())
+            || (self.input_form != "original" && !self.apple)
             || !(1..=2).contains(&self.repeats)
             || (!self.apple && !self.qwen)
             || self.instruction.len() > 1536
@@ -85,6 +111,7 @@ pub struct LabStatus {
     pub more: bool,
     pub parts: usize,
     pub foundation: Option<FoundationDiagnostic>,
+    pub final_test_summary: Value,
 }
 fn now_id(epoch: u64) -> String {
     let n = std::time::SystemTime::now()
@@ -151,10 +178,11 @@ impl Comparisons {
             json!({"custom":options.instruction})
         };
         let variants = instructions.as_object().unwrap().len();
-        let per_scene = if options.input == "text" { 7 } else { 19 };
-        let engines = usize::from(options.apple) + usize::from(options.qwen);
+        let per_scene = if options.input == "text" { 8 } else { 22 };
+        let forms = if options.input_form == "both" { 2 } else { 1 };
+        let engines = usize::from(options.apple) * forms + usize::from(options.qwen);
         let total = options.repeats * 2 * per_scene * (1 + variants * engines)
-            + (4 + 4) * variants * engines;
+            + (4 + 4) * variants * (usize::from(options.apple) + usize::from(options.qwen));
         {
             let mut state = self
                 .inner
@@ -170,10 +198,11 @@ impl Comparisons {
                 ..Status::default()
             };
             state.lab = Some(Session {
-                report: json!({"schemaVersion":1,"kind":"device-context-lab","sampleSetVersion":1,
+                report: json!({"schemaVersion":1,"kind":"device-context-lab","sampleSetVersion":if options.dataset=="ame-falling-v1" {2} else {1},
                 "reportId":run_id,"appVersion":env!("CARGO_PKG_VERSION"),"sourceRevision":env!("VOICE_INPUT_SOURCE_REVISION"),
                 "platform":"macos","machine":std::env::consts::ARCH,"execution":"local-app","networkDenied":false,
                 "completed":false,"inputKind":options.input,"instructions":instructions,
+                "experiment":{"dataset":options.dataset,"afmInputForm":options.input_form,"whisperKanaHint":options.kana_hint,"readingMethod":"CFStringTokenizer-ja_JP-latinToHiragana-v1","guardSource":"original-asr"},
                 "presentationEngine":if options.apple {"apple-foundation"} else {"qwen3"},"presentationInstruction":"custom",
                 "models":{},"foundation":{},"captures":{},"fixture":{},"rows":[],"kanaControls":[],"preservationControls":[],
                 "limits":["Controlled built-in scenes; not other-app screen capture or a direct-image VLM.",
@@ -209,13 +238,28 @@ impl Comparisons {
             .map_err(|_| "同梱リソースを確認できません。")?;
         let resources = root.join("bin");
         let assets = root.join("lab");
+        let texts = if options.dataset == "ame-falling-v1" {
+            FALLING_TEXTS
+        } else {
+            TEXTS
+        };
+        let utterance = if options.dataset == "ame-falling-v1" {
+            "あめがふっています"
+        } else {
+            "あめがすごいですね"
+        };
+        let audio_file = if options.dataset == "ame-falling-v1" {
+            "speech-falling.wav"
+        } else {
+            "speech.wav"
+        };
         let audio = if options.input == "text" {
             Vec::new()
         } else if let Some(input) = recorded {
             local_transcription::prepare_audio(&input.audio, input.rate)
                 .map_err(|_| "録音は1〜60秒で比較してください。")?
         } else {
-            local_transcription::read_wav(&assets.join("speech.wav"))
+            local_transcription::read_wav(&assets.join(audio_file))
                 .map_err(|_| "同梱音声を読み込めません。")?
         };
         let pcm: Vec<u8> = audio.iter().flat_map(|x| x.to_le_bytes()).collect();
@@ -224,10 +268,17 @@ impl Comparisons {
         } else {
             json!(hash_stdin(&pcm, &self.epoch, epoch)?)
         };
-        let asset_hashes = json!({"storm.png":hash_file(&assets.join("storm.png"),&self.epoch,epoch)?,"candy.png":hash_file(&assets.join("candy.png"),&self.epoch,epoch)?});
+        let mut asset_hashes = serde_json::Map::new();
+        for (scene, _) in texts {
+            let file = format!("{scene}.png");
+            asset_hashes.insert(
+                file.clone(),
+                json!(hash_file(&assets.join(file), &self.epoch, epoch)?),
+            );
+        }
         let audio_ms = audio.len() as u64 * 1000 / 16000;
-        self.lab_update(epoch,"fixture",json!({"utterance":if options.input=="recorded" {"利用者の録音（期待語は実験シーン側の定義）"} else {"あめがすごいですね"},
-            "voice":if options.input=="bundled" {"CIの同梱合成音声（Eddy ja_JP）"} else if options.input=="text" {"音声なし"} else {"利用者の録音"},
+        self.lab_update(epoch,"fixture",json!({"utterance":if options.input=="recorded" {"利用者の録音（期待語は実験シーン側の定義）"} else {utterance},
+            "voice":if options.input=="bundled" { if options.dataset=="ame-falling-v1" {"ビルド時に生成した日本語システム音声（SHA-256で識別）"} else {"CIの同梱合成音声（Eddy ja_JP）"} } else if options.input=="text" {"音声なし"} else {"利用者の録音"},
             "origin":options.input,"audioMs":audio_ms,"audioSha256":audio_hash,"audioHashFormat":"f32le-16000-mono","hashes":{},"assetHashes":asset_hashes}));
         let mut binaries = serde_json::Map::new();
         for name in [
@@ -278,7 +329,7 @@ impl Comparisons {
             self.lab_update(epoch, "foundation", value);
         }
         let mut captures = BTreeMap::new();
-        for (scene, text) in TEXTS {
+        for (scene, text) in texts {
             if !self.current(epoch) {
                 return Ok(());
             }
@@ -311,12 +362,16 @@ impl Comparisons {
         for repeat in 0..options.repeats {
             let mut cache: BTreeMap<String, Row> = BTreeMap::new();
             for scene in if repeat % 2 == 0 {
-                ["storm", "candy"]
+                [texts[0].0, texts[1].0]
             } else {
-                ["candy", "storm"]
+                [texts[1].0, texts[0].0]
             } {
                 let capture = &captures[scene];
-                let other = &captures[if scene == "storm" { "candy" } else { "storm" }];
+                let other = &captures[if scene == texts[0].0 {
+                    texts[1].0
+                } else {
+                    texts[0].0
+                }];
                 let sources = scene_sources(capture, other);
                 let mut conditions = vec![("none", "none", Some(String::new()))];
                 for (source, context) in &sources {
@@ -340,38 +395,55 @@ impl Comparisons {
                         "running",
                         &format!("{scene} / {source} / {route} を直列比較中。"),
                     );
-                    let expected = if scene == "storm" { "雨" } else { "飴" };
-                    let opposite = if scene == "storm" { "飴" } else { "雨" };
+                    let expected = if scene == texts[0].0 { "雨" } else { "飴" };
+                    let opposite = if scene == texts[0].0 { "飴" } else { "雨" };
                     let base = json!({"scene":scene,"source":source,"route":route,"repeat":repeat,"expected":expected,"opposite":opposite,"audioSha256":audio_hash});
-                    let variants = std::iter::once(("none", "none", "")).chain(
-                        engines.iter().flat_map(|engine| {
-                            instructions
-                                .iter()
-                                .map(move |(key, value)| (*engine, *key, *value))
-                        }),
-                    );
+                    let mut variants = vec![("none", "none", "", "original")];
+                    for engine in &engines {
+                        let forms: &[&str] =
+                            if *engine != "apple-foundation" || options.input_form == "original" {
+                                &["original"]
+                            } else if options.input_form == "reading" {
+                                &["reading"]
+                            } else {
+                                &["original", "reading"]
+                            };
+                        for (key, value) in &instructions {
+                            for form in forms {
+                                variants.push((*engine, *key, *value, *form));
+                            }
+                        }
+                    }
                     let Some(context) = context else {
-                        for (engine, instruction, _) in variants {
+                        for (engine, instruction, _, form) in variants {
                             let mut r = base.clone();
                             r["engine"] = engine.into();
                             r["instruction"] = instruction.into();
+                            r["inputForm"] = form.into();
                             r["status"] = "unavailable".into();
                             r["reason"] = "context-unavailable".into();
                             self.lab_publish(epoch, r);
                         }
                         continue;
                     };
-                    let hint = local_transcription::recognition_hint(
-                        if ["hint", "both"].contains(&route) {
-                            &context
-                        } else {
-                            ""
-                        },
-                    );
+                    let contextual_hint = if ["hint", "both"].contains(&route) {
+                        context.as_str()
+                    } else {
+                        ""
+                    };
+                    // Whisper initial_prompt is a soft style cue, never a forced output grammar.
+                    let whisper_input = if options.kana_hint && options.input != "text" {
+                        format!(
+                            "日本語の発話はなるべくひらがなで表記します。数字と英字はそのままです。{contextual_hint}"
+                        )
+                    } else {
+                        contextual_hint.to_owned()
+                    };
+                    let hint = local_transcription::recognition_hint(&whisper_input);
                     let shared = cache.contains_key(&hint);
                     let asr = if options.input == "text" {
                         let mut r = Row::new(0, lab_case("none", prefs, route));
-                        r.raw = Some("あめがすごいですね".into());
+                        r.raw = Some(utterance.into());
                         r.final_text = r.raw.clone();
                         r.status = "uncorrected".into();
                         r
@@ -379,13 +451,18 @@ impl Comparisons {
                         cache
                             .entry(hint.clone())
                             .or_insert_with(|| {
+                                let mut asr_case = lab_case("none", prefs, route);
+                                if options.kana_hint {
+                                    asr_case.source = "ax".into();
+                                    asr_case.route = "asr-only".into();
+                                }
                                 run_case(
                                     &resources,
-                                    &lab_case("none", prefs, route),
+                                    &asr_case,
                                     0,
                                     &audio,
                                     &crate::context::Sources {
-                                        ax: context.clone(),
+                                        ax: whisper_input.clone(),
                                         ocr: String::new(),
                                     },
                                     &paths,
@@ -398,7 +475,17 @@ impl Comparisons {
                             })
                             .clone()
                     };
-                    for (engine, key, instruction) in variants {
+                    let reading_started = Instant::now();
+                    let reading = if options.input_form != "original" {
+                        asr.raw
+                            .as_deref()
+                            .map(|raw| reading_text(&resources, raw, &self.epoch, epoch))
+                            .transpose()
+                    } else {
+                        Ok(None)
+                    };
+                    let reading_ms = reading_started.elapsed().as_millis() as u64;
+                    for (engine, key, instruction, form) in variants {
                         if !self.current(epoch) {
                             return Ok(());
                         }
@@ -407,25 +494,49 @@ impl Comparisons {
                             && let Some(raw) = &asr.raw
                         {
                             let case = lab_case(engine, prefs, route);
-                            if let Err(error) = correct_text_profile(
-                                &resources,
-                                &case,
-                                &mut row,
-                                raw,
-                                &context,
-                                instruction,
-                                &paths,
-                                &apple,
-                                &self.epoch,
-                                epoch,
-                                &options.foundation_profile,
-                            ) {
+                            let correction_input = if form == "reading" {
+                                reading.as_ref().map_err(Clone::clone).and_then(|x| {
+                                    x.as_deref().ok_or_else(|| "reading-unavailable".into())
+                                })
+                            } else {
+                                Ok(raw.as_str())
+                            };
+                            let result = correction_input.and_then(|input| {
+                                correct_text_input(
+                                    &resources,
+                                    &case,
+                                    &mut row,
+                                    raw,
+                                    input,
+                                    &context,
+                                    instruction,
+                                    &paths,
+                                    &apple,
+                                    &self.epoch,
+                                    epoch,
+                                    &options.foundation_profile,
+                                )
+                            });
+                            if let Err(error) = result {
                                 record_error(&mut row, error);
                             }
                         }
                         let mut r = base.clone();
                         r["engine"] = engine.into();
                         r["instruction"] = key.into();
+                        r["inputForm"] = form.into();
+                        r["correctionInput"] = if engine == "none" {
+                            Value::Null
+                        } else if form == "reading" {
+                            json!(reading.as_ref().ok().and_then(|x| x.as_ref()))
+                        } else {
+                            json!(asr.raw)
+                        };
+                        r["readingMs"] = if form == "reading" {
+                            json!(reading_ms)
+                        } else {
+                            Value::Null
+                        };
                         r["context"] = context.clone().into();
                         r["status"] = row.status.clone().into();
                         r["reason"] = row.message.clone().into();
@@ -442,6 +553,16 @@ impl Comparisons {
                         r["correctionMs"] = json!(row.correction_ms);
                         r["judgment"] =
                             judgment(row.final_text.as_deref(), expected, opposite).into();
+                        if options.dataset == "ame-falling-v1" {
+                            r["expectedText"] = format!("{expected}が降っています").into();
+                            r["finalPass"] = if ["accepted", "rejected", "uncorrected"]
+                                .contains(&row.status.as_str())
+                            {
+                                json!(final_pass(row.final_text.as_deref(), expected))
+                            } else {
+                                Value::Null
+                            };
+                        }
                         self.lab_publish(epoch, r);
                     }
                 }
@@ -451,12 +572,12 @@ impl Comparisons {
         let mut controls = Vec::new();
         for engine in engines {
             for (key, instruction) in &instructions {
-                for (scene, text) in TEXTS {
+                for (scene, text) in texts {
                     let row = control(
                         &resources,
                         engine,
                         prefs,
-                        "あめがすごいですね",
+                        utterance,
                         text,
                         instruction,
                         &paths,
@@ -465,7 +586,7 @@ impl Comparisons {
                         epoch,
                         &options.foundation_profile,
                     );
-                    kana.push(json!({"scene":scene,"engine":engine,"instruction":key,"input":"あめがすごいですね","result":control_result(&row)}));
+                    kana.push(json!({"scene":scene,"engine":engine,"instruction":key,"input":utterance,"result":control_result(&row)}));
                     self.lab_update(epoch, "kanaControls", json!(kana));
                     self.lab_publish_control(epoch);
                 }
@@ -502,6 +623,22 @@ impl Comparisons {
         }
         self.lab_update(epoch, "kanaControls", json!(kana));
         self.lab_update(epoch, "preservationControls", json!(controls));
+        if options.dataset == "ame-falling-v1" {
+            let rows = self
+                .inner
+                .lock()
+                .ok()
+                .and_then(|s| s.lab.as_ref().map(|l| l.report["rows"].clone()))
+                .unwrap_or(json!([]));
+            self.lab_update(
+                epoch,
+                "finalTestSummary",
+                final_test_summary(
+                    rows.as_array().map(Vec::as_slice).unwrap_or(&[]),
+                    options.repeats,
+                ),
+            );
+        }
         Ok(())
     }
     fn lab_publish_control(&self, epoch: u64) {
@@ -512,6 +649,71 @@ impl Comparisons {
             s.status.completed += 1;
         }
     }
+}
+fn final_test_summary(rows: &[Value], repeats: usize) -> Value {
+    // Keep input forms, sources, routes and instructions separate. Unavailable rows
+    // are not successes; mismatched context is a negative control, not a target test.
+    let mut groups: BTreeMap<(String, String, String, String, String), Vec<&Value>> =
+        BTreeMap::new();
+    for r in rows {
+        if r["engine"] == "none"
+            || !["fixture-text", "ocr", "vision-labels", "vision-regions"]
+                .contains(&r["source"].as_str().unwrap_or(""))
+            || !["correction", "both"].contains(&r["route"].as_str().unwrap_or(""))
+        {
+            continue;
+        }
+        let key = (
+            r["engine"].as_str().unwrap_or("").into(),
+            r["inputForm"].as_str().unwrap_or("original").into(),
+            r["source"].as_str().unwrap_or("").into(),
+            r["route"].as_str().unwrap_or("").into(),
+            r["instruction"].as_str().unwrap_or("").into(),
+        );
+        groups.entry(key).or_default().push(r);
+    }
+    json!(groups.into_iter().map(|((engine,form,source,route,instruction),rs)| {
+        let evaluable = |r: &&&Value| r["finalPass"].is_boolean() && ["accepted", "rejected", "uncorrected"].contains(&r["status"].as_str().unwrap_or(""));
+        let evaluated = rs.iter().filter(evaluable).count();
+        let passed = rs.iter().filter(evaluable).filter(|r| r["finalPass"] == true).count();
+        let identities: std::collections::BTreeSet<_> = rs.iter().filter(evaluable).map(|r| (r["scene"].as_str().unwrap_or(""),r["repeat"].as_u64().unwrap_or(u64::MAX))).collect();
+        let complete = evaluated == 2 * repeats && identities.len() == evaluated
+            && ["rainfall","candy-shower"].iter().all(|scene| (0..repeats).all(|repeat|identities.contains(&(*scene,repeat as u64))));
+        json!({"engine":engine,"inputForm":form,"source":source,"route":route,"instruction":instruction,
+            "required":2*repeats,"evaluated":evaluated,"passed":passed,
+            "status":if !complete {"not-evaluated"} else if passed==evaluated {"passed"} else {"failed"}})
+    }).collect::<Vec<_>>())
+}
+fn final_pass(text: Option<&str>, expected: &str) -> bool {
+    let normalized = |s: &str| {
+        s.chars()
+            .filter(|c| !c.is_whitespace() && !"。、，．.!！?？".contains(*c))
+            .collect::<String>()
+    };
+    text.is_some_and(|s| normalized(s) == format!("{expected}が降っています"))
+}
+fn reading_text(
+    resources: &Path,
+    raw: &str,
+    epoch: &AtomicU64,
+    current: u64,
+) -> Result<String, String> {
+    let out = crate::correction::child_output(
+        Command::new(resources.join("context-lab-native")).arg("--reading"),
+        serde_json::to_vec(&json!({"text":raw})).map_err(|_| "reading-input-failed")?,
+        epoch,
+        current,
+        Duration::from_secs(15),
+    )?;
+    let result: Value = serde_json::from_slice(&out.stdout).map_err(|_| "reading-output-failed")?;
+    if !out.status.success() || result["method"] != "CFStringTokenizer-ja_JP-latinToHiragana-v1" {
+        return Err("reading-runtime-failed".into());
+    }
+    result["text"]
+        .as_str()
+        .filter(|s| !s.is_empty() && s.len() <= 8192 && !s.contains('\0'))
+        .map(str::to_owned)
+        .ok_or_else(|| "reading-output-failed".into())
 }
 fn lab_case(engine: &str, prefs: &crate::settings::Preferences, route: &str) -> Case {
     Case {
@@ -589,31 +791,22 @@ fn scene_sources(c: &Value, other: &Value) -> Vec<(&'static str, Option<String>)
             None
         }
     }
-    let labels = if c["vision"]["status"] == "completed" {
-        c["vision"]["labels"]
-            .as_array()
-            .filter(|a| !a.is_empty())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|x| {
-                        Some(format!(
-                            "{} ({:.3})",
-                            x["label"].as_str()?,
-                            x["confidence"].as_f64()?
-                        ))
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })
-    } else {
-        None
-    };
+    fn labels(v: &Value, regional: bool) -> Option<String> {
+        if v["status"] != "completed" {
+            return None;
+        }
+        v["labels"].as_array().filter(|a|!a.is_empty()).map(|a| {
+            let body = a.iter().filter_map(|x|Some(format!("{} ({:.3})",x["label"].as_str()?,x["confidence"].as_f64()?))).collect::<Vec<_>>().join("\n");
+            if regional {format!("画像の固定グリッド領域の分類。数値は各ラベルの領域内スコア最大値で、画面全体や単語選択の確率ではありません。\n{body}")} else {body}
+        })
+    }
     vec![
         ("fixture-text", c["fixtureText"].as_str().map(str::to_owned)),
         ("ax", text(&c["ax"])),
         ("ocr", text(&c["ocr"])),
         ("image-ocr", text(&c["imageOCR"])),
-        ("vision-labels", labels),
+        ("vision-labels", labels(&c["vision"], false)),
+        ("vision-regions", labels(&c["visionRegions"], true)),
         (
             "mismatched-text",
             other["fixtureText"].as_str().map(str::to_owned),
@@ -908,6 +1101,9 @@ pub fn context_lab_status(
         more: end < total,
         parts: total.div_ceil(20),
         foundation: state.status.foundation.clone(),
+        final_test_summary: report
+            .map(|r| r["finalTestSummary"].clone())
+            .unwrap_or(Value::Null),
     }
 }
 fn export(
@@ -955,7 +1151,13 @@ fn export(
         if let Some(rows) = result["rows"].as_array_mut() {
             for row in rows {
                 if let Some(o) = row.as_object_mut() {
-                    for key in ["raw", "candidate", "finalText", "context"] {
+                    for key in [
+                        "raw",
+                        "candidate",
+                        "finalText",
+                        "context",
+                        "correctionInput",
+                    ] {
                         o.remove(key);
                     }
                 }
@@ -1020,6 +1222,93 @@ mod tests {
         assert!(options.validate().is_err());
     }
     #[test]
+    fn falling_success_requires_the_whole_sentence_and_keeps_negative_controls_separate() {
+        assert!(final_pass(Some("雨が降っています。"), "雨"));
+        assert!(final_pass(Some("飴が降っています"), "飴"));
+        for text in [
+            "飴がすごいですね",
+            "雨が降っています",
+            "飴が降っています。お祭りです",
+            "飴が降っている",
+        ] {
+            assert!(!final_pass(Some(text), "飴"));
+        }
+        assert!(!final_pass(None, "飴"));
+    }
+    #[test]
+    fn final_summary_requires_both_scenes_and_each_repeat_and_does_not_pool_readings() {
+        let row = |scene: &str, repeat: usize, form: &str| json!({"scene":scene,"repeat":repeat,"engine":"apple-foundation","source":"vision-labels","route":"correction","instruction":"custom","inputForm":form,"status":"accepted","finalPass":true});
+        let mut rows = vec![
+            row("rainfall", 0, "reading"),
+            row("candy-shower", 0, "reading"),
+            row("rainfall", 1, "reading"),
+        ];
+        assert_eq!(final_test_summary(&rows, 2)[0]["status"], "not-evaluated");
+        rows.push(row("candy-shower", 1, "original"));
+        assert!(
+            final_test_summary(&rows, 2)
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|g| g["status"] == "not-evaluated")
+        );
+        rows.push(row("candy-shower", 1, "reading"));
+        assert_eq!(final_test_summary(&rows, 2)[1]["status"], "passed");
+        rows[0]["finalPass"] = false.into();
+        assert_eq!(final_test_summary(&rows, 2)[1]["status"], "failed");
+        rows[0]["finalPass"] = true.into();
+        rows[0]["status"] = "unavailable".into();
+        assert_eq!(final_test_summary(&rows, 2)[1]["status"], "not-evaluated");
+    }
+    #[test]
+    fn phonetic_model_input_keeps_original_as_guard_source_and_rejection_fallback() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(now_id(0));
+        std::fs::create_dir(&root).unwrap();
+        let script = r#"#!/usr/bin/python3
+import sys,json
+p=json.load(sys.stdin)
+if sys.argv[1:] == ['--correct']:
+ assert p['transcript']=='あめがふっています'
+ assert p['profile']=='screen-reading-v3'
+ print(json.dumps(dict(text='飴が降っています',backend='foundation',offloaded_layers=0)))
+else:
+ assert p['transcript']=='雨が降っています'
+ print(json.dumps(dict(error='rejected',reason='correction changed numeric facts')))
+ sys.exit(1)
+"#;
+        for name in ["apple-foundation-correction", "local-correction"] {
+            let path = root.join(name);
+            std::fs::write(&path, script).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let case = lab_case(
+            "apple-foundation",
+            &crate::settings::Preferences::default(),
+            "correction",
+        );
+        let mut row = Row::new(0, case.clone());
+        correct_text_input(
+            &root,
+            &case,
+            &mut row,
+            "雨が降っています",
+            "あめがふっています",
+            "参考",
+            "",
+            &BTreeMap::new(),
+            &Ok(()),
+            &AtomicU64::new(1),
+            1,
+            "screen-reading-v3",
+        )
+        .unwrap();
+        assert_eq!(row.accepted, Some(false));
+        assert_eq!(row.final_text.as_deref(), Some("雨が降っています"));
+        assert_eq!(row.candidate.as_deref(), Some("飴が降っています"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn synthetic_control_forwards_the_selected_afm_profile_to_the_owned_helper() {
         use std::os::unix::fs::PermissionsExt;
         let root = std::env::temp_dir().join(now_id(0));
@@ -1069,6 +1358,9 @@ else:
         let mut prefs = crate::settings::Preferences::default();
         let mut options = Options {
             input: "text".into(),
+            dataset: default_dataset(),
+            input_form: default_input_form(),
+            kana_hint: false,
             apple: true,
             qwen: false,
             ax: false,
@@ -1137,7 +1429,7 @@ else:
             std::env::var("VOICE_INPUT_LAB_EVIDENCE").expect("public CI evidence path"),
         );
         std::fs::create_dir_all(&output).unwrap();
-        for (scene, expected) in TEXTS {
+        for (scene, expected) in TEXTS.into_iter().chain(FALLING_TEXTS) {
             let captured = capture_scene(
                 &runtime,
                 &assets,
@@ -1148,7 +1440,7 @@ else:
                 1,
             )
             .expect("native controlled capture");
-            for key in ["ax", "ocr", "imageOCR", "vision"] {
+            for key in ["ax", "ocr", "imageOCR", "vision", "visionRegions"] {
                 assert!(
                     ["completed", "unavailable"]
                         .contains(&captured[key]["status"].as_str().unwrap_or("invalid"))
@@ -1227,7 +1519,7 @@ time.sleep(30)
     }
     #[test]
     fn metadata_export_redacts_bodies_instructions_and_control_candidates() {
-        let r = json!({"reportId":"run","rows":[{"raw":"PRIVATE","candidate":"PRIVATE","finalText":"PRIVATE","context":"PRIVATE","status":"accepted"}],
+        let r = json!({"reportId":"run","rows":[{"raw":"PRIVATE","candidate":"PRIVATE","finalText":"PRIVATE","context":"PRIVATE","correctionInput":"PRIVATE","status":"accepted"}],
             "captures":{"storm":{"fixtureText":"PRIVATE","ax":{"status":"completed","text":"PRIVATE"},"ocr":{"text":"PRIVATE"},"imageOCR":{"text":"PRIVATE"}}},
             "instructions":{"custom":"PRIVATE"},"kanaControls":["PRIVATE"],"preservationControls":["PRIVATE"]});
         assert!(!export(&r, false, None, "done").unwrap().contains("PRIVATE"));

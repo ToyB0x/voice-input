@@ -34,7 +34,7 @@ def main():
     assert code == 0 and status['protocol_version'] == 1 and status['availability'] in AVAILABILITY
     assert not args.require_framework or status['framework_imported'] is True
     assert set(status) == {'protocol_version', 'framework_imported', 'os_supported', 'availability', 'os_major', 'os_minor', 'os_patch'}
-    profiles = ['legacy-structured-v1', 'grounded-structured-v2', 'grounded-text-v2']
+    profiles = ['legacy-structured-v1', 'grounded-structured-v2', 'grounded-text-v2', 'screen-reading-v3']
     code, contract = invoke(args.binary, ['--self-test'])
     assert code == 0 and contract['status'] == 'passed' and contract['profiles'] == profiles
     for profile in profiles:

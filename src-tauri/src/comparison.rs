@@ -784,6 +784,36 @@ fn correct_text_profile(
     current: u64,
     foundation_profile: &str,
 ) -> Result<(), String> {
+    correct_text_input(
+        resources,
+        case,
+        row,
+        transcript,
+        transcript,
+        context,
+        instruction,
+        paths,
+        apple,
+        epoch,
+        current,
+        foundation_profile,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+fn correct_text_input(
+    resources: &Path,
+    case: &Case,
+    row: &mut Row,
+    transcript: &str,
+    correction_input: &str,
+    context: &str,
+    instruction: &str,
+    paths: &BTreeMap<String, Result<PathBuf, String>>,
+    apple: &Result<(), String>,
+    epoch: &AtomicU64,
+    current: u64,
+    foundation_profile: &str,
+) -> Result<(), String> {
     let mut correction_started = None;
     let outcome = (|| -> Result<(), String> {
         if case.correction == "none" || transcript.trim().is_empty() {
@@ -803,7 +833,7 @@ fn correct_text_profile(
             return Err("correction-model-missing".into());
         }
         correction_started = Some(Instant::now());
-        let mut payload = serde_json::json!({"transcript":transcript,"context":if case.correction_context(){context}else{""}});
+        let mut payload = serde_json::json!({"transcript":correction_input,"context":if case.correction_context(){context}else{""}});
         if !instruction.is_empty() {
             payload["instruction"] = instruction.into();
         }
