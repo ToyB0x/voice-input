@@ -40,6 +40,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             return Err("invalid fixture ID".into());
         }
         Request {
+            mode: local_correction::Mode::Rewrite,
+            dictionary: Vec::new(),
             instruction: String::new(),
             transcript: case.original.clone(),
             context: String::new(),

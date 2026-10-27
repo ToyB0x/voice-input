@@ -1,0 +1,72 @@
+name: Constrained correction quality
+on:
+  pull_request:
+    paths:
+      - 'crates/local-correction/**'
+      - 'evaluation/replacement-cases.json'
+      - 'scripts/evaluate_replacements.py'
+      - '.github/workflows/correction-quality.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: correction-quality-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dependency-policy:
+    uses: ./.github/workflows/dependency-policy.yml
+  quality:
+    needs: dependency-policy
+    runs-on: ubuntu-26.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [qwen3-4b, qwen3-8b]
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install CPU build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libclang-dev libseccomp2
+          rustup show
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: ubuntu26-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Test guards and build production helper
+        run: |
+          cargo fmt --manifest-path crates/local-correction/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/local-correction/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path crates/local-correction/Cargo.toml --locked
+          cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked --bin local-correction
+      - name: Prepare pinned model (explicit setup only)
+        run: python3 scripts/prepare-correction-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/model.gguf"
+      - name: Measure original rewrite baseline offline
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/evaluate_replacements.py \
+            --binary crates/local-correction/target/release/local-correction --model "$RUNNER_TEMP/model.gguf" \
+            --model-name '${{ matrix.model }}' --output "$RUNNER_TEMP/quality/rewrite" \
+            --require-network-denied --baseline-rewrite --repeats 1
+      - name: Measure constrained selection twice offline
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/evaluate_replacements.py \
+            --binary crates/local-correction/target/release/local-correction --model "$RUNNER_TEMP/model.gguf" \
+            --model-name '${{ matrix.model }}' --output "$RUNNER_TEMP/quality/replacements" \
+            --require-network-denied --repeats 2
+      - name: Publish quality summaries
+        if: always()
+        run: |
+          for report in "$RUNNER_TEMP"/quality/*/summary.md; do
+            if [ -f "$report" ]; then cat "$report" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: correction-quality-${{ matrix.model }}
+          path: ${{ runner.temp }}/quality/
+          retention-days: 14

@@ -113,6 +113,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let request: Validation =
             serde_json::from_slice(&input).map_err(|_| "invalid validation request")?;
         Request {
+            mode: local_correction::Mode::Rewrite,
+            dictionary: Vec::new(),
             instruction: String::new(),
             transcript: request.transcript.clone(),
             context: String::new(),
@@ -302,17 +304,23 @@ fn infer(
     PHASE.store(5, Ordering::Relaxed);
     let generation_started = Instant::now();
     const GRAMMAR: &str = "root ::= \"{\" ws \"\\\"text\\\"\" ws \":\" ws string ws \"}\"\nws ::= [ \\t\\n\\r]*\nstring ::= \"\\\"\" char* \"\\\"\"\nchar ::= [^\"\\\\\\x00-\\x1F] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])";
+    let restricted = request.mode == local_correction::Mode::Replacements;
+    let grammar = if restricted {
+        local_correction::replacements::GRAMMAR
+    } else {
+        GRAMMAR
+    };
     let mut sampler = LlamaSampler::chain_simple([
-        LlamaSampler::grammar(model, GRAMMAR, "root")?,
+        LlamaSampler::grammar(model, grammar, "root")?,
         LlamaSampler::greedy(),
     ]);
     let mut generated = Vec::new();
     let mut ended = false;
     for position in tokens.len()..tokens.len() + 512 {
-        if started.elapsed().as_secs() > 120 {
+        if started.elapsed().as_secs() > if restricted && !metal { 1800 } else { 120 } {
             return Err(SafeRuntimeError("total-time-budget").into());
         }
-        if generation_started.elapsed().as_secs() > 60 {
+        if generation_started.elapsed().as_secs() > if restricted && !metal { 900 } else { 60 } {
             return Err(SafeRuntimeError("generation-time-budget").into());
         }
         let token = sampler.sample(&context, -1);
@@ -326,7 +334,11 @@ fn infer(
             return Err("correction output exceeds limit".into());
         }
         // Stop once a complete constrained JSON response is available.
-        if serde_json::from_slice::<local_correction::Answer>(&bytes).is_ok() {
+        if if restricted {
+            serde_json::from_slice::<local_correction::replacements::Selection>(&bytes).is_ok()
+        } else {
+            serde_json::from_slice::<local_correction::Answer>(&bytes).is_ok()
+        } {
             ended = true;
             break;
         }
@@ -342,17 +354,36 @@ fn infer(
     let phase_started = Instant::now();
     PHASE.store(6, Ordering::Relaxed);
     let answer = vocab.detokenize(&generated, false, false);
-    let result = parse_answer(&answer, &request.transcript);
+    let selection = if restricted {
+        Some(
+            serde_json::from_slice::<local_correction::replacements::Selection>(&answer)
+                .map_err(|_| "invalid replacement JSON")?,
+        )
+    } else {
+        None
+    };
+    let result = if let Some(selection) = &selection {
+        local_correction::replacements::apply(request, selection)
+    } else {
+        parse_answer(&answer, &request.transcript)
+    };
     if comparison {
-        let candidate: local_correction::Answer =
-            serde_json::from_slice(&answer).map_err(|_| "invalid correction JSON")?;
-        let candidate = candidate.text.trim();
+        let candidate = if restricted {
+            result.as_ref().ok().cloned()
+        } else {
+            let parsed: local_correction::Answer =
+                serde_json::from_slice(&answer).map_err(|_| "invalid correction JSON")?;
+            Some(parsed.text.trim().to_owned())
+        };
+        let candidate = candidate.as_deref().unwrap_or("");
         if candidate.len() > MAX_OUTPUT || candidate.contains('\0') {
             return Err("invalid comparison candidate".into());
         }
         return Ok(serde_json::json!({
             "candidate": candidate, "accepted": result.is_ok(), "reason": result.err(),
             "model_reused": reused,
+            "selection": selection,
+            "performance": {"prefill_ms": performance.prefill_ms, "generation_ms": performance.generation_ms, "input_tokens": performance.input_tokens, "generated_tokens": performance.generated_tokens, "peak_rss_bytes": peak_rss_bytes()},
             "backend": if metal { "metal" } else { "cpu" }, "offloaded_layers": layers,
             "elapsed_ms": started.elapsed().as_millis() as u64,
         }));
