@@ -30,7 +30,7 @@ def prompt_for(raw,stage,case):
     elif stage!='image':raise ValueError('Only contextual stages invoke the model')
     # In image mode there is no caption, OCR, scene name, expected spelling,
     # or manually authored image description in the model prompt.
-    return PROMPT+'\n'+json.dumps(payload,ensure_ascii=False)
+    return PROMPT+' '+json.dumps(payload,ensure_ascii=False)
 def parse_choice(raw):
     value=json.loads(raw.strip())
     if not isinstance(value,dict) or set(value)!={'spelling'} or value['spelling'] not in ['雨','飴','不明']:

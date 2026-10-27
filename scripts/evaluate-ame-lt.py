@@ -39,16 +39,19 @@ def main():
         for stage,case in cases if repeat==0 else reversed(cases):
             prompt=prompt_for(raw,stage,case);image_copy=a.output/'input.png'
             command=[str(a.binary.resolve()),'-m',str(paths['model']),'--mmproj',str(paths['projector']),
-                '-p',prompt,'-c','8192','-n','128','--temp','0','--seed','0','--json-schema',json.dumps(SCHEMA),
+                '--simple-io','-c','8192','-n','128','--temp','0','--seed','0','--json-schema',json.dumps(SCHEMA),
                 '--threads','4','--image-max-tokens','4096','--no-warmup','-ngl','0','--no-mmproj-offload']
             if stage=='image':
-                image_copy.write_bytes((ROOT/case['file']).read_bytes());command+=['--image',str(image_copy.resolve())]
+                image_copy.write_bytes((ROOT/case['file']).read_bytes());command+=['--image',str(image_copy.resolve()),'-p',prompt]
             row=dict(stage=stage,id=case['id'],repeat=repeat,audio_sha256=c['audio_sha256'],raw=raw,
                 context=case['text'] if stage=='text' else '',image=case.get('file'),image_sha256=case.get('sha256'),
                 prompt=prompt,expected=c['utterance'].replace('あめ',case['expected']),model_called=True,status='runtime-error')
             start=time.monotonic()
             try:
-                result=run_inference(command,'',timeout=1800)
+                # This pinned mtmd CLI uses -p only when an image is present.
+                # Text-only input is one stdin chat turn, followed by /quit.
+                model_input=prompt+'\n/quit\n' if stage=='text' else ''
+                result=run_inference(command,model_input,timeout=1800)
                 (a.output/f"{stage}-{case['id']}-{repeat}.stderr.txt").write_text(result.stderr)
                 row.update(model_output=result.stdout,exit_status=result.returncode)
                 if result.returncode:raise ValueError('Model runtime failure')
