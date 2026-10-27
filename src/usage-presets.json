@@ -1,0 +1,29 @@
+[
+  {
+    "id": "asr-first",
+    "name": "原文重視（推奨）",
+    "description": "Whisper large-v3-turbo / Metal。自動補正と画面文脈を使わず、認識原文を確認して利用します。",
+    "evidence": "実機ではbaseの「目」がturboで「雨」に改善。AFMは語尾の変更が残り、今回の補正では「飴」への改善がなかったため、原文保持を初期候補にしています。一般的な最良精度の保証ではありません。",
+    "speech": "large-v3-turbo",
+    "correction": null,
+    "textHints": false
+  },
+  {
+    "id": "text-hints",
+    "name": "文字の文脈をヒントにする（実験）",
+    "description": "large-v3-turbo / Metal。入力欄のAXテキストとOCRをWhisperのヒントへ渡し、自動補正は使いません。",
+    "evidence": "関連テキストはWhisperの表記を変える一方、逆の文脈では誤誘導も観測。読み取り範囲はフォーカス中の編集欄です。アクセシビリティと画面収録の許可は設定画面で確認してください。",
+    "speech": "large-v3-turbo",
+    "correction": null,
+    "textHints": true
+  },
+  {
+    "id": "qwen-preview",
+    "name": "整形をプレビューする（比較用）",
+    "description": "large-v3-turbo + Qwen3 4B / Metal。追加指示なし・文脈なしで、認識後に手動で整形をプレビューします。自動補正は使いません。",
+    "evidence": "Qwen標準指示では句読点やフィラー除去を確認しています。新しいプロンプトの実機品質は比較が必要です。原文と候補を確認してからコピーしてください。",
+    "speech": "large-v3-turbo",
+    "correction": "qwen3-4b",
+    "textHints": false
+  }
+]

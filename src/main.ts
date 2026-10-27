@@ -1,3 +1,4 @@
+import { setupUsagePresets } from "./usage-presets";
 import { setupContextLab } from "./context-lab";
 import { setupComparison, comparisonWorking } from "./comparison";
 import { setupUpdates, updateInstalling } from "./updates";
@@ -6,7 +7,7 @@ import { setupModels } from "./model-setup";
 import { setupInputLevel } from "./input-level";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-type Preferences = { version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; autoCorrection: boolean; reuseCorrectionModel: boolean; showOverlay: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionInstruction: string; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
+type Preferences = { usagePreset?: string | null; version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; autoCorrection: boolean; reuseCorrectionModel: boolean; showOverlay: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionInstruction: string; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
 type InsertionStatus = { enabled: boolean; trusted: boolean; state: string; message: string };
 type DesktopStatus = { preferences: Preferences; shortcutRegistered: boolean; error: string | null };
 
@@ -116,6 +117,7 @@ let busy = false;
 let refreshing = false;
 let refreshVersion = 0;
 let actionError: string | null = null;
+let usageSetup: ReturnType<typeof setupUsagePresets> | undefined;
 const inputLevel = setupInputLevel(level, levelFill, levelValue, levelStatus, () => isTauri() && !busy);
 
 const managedModels = setupModels(
@@ -128,6 +130,23 @@ const managedModels = setupModels(
   },
 );
 
+usageSetup = setupUsagePresets(
+  () => busy || !snapshot || snapshot.working || snapshot.phase === "recording" || !!correction?.working || comparisonWorking() || updateInstalling(),
+  async (id,generation) => {
+    let applied=false;
+    await action(async()=>{
+      desktop=await invoke<DesktopStatus>("apply_usage_preset",{id,generation,preferences:preferencesFromFields()});
+      preferencesInitialized=false;
+      preferencesMessage.textContent="設定を保存しました。プリセットを適用しました。";
+      try{snapshot=await invoke<Snapshot>("load_model",{path:desktop.preferences.modelPath,backend:desktop.preferences.backend});}
+      catch(error){throw new Error(`設定は保存済みです。音声モデルの読み込みを開始できません: ${String(error)}`);}
+      applied=true;
+    });
+    if(!applied)throw new Error(actionError??"設定を適用できませんでした。");
+  },
+  () => desktop?.preferences.usagePreset??null,
+);
+
 function setText(element: HTMLElement, text: string | null) {
   const value = text ?? "";
   if (element.textContent !== value) element.textContent = value;
@@ -135,6 +154,7 @@ function setText(element: HTMLElement, text: string | null) {
 
 function render() {
   managedModels.refreshControls();
+  usageSetup?.refreshControls();
   if (!snapshot) return;
   setText(permission, `マイクの許可: ${permissions[snapshot.permission]}`);
   savePreferences.disabled = busy;
@@ -296,12 +316,15 @@ async function action(operation: () => Promise<unknown>) {
   }
 }
 
-savePreferences.addEventListener("click", () => void action(async () => {
-  desktop = await invoke<DesktopStatus>("save_preferences", { preferences: {
+function preferencesFromFields(): Preferences {
+  return {
     version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, autoCorrection: autoCorrection.checked, reuseCorrectionModel: reuseCorrectionModel.checked, showOverlay: showOverlay.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
     whisperContext: whisperContext.checked, correctionContext: correctionContext.checked,
     correctionInstruction: correctionInstruction.value, correctionModelPath: correctionModelPath.value, correctionEngine: correctionEngine.value, correctionBackend: correctionBackend.value,
-  } });
+  };
+}
+savePreferences.addEventListener("click", () => void action(async () => {
+  desktop = await invoke<DesktopStatus>("save_preferences", { preferences: preferencesFromFields() });
   preferencesMessage.textContent = "設定を保存しました。ショートカットは反映済みです。";
 }));
 accessibility.addEventListener("click", () => void action(() => invoke("request_accessibility")));

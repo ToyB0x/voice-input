@@ -158,7 +158,7 @@ pub fn desktop_status(desktop: tauri::State<'_, Desktop>) -> Result<Status, Stri
 pub fn save_preferences(
     app: AppHandle,
     desktop: tauri::State<'_, Desktop>,
-    mut preferences: Preferences,
+    preferences: Preferences,
 ) -> Result<Status, String> {
     let activity = app.state::<crate::activity::Activity>();
     let _gate = activity.lock()?;
@@ -167,12 +167,20 @@ pub fn save_preferences(
     {
         return Err("比較・更新を終了してから設定を保存してください。".into());
     }
+    apply_preferences(&app, &desktop, preferences)
+}
+/// Caller holds Activity's startup gate; shared by manual settings and setup recipes.
+pub(crate) fn apply_preferences(
+    app: &AppHandle,
+    desktop: &Desktop,
+    mut preferences: Preferences,
+) -> Result<Status, String> {
     preferences.model_path = preferences.model_path.trim().into();
     preferences.correction_model_path = preferences.correction_model_path.trim().into();
     preferences.shortcut = preferences.shortcut.trim().into();
     preferences.validate()?;
     let new = parse_shortcut(&preferences.shortcut)?;
-    let automatic = crate::correction::AutomaticConfig::from_preferences(&app, &preferences)?;
+    let automatic = crate::correction::AutomaticConfig::from_preferences(app, &preferences)?;
     let mut inner = desktop.inner.lock().map_err(|e| e.to_string())?;
     let old = inner.registered;
     if new != old

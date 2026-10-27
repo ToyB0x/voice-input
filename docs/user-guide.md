@@ -93,6 +93,10 @@ OS側の予約などで登録できても期待どおり届かない場合は、
 
 Qwenの読込待ちを減らす場合は[モデル再利用・処理時間](correction-reuse.md)を参照。初期状態は無効で、Appleモデルには適用しない。
 
+## かんたん設定
+
+「モデル」タブの[実測を基にしたプリセット](usage-presets.md)から、必要モデルの取得・検証と設定保存・読み込みまで進められる。最初は「原文重視（推奨）」を選ぶ。
+
 ## 設定・一時データ・更新
 
 保存先は `~/Library/Application Support/dev.toyb0x.voiceinput/settings.json`。

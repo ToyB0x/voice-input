@@ -31,6 +31,7 @@
     "allow-model-catalog",
     "allow-model-preparation-status",
     "allow-prepare-models",
+    "allow-apply-usage-preset",
     "allow-cancel-model-preparation",
     "allow-comparison-models",
     "allow-comparison-plan",

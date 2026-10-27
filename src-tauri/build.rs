@@ -39,6 +39,7 @@ fn main() {
         "model_catalog",
         "model_preparation_status",
         "prepare_models",
+        "apply_usage_preset",
         "cancel_model_preparation",
         "recording_status",
         "recording_level",
