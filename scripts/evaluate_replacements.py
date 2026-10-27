@@ -39,13 +39,15 @@ def main():
     p.add_argument('--require-network-denied', action='store_true')
     p.add_argument('--baseline-rewrite', action='store_true')
     p.add_argument('--observe-only', action='store_true', help='Report accuracy for a challenger; runtime failures still fail')
+    p.add_argument('--suite', choices=['development','confirmation'], default='development')
     args = p.parse_args()
     if args.require_network_denied:
         try: socket.create_connection(('127.0.0.1',9),timeout=1)
         except PermissionError: pass
         else: raise ValueError('Network denial not enforced')
     if checksum(args.model) != MODELS[args.model_name]['sha256']: raise ValueError('Wrong model')
-    fixture = ROOT/'evaluation/replacement-cases.json'
+    fixture = ROOT/'evaluation'/('replacement-cases.json' if args.suite=='development' else 'replacement-confirmation-cases.json')
+    if args.baseline_rewrite and args.suite!='development':raise ValueError('Rewrite baseline is defined only for development cases')
     corpus = json.loads(fixture.read_text())
     args.output.mkdir(parents=True,exist_ok=True)
     report = dict(schema_version=1, complete=False, model=args.model_name,

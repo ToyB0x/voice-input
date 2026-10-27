@@ -4,6 +4,7 @@ on:
     paths:
       - 'crates/local-correction/**'
       - 'evaluation/replacement-cases.json'
+      - 'evaluation/replacement-confirmation-cases.json'
       - 'scripts/evaluate_replacements.py'
       - '.github/workflows/correction-quality.yml'
   workflow_dispatch:
@@ -13,6 +14,11 @@ on:
         type: choice
         options: [qwen3-14b, qwen3-8b, qwen3-4b, all]
         default: qwen3-14b
+      suite:
+        description: Fixed development suite or the separately recorded confirmation regressions
+        type: choice
+        options: [development, confirmation]
+        default: development
 permissions:
   contents: read
 concurrency:
@@ -61,17 +67,20 @@ jobs:
       - name: Prepare pinned model (explicit setup only)
         run: python3 scripts/prepare-correction-model.py --model '${{ matrix.model }}' "$RUNNER_TEMP/model.gguf"
       - name: Measure original rewrite baseline offline
+        if: github.event_name != 'workflow_dispatch' || inputs.suite != 'confirmation'
         run: |
           python3 scripts/run-offline-linux.py python3 scripts/evaluate_replacements.py \
             --binary crates/local-correction/target/release/local-correction --model "$RUNNER_TEMP/model.gguf" \
             --model-name '${{ matrix.model }}' --output "$RUNNER_TEMP/quality/rewrite" \
             --require-network-denied --baseline-rewrite --repeats 1
       - name: Measure constrained selection twice offline
+        env:
+          QUALITY_SUITE: ${{ inputs.suite || 'development' }}
         run: |
           python3 scripts/run-offline-linux.py python3 scripts/evaluate_replacements.py \
             --binary crates/local-correction/target/release/local-correction --model "$RUNNER_TEMP/model.gguf" \
             --model-name '${{ matrix.model }}' --output "$RUNNER_TEMP/quality/replacements" \
-            --require-network-denied --repeats 2 --observe-only
+            --require-network-denied --repeats 2 --observe-only --suite "$QUALITY_SUITE"
       - name: Publish quality summaries
         if: always()
         run: |
