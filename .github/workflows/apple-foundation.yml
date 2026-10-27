@@ -24,6 +24,11 @@ jobs:
           xcrun --sdk macosx --show-sdk-version > "$RUNNER_TEMP/foundation-runtime/sdk.txt"
           python3 scripts/build-foundation-runtime.py --require-framework \
             --output "$RUNNER_TEMP/foundation-runtime/apple-foundation-correction"
+      - name: Compile and verify Japanese reading before the app build
+        run: |
+          xcrun swiftc -O -target arm64-apple-macos27.0 scripts/context-lab-native.swift -o "$RUNNER_TEMP/reading-helper"
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+            "$RUNNER_TEMP/reading-helper" --reading-self-test > "$RUNNER_TEMP/foundation-runtime/reading-verification.json"
       - name: Verify actual framework and bounded protocol offline
         run: |
           sandbox-exec -p '(version 1) (allow default) (deny network*)' \

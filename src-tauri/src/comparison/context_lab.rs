@@ -111,6 +111,7 @@ pub struct LabStatus {
     pub more: bool,
     pub parts: usize,
     pub foundation: Option<FoundationDiagnostic>,
+    pub final_test_summary: Value,
 }
 fn now_id(epoch: u64) -> String {
     let n = std::time::SystemTime::now()
@@ -616,6 +617,22 @@ impl Comparisons {
         }
         self.lab_update(epoch, "kanaControls", json!(kana));
         self.lab_update(epoch, "preservationControls", json!(controls));
+        if options.dataset == "ame-falling-v1" {
+            let rows = self
+                .inner
+                .lock()
+                .ok()
+                .and_then(|s| s.lab.as_ref().map(|l| l.report["rows"].clone()))
+                .unwrap_or(json!([]));
+            self.lab_update(
+                epoch,
+                "finalTestSummary",
+                final_test_summary(
+                    rows.as_array().map(Vec::as_slice).unwrap_or(&[]),
+                    options.repeats,
+                ),
+            );
+        }
         Ok(())
     }
     fn lab_publish_control(&self, epoch: u64) {
@@ -626,6 +643,39 @@ impl Comparisons {
             s.status.completed += 1;
         }
     }
+}
+fn final_test_summary(rows: &[Value], repeats: usize) -> Value {
+    // Keep input forms, sources, routes and instructions separate. Unavailable rows
+    // are not successes; mismatched context is a negative control, not a target test.
+    let mut groups: BTreeMap<(String, String, String, String, String), Vec<&Value>> =
+        BTreeMap::new();
+    for r in rows {
+        if r["engine"] == "none"
+            || !["fixture-text", "ocr", "vision-labels"]
+                .contains(&r["source"].as_str().unwrap_or(""))
+            || !["correction", "both"].contains(&r["route"].as_str().unwrap_or(""))
+        {
+            continue;
+        }
+        let key = (
+            r["engine"].as_str().unwrap_or("").into(),
+            r["inputForm"].as_str().unwrap_or("original").into(),
+            r["source"].as_str().unwrap_or("").into(),
+            r["route"].as_str().unwrap_or("").into(),
+            r["instruction"].as_str().unwrap_or("").into(),
+        );
+        groups.entry(key).or_default().push(r);
+    }
+    json!(groups.into_iter().map(|((engine,form,source,route,instruction),rs)| {
+        let evaluated = rs.iter().filter(|r| r["finalPass"].is_boolean()).count();
+        let passed = rs.iter().filter(|r| r["finalPass"] == true).count();
+        let identities: std::collections::BTreeSet<_> = rs.iter().filter(|r| r["finalPass"].is_boolean()).map(|r| (r["scene"].as_str().unwrap_or(""),r["repeat"].as_u64().unwrap_or(u64::MAX))).collect();
+        let complete = evaluated == 2 * repeats && identities.len() == evaluated
+            && ["rainfall","candy-shower"].iter().all(|scene| (0..repeats).all(|repeat|identities.contains(&(*scene,repeat as u64))));
+        json!({"engine":engine,"inputForm":form,"source":source,"route":route,"instruction":instruction,
+            "required":2*repeats,"evaluated":evaluated,"passed":passed,
+            "status":if !complete {"not-evaluated"} else if passed==evaluated {"passed"} else {"failed"}})
+    }).collect::<Vec<_>>())
 }
 fn final_pass(text: Option<&str>, expected: &str) -> bool {
     let normalized = |s: &str| {
@@ -1053,6 +1103,9 @@ pub fn context_lab_status(
         more: end < total,
         parts: total.div_ceil(20),
         foundation: state.status.foundation.clone(),
+        final_test_summary: report
+            .map(|r| r["finalTestSummary"].clone())
+            .unwrap_or(Value::Null),
     }
 }
 fn export(
@@ -1183,6 +1236,28 @@ mod tests {
             assert!(!final_pass(Some(text), "飴"));
         }
         assert!(!final_pass(None, "飴"));
+    }
+    #[test]
+    fn final_summary_requires_both_scenes_and_each_repeat_and_does_not_pool_readings() {
+        let row = |scene: &str, repeat: usize, form: &str| json!({"scene":scene,"repeat":repeat,"engine":"apple-foundation","source":"vision-labels","route":"correction","instruction":"custom","inputForm":form,"finalPass":true});
+        let mut rows = vec![
+            row("rainfall", 0, "reading"),
+            row("candy-shower", 0, "reading"),
+            row("rainfall", 1, "reading"),
+        ];
+        assert_eq!(final_test_summary(&rows, 2)[0]["status"], "not-evaluated");
+        rows.push(row("candy-shower", 1, "original"));
+        assert!(
+            final_test_summary(&rows, 2)
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|g| g["status"] == "not-evaluated")
+        );
+        rows.push(row("candy-shower", 1, "reading"));
+        assert_eq!(final_test_summary(&rows, 2)[1]["status"], "passed");
+        rows[0]["finalPass"] = false.into();
+        assert_eq!(final_test_summary(&rows, 2)[1]["status"], "failed");
     }
     #[test]
     fn phonetic_model_input_keeps_original_as_guard_source_and_rejection_fallback() {

@@ -83,3 +83,20 @@ class ConclusionsTests(unittest.TestCase):
             self.assertIn('元の全文JSONや省略部分を再構成したものではない',html)
             self.assertIn('期待語の一致と、意味・文体の保持は別',html)
             self.assertIn('長い候補の抜粋 2件',html)
+
+    def test_falling_slides_select_one_input_form_and_keep_real_scene_names(self):
+        import json,tempfile
+        from unittest.mock import patch
+        report=json.loads((Path(__file__).resolve().parents[2]/'evaluation/context-evidence/baseline/results.json').read_text())
+        report.update(experiment={'dataset':'ame-falling-v1'},inputKind='text',presentationEngine='apple-foundation',presentationInstruction='custom',instructions={'custom':''})
+        report['fixture']['utterance']='あめがふっています'
+        report['captures']={('rainfall' if k=='storm' else 'candy-shower'):v for k,v in report['captures'].items()}
+        report['rows']=[dict(scene='candy-shower',source='vision-labels',engine='apple-foundation',instruction='custom',route='correction',repeat=0,status='accepted',raw='雨が降っています',finalText=text,judgment=judgment,correctionMs=100,inputForm=form,finalPass=passed) for form,text,judgment,passed in [('original','雨が降っています','opposite',False),('reading','飴が降っています','target',True)]]
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);source=root/'synthetic-test-only.json';source.write_text(json.dumps(report))
+            with patch('sys.argv',['slides','--report',str(source),'--output',str(root/'out'),'--input-form','reading']): slides.main()
+            html=(root/'out/slides.html').read_text()
+            self.assertTrue('屋根からの飴まき' in html)
+            self.assertTrue('最終試験：語尾を含む文全体の一致' in html)
+            self.assertTrue('飴まき 1/1' in html)
+            self.assertTrue('かな原文' in html)

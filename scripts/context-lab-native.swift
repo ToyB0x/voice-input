@@ -12,9 +12,11 @@ func finish(_ reason: String) -> Never { emit(["error": reason]); exit(1) }
 // Only Japanese tokens change; numbers, Latin identifiers and separators remain byte-for-byte.
 func japaneseReading(_ text: String) -> String? {
     let ns = text as NSString
+    // NSLocale and CFLocale are toll-free bridged. Avoid SDK 27's newly typed
+    // CFLocaleIdentifier constructor while passing an explicit Japanese locale.
+    let locale = unsafeBitCast(NSLocale(localeIdentifier: "ja_JP"), to: CFLocale.self)
     let tokenizer = CFStringTokenizerCreate(kCFAllocatorDefault, text as CFString,
-        CFRange(location: 0, length: ns.length), kCFStringTokenizerUnitWord,
-        CFLocaleCreate(kCFAllocatorDefault, "ja_JP" as CFString))!
+        CFRange(location: 0, length: ns.length), kCFStringTokenizerUnitWord, locale)!
     var kind = CFStringTokenizerGoToTokenAtIndex(tokenizer, 0)
     var end = 0, output = ""
     while kind.rawValue != 0 {

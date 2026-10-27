@@ -254,7 +254,7 @@
             <label class="check"><input id="lab-compare-instruction" type="checkbox" checked>追加指示なしの標準条件も比較する</label>
             <p class="hint">文脈なし・直接テキスト・AX・文字OCR・文字なし画像OCR・画像分類ラベル・逆の文脈を比較します。音声がある場合はWhisperヒント／補正／両方へ振り分けます。かな原文モードは最終補正だけを比較します。数値・否定・人名・フィラーなどの補助試験も行います。期待語の出現やガード採用は意味保持の保証ではありません。</p>
             <button id="lab-start">実機で直列検証を開始</button><button id="lab-cancel" disabled>検証を中止</button><button id="lab-clear">結果を破棄</button>
-            <p id="lab-progress" role="status"></p><p id="lab-message" role="alert" aria-live="assertive"></p>
+            <p id="lab-progress" role="status"></p><p id="lab-final-status" role="status"></p><p id="lab-message" role="alert" aria-live="assertive"></p>
             <div class="table-scroll"><table><thead><tr><th>条件</th><th>状態・期待語</th><th>時間</th><th>原文・候補・最終</th></tr></thead><tbody id="lab-rows"></tbody></table></div>
             <label class="check"><input id="lab-include-text" type="checkbox">解析・スライド更新用に本文・取得文脈・追加指示をJSONへ含める</label>
             <p class="hint">初期状態は診断情報だけです。録音を使った場合、認識文には個人情報が含まれる可能性があります。内容を確認してから共有してください。音声・画像のバイト列、モデルパスやマイク名はコピーしません。コピー操作だけで外部送信・自動保存はしません。</p>

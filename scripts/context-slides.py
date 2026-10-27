@@ -46,6 +46,7 @@ def main():
     falling=r.get('experiment',{}).get('dataset')=='ame-falling-v1'
     scenes=['rainfall','candy-shower'] if falling else ['storm','candy']
     scene_names=['降雨 → 雨','屋根からの飴まき → 飴'] if falling else ['台風 → 雨','お菓子 → 飴']
+    scene_short=['降雨','飴まき'] if falling else ['台風','キャンディ']
     repeats=len({x['repeat'] for x in rows if 'repeat' in x})
     def add(title,body): slides.append('<section><h1>'+title+'</h1>'+body+'<footer>Voice Input / '+footer_label+'による小規模実験 · '+str(len(slides)+1)+'</footer></section>')
     add('音声だけで、漢字は決まる？','<p class="lead">'+e(r['fixture']['utterance'])+'</p><p class="lead">雨 ☔　／　飴 🍬</p><p>音声入力＋ローカルな画面文脈で、同音語の表記を比較する。</p><p>「音声入力 → 整文」を提供する製品例：<a href="https://www.typeless.com/ja">Typeless</a>、<a href="https://wisprflow.ai/">Wispr Flow</a>。製品間の性能比較や市場成長率は本実験の対象外。</p>')
@@ -105,8 +106,8 @@ def main():
     kana_changed=sum(x['result']['candidate'].rstrip('。')!=x['input'].rstrip('。') for x in kana_candidates)
     add('今回の実測で分かったこと',
         '<p>'+('入力したかな原文：' if text_only else '文脈なしのWhisper原文：')+'<b>'+e(' / '.join(raw_examples) or '未取得／失敗（原文はJSONを参照）')+'</b>。</p>'
-        '<p>直接テキスト＋'+('最終補正' if text_only else 'ヒント・補正')+'の期待語出現：台風 '+counts('storm','fixture-text')+'、キャンディ '+counts('candy','fixture-text')+'。</p>'
-        '<p>画像分類ラベル＋'+('最終補正' if text_only else 'ヒント・補正')+'の期待語出現：台風 '+counts('storm','vision-labels')+'、キャンディ '+counts('candy','vision-labels')+'。逆の文脈での逆語出現：台風 '+counts('storm','mismatched-text','opposite')+'、キャンディ '+counts('candy','mismatched-text','opposite')+'。</p>'
+        '<p>直接テキスト＋'+('最終補正' if text_only else 'ヒント・補正')+'の期待語出現：'+e(scene_short[0])+' '+counts(scenes[0],'fixture-text')+'、'+e(scene_short[1])+' '+counts(scenes[1],'fixture-text')+'。</p>'
+        '<p>画像分類ラベル＋'+('最終補正' if text_only else 'ヒント・補正')+'の期待語出現：'+e(scene_short[0])+' '+counts(scenes[0],'vision-labels')+'、'+e(scene_short[1])+' '+counts(scenes[1],'vision-labels')+'。逆の文脈での逆語出現：'+e(scene_short[0])+' '+counts(scenes[0],'mismatched-text','opposite')+'、'+e(scene_short[1])+' '+counts(scenes[1],'mismatched-text','opposite')+'。</p>'
         '<p>かな入力の分離試験：候補本文 '+str(len(kana_candidates))+'件、長い候補の抜粋 '+str(len(kana_excerpts))+'件／全'+str(len(kana))+'件。完全な候補のうち'+str(kana_changed)+'件で表記が変化（末尾の句点を除く）。変化だけでは正しい変換や意味保持を保証しない。</p>')
     # Authored interpretation stays with its frozen evidence, not future reports.
     for note in r.get('presentationSlides',[]):
