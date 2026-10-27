@@ -11,7 +11,7 @@ async function setup(){
       addEventListener(k,fn){this.listeners.set(k,fn);},replaceChildren(){this.rows=[];},
       insertRow(){const row={cells:[],insertCell(){const c={textContent:''};this.cells.push(c);return c;}};this.rows.push(row);return row;}});
   }
-  elements.get('lab-input').value='text';elements.get('lab-repeats').value='1';elements.get('lab-apple').checked=true;elements.get('lab-compare-instruction').checked=true;
+  elements.get('lab-foundation-profile').value='grounded-structured-v2';elements.get('lab-input').value='text';elements.get('lab-repeats').value='1';elements.get('lab-apple').checked=true;elements.get('lab-compare-instruction').checked=true;
   const state={runId:null,working:false,phase:'idle',message:'',planned:0,completed:0,rows:[],next:0,more:false,parts:0,foundation:null};
   const requests=[];let poll,startError;
   const models=[{id:"current-speech",available:false},{id:"current-correction",available:false}];
@@ -63,4 +63,11 @@ test('missing saved Qwen readiness and the start error remain visible across sta
   a.models[1].available=true;await a.poll();assert.match(a.elements.get('lab-model-readiness').textContent,/Qwen: 保存済みモデルあり/);
   assert.equal(a.elements.get('lab-message').textContent,message);
   a.setStartError(undefined);await a.click('lab-start');assert.equal(a.elements.get('lab-message').textContent,'');
+});
+
+test('AFM output profile is sent only on explicit start',async()=>{
+  const a=await setup();a.elements.get('lab-foundation-profile').value='grounded-text-v2';
+  assert.ok(!a.requests.some(x=>x.command==='start_context_lab'));
+  await a.click('lab-start');
+  assert.equal(a.requests.find(x=>x.command==='start_context_lab').args.options.foundationProfile,'grounded-text-v2');
 });

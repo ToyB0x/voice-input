@@ -24,7 +24,7 @@ function render(){
   for(const id of ["lab-copy","lab-copy-part"]) el<HTMLButtonElement>(id).disabled=busy||!state?.runId||!!state.more;
   el<HTMLButtonElement>("lab-copy-part").disabled = busy || !state?.runId || !state.parts || !!state.more;
   el<HTMLButtonElement>("lab-clear").disabled = acting || !state?.runId;
-  for(const id of ["lab-input","lab-apple","lab-qwen","lab-ax","lab-repeats","lab-instruction","lab-compare-instruction"]) (el(id) as HTMLInputElement).disabled=busy;
+  for(const id of ["lab-input","lab-apple","lab-qwen","lab-ax","lab-repeats","lab-instruction","lab-compare-instruction","lab-foundation-profile"]) (el(id) as HTMLInputElement).disabled=busy;
   const qwen=el<HTMLInputElement>("lab-qwen").checked;
   const speech=el<HTMLSelectElement>("lab-input").value!=="text";
   const ready=(id:string)=>modelChoices.find(x=>x.id===id)?.available===true;
@@ -68,7 +68,7 @@ export function setupContextLab(){
   el<HTMLImageElement>("lab-storm").src=storm;el<HTMLImageElement>("lab-candy").src=candy;
   el("lab-start").addEventListener("click",()=>void action(()=>invoke("start_context_lab",{options:{
     input:el<HTMLSelectElement>("lab-input").value,apple:el<HTMLInputElement>("lab-apple").checked,qwen:el<HTMLInputElement>("lab-qwen").checked,
-    ax:el<HTMLInputElement>("lab-ax").checked,repeats:Number(el<HTMLSelectElement>("lab-repeats").value),compareInstruction:el<HTMLInputElement>("lab-compare-instruction").checked,instruction:el<HTMLTextAreaElement>("lab-instruction").value,
+    ax:el<HTMLInputElement>("lab-ax").checked,repeats:Number(el<HTMLSelectElement>("lab-repeats").value),compareInstruction:el<HTMLInputElement>("lab-compare-instruction").checked,instruction:el<HTMLTextAreaElement>("lab-instruction").value,foundationProfile:el<HTMLSelectElement>("lab-foundation-profile").value,
   }})));
   el("lab-cancel").addEventListener("click",()=>void action(()=>invoke("cancel_comparison",{clear:false})));
   el("lab-clear").addEventListener("click",()=>void action(async()=>{await invoke("cancel_comparison",{clear:true});cursor=0;part=0;el("lab-rows").replaceChildren();el<HTMLTextAreaElement>("lab-json").value="";}));

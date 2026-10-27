@@ -701,6 +701,7 @@ pub(crate) fn foundation_failure(failure: &serde_json::Value) -> String {
 }
 pub(crate) fn guard_code(reason: Option<&str>) -> &'static str {
     match reason {
+        Some("correction generated repetitive sentences") => "guard-repetition",
         Some("correction changed numeric facts") => "guard-numbers",
         Some("correction removed a negation marker" | "correction changed a negation target") => {
             "guard-negation"

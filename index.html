@@ -218,6 +218,9 @@
             <label for="lab-input">比較する入力</label>
             <select id="lab-input"><option value="bundled">CIと同じ同梱音声（Whisperモデルが必要）</option><option value="recorded">直前の録音（同じ音声を両シーンへ再利用）</option><option value="text">かな原文のみ（音声認識・マイク不要）</option></select>
             <p class="hint">同梱音声／録音は設定中のWhisperとCPU / Metalを使用します。録音は先に完了してください。録音時の通常AX/OCRは使わず、下の同梱シーンを新たに取得します。音声モデルは検証開始時に解放されるため、通常入力へ戻る際は再読み込みしてください。</p>
+            <label for="lab-foundation-profile">AFMの補正方式（実機で比較）</label>
+            <select id="lab-foundation-profile"><option value="grounded-structured-v2">新方式：発話と参考を分離＋構造化出力</option><option value="grounded-text-v2">新方式：発話と参考を分離＋テキスト出力</option><option value="legacy-structured-v1">旧方式：JSON入力＋構造化出力（対照）</option></select>
+            <p class="hint">通常入力は新しい構造化方式を使用します。この選択は実機検証だけに適用します。新方式同士ではプロンプトと生成上限を固定して出力方式を比較し、旧方式は従来の指示・512トークン上限を使います。</p>
             <label class="check"><input id="lab-apple" type="checkbox" checked>Apple Foundation Modelsで補正する</label>
             <label class="check"><input id="lab-qwen" type="checkbox">保存済みのQwenも比較する（モデルパスの保存が必要）</label>
             <p id="lab-model-readiness" class="hint" role="status"></p>
