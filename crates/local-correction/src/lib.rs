@@ -105,6 +105,20 @@ impl Request {
     }
 }
 pub fn parse_answer(json: &[u8], original: &str) -> Result<String, &'static str> {
+    parse_answer_with_scope(json, original, false)
+}
+
+// Only the verified dictionary splice path may use this scope. It independently
+// preserves literal negation markers and every byte outside selected spans.
+pub(crate) fn parse_dictionary_answer(json: &[u8], original: &str) -> Result<String, &'static str> {
+    parse_answer_with_scope(json, original, true)
+}
+
+fn parse_answer_with_scope(
+    json: &[u8],
+    original: &str,
+    dictionary_spans: bool,
+) -> Result<String, &'static str> {
     if json.len() > MAX_OUTPUT {
         return Err("correction output exceeds limit");
     }
@@ -127,7 +141,9 @@ pub fn parse_answer(json: &[u8], original: &str) -> Result<String, &'static str>
     {
         return Err("correction removed a negation marker");
     }
-    preserve_negation_targets(&comparison_source, &text)?;
+    if !dictionary_spans {
+        preserve_negation_targets(&comparison_source, &text)?;
+    }
     preserve_contrasts(&comparison_source, &text)?;
     preserve_connectives(&comparison_source, &text)?;
     preserve_named_mentions(&comparison_source, &text)?;
@@ -158,7 +174,8 @@ pub fn parse_answer(json: &[u8], original: &str) -> Result<String, &'static str>
     }
     let source = significant(&comparison_source);
     let corrected = significant(&text);
-    if !source.is_empty() && edits(&source, &corrected) * 10 > source.len() * 6 {
+    if !dictionary_spans && !source.is_empty() && edits(&source, &corrected) * 10 > source.len() * 6
+    {
         return Err("correction replaced or removed too much of the source");
     }
     // A gross expansion is a failed preview, never a replacement of the source.

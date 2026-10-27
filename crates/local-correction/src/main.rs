@@ -206,6 +206,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             performance,
             comparison,
             reused,
+            None,
         )?;
         let mut output = std::io::stdout().lock();
         serde_json::to_writer(&mut output, &result)?;
@@ -268,6 +269,7 @@ fn infer(
     mut performance: Performance,
     comparison: bool,
     reused: bool,
+    verification_candidate: Option<&str>,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let phase_started = Instant::now();
     PHASE.store(3, Ordering::Relaxed);
@@ -282,7 +284,12 @@ fn infer(
         .with_n_threads_batch(threads);
     let mut context = model.new_context(backend, params)?;
     let vocab = model.vocab();
-    let tokens = vocab.tokenize(request.prompt()?.as_bytes(), true, true);
+    let prompt = if let Some(candidate) = verification_candidate {
+        local_correction::replacements::verification_prompt(request, candidate)?
+    } else {
+        request.prompt()?
+    };
+    let tokens = vocab.tokenize(prompt.as_bytes(), true, true);
     if tokens.is_empty() || tokens.len() > 3500 {
         return Err("correction prompt exceeds context budget".into());
     }
@@ -304,9 +311,12 @@ fn infer(
     PHASE.store(5, Ordering::Relaxed);
     let generation_started = Instant::now();
     const GRAMMAR: &str = "root ::= \"{\" ws \"\\\"text\\\"\" ws \":\" ws string ws \"}\"\nws ::= [ \\t\\n\\r]*\nstring ::= \"\\\"\" char* \"\\\"\"\nchar ::= [^\"\\\\\\x00-\\x1F] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])";
-    let restricted = request.mode == local_correction::Mode::Replacements;
+    let verifying = verification_candidate.is_some();
+    let restricted = request.mode == local_correction::Mode::Replacements && !verifying;
     let long_cpu_budget = !metal && (restricted || comparison);
-    let grammar = if restricted {
+    let grammar = if verifying {
+        local_correction::replacements::VERIFICATION_GRAMMAR
+    } else if restricted {
         local_correction::replacements::GRAMMAR
     } else {
         GRAMMAR
@@ -335,7 +345,9 @@ fn infer(
             return Err("correction output exceeds limit".into());
         }
         // Stop once a complete constrained JSON response is available.
-        if if restricted {
+        if if verifying {
+            serde_json::from_slice::<local_correction::replacements::Verification>(&bytes).is_ok()
+        } else if restricted {
             serde_json::from_slice::<local_correction::replacements::Selection>(&bytes).is_ok()
         } else {
             serde_json::from_slice::<local_correction::Answer>(&bytes).is_ok()
@@ -355,6 +367,17 @@ fn infer(
     let phase_started = Instant::now();
     PHASE.store(6, Ordering::Relaxed);
     let answer = vocab.detokenize(&generated, false, false);
+    if verifying {
+        let verdict: local_correction::replacements::Verification =
+            serde_json::from_slice(&answer)?;
+        return Ok(
+            serde_json::json!({"approved":verdict.approved, "elapsed_ms":started.elapsed().as_millis() as u64, "performance":performance}),
+        );
+    }
+    // The verification pass gets a fresh KV cache and sampler, sharing only weights.
+    drop(sampler);
+    drop(batch);
+    drop(context);
     let selection = if restricted {
         Some(
             serde_json::from_slice::<local_correction::replacements::Selection>(&answer)
@@ -363,11 +386,39 @@ fn infer(
     } else {
         None
     };
-    let result = if let Some(selection) = &selection {
+    let mut result = if let Some(selection) = &selection {
         local_correction::replacements::apply(request, selection)
     } else {
         parse_answer(&answer, &request.transcript)
     };
+    let mut selection_report = serde_json::to_value(&selection)?;
+    if restricted
+        && let Ok(candidate) = &result
+        && candidate != &request.transcript
+    {
+        let verification = infer(
+            backend,
+            model,
+            name,
+            layers,
+            metal,
+            request,
+            started,
+            Performance::default(),
+            true,
+            true,
+            Some(candidate),
+        )?;
+        selection_report["proposedText"] = candidate.clone().into();
+        selection_report["verification"] = verification.clone();
+        if verification["approved"] != true {
+            result = Ok(request.transcript.clone());
+            selection_report["appliedEdits"] = serde_json::json!([]);
+        } else {
+            selection_report["appliedEdits"] =
+                serde_json::json!(selection.as_ref().map(|s| &s.edits));
+        }
+    }
     if comparison {
         let candidate = if restricted {
             result.as_ref().ok().cloned()
@@ -383,7 +434,7 @@ fn infer(
         return Ok(serde_json::json!({
             "candidate": candidate, "accepted": result.is_ok(), "reason": result.err(),
             "model_reused": reused,
-            "selection": selection,
+            "selection": selection_report,
             "performance": {"prefill_ms": performance.prefill_ms, "generation_ms": performance.generation_ms, "input_tokens": performance.input_tokens, "generated_tokens": performance.generated_tokens, "peak_rss_bytes": peak_rss_bytes()},
             "backend": if metal { "metal" } else { "cpu" }, "offloaded_layers": layers,
             "elapsed_ms": started.elapsed().as_millis() as u64,

@@ -7,6 +7,12 @@ on:
       - 'scripts/evaluate_replacements.py'
       - '.github/workflows/correction-quality.yml'
   workflow_dispatch:
+    inputs:
+      model:
+        description: Model to evaluate (PRs compare 4B and 8B; 14B is an explicit challenger)
+        type: choice
+        options: [qwen3-14b, qwen3-8b, qwen3-4b, all]
+        default: qwen3-14b
 permissions:
   contents: read
 concurrency:
@@ -18,11 +24,11 @@ jobs:
   quality:
     needs: dependency-policy
     runs-on: ubuntu-26.04
-    timeout-minutes: 150
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
-        model: [qwen3-4b, qwen3-8b, qwen3-14b]
+        model: ${{ fromJSON(github.event_name == 'workflow_dispatch' && (inputs.model == 'all' && '["qwen3-4b","qwen3-8b","qwen3-14b"]' || format('["{0}"]', inputs.model)) || '["qwen3-4b","qwen3-8b"]') }}
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
     steps:
@@ -87,11 +93,13 @@ jobs:
           pattern: correction-quality-*
           path: reports
       - name: Require at least one fully passing model, report every challenger
+        env:
+          EXPECTED_MODELS: ${{ github.event_name == 'workflow_dispatch' && (inputs.model == 'all' && '["qwen3-4b","qwen3-8b","qwen3-14b"]' || format('["{0}"]', inputs.model)) || '["qwen3-4b","qwen3-8b"]' }}
         run: |
           python3 - <<'PYCODE'
           import json, pathlib, os
           reports=[json.loads(p.read_text()) for p in pathlib.Path('reports').glob('*/replacements/report.json')]
-          expected={'qwen3-4b','qwen3-8b','qwen3-14b'}
+          expected=set(json.loads(os.environ['EXPECTED_MODELS']))
           if {r['model'] for r in reports}!=expected or len(reports)!=len(expected):raise SystemExit('Missing model report')
           passing=[r['model'] for r in reports if r['complete'] and r['quality_pass']]
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:
