@@ -348,7 +348,7 @@ fn infer(
         if if verifying {
             serde_json::from_slice::<local_correction::replacements::Verification>(&bytes).is_ok()
         } else if restricted {
-            serde_json::from_slice::<local_correction::replacements::Selection>(&bytes).is_ok()
+            serde_json::from_slice::<local_correction::replacements::ModelSelection>(&bytes).is_ok()
         } else {
             serde_json::from_slice::<local_correction::Answer>(&bytes).is_ok()
         } {
@@ -379,10 +379,11 @@ fn infer(
     drop(batch);
     drop(context);
     let selection = if restricted {
-        Some(
-            serde_json::from_slice::<local_correction::replacements::Selection>(&answer)
+        Some(local_correction::replacements::resolve(
+            request,
+            serde_json::from_slice::<local_correction::replacements::ModelSelection>(&answer)
                 .map_err(|_| "invalid replacement JSON")?,
-        )
+        )?)
     } else {
         None
     };
@@ -392,6 +393,11 @@ fn infer(
         parse_answer(&answer, &request.transcript)
     };
     let mut selection_report = serde_json::to_value(&selection)?;
+    if restricted {
+        selection_report["evidenceId"] =
+            serde_json::from_slice::<serde_json::Value>(&answer)?["evidenceId"].clone();
+        selection_report["promptRevision"] = local_correction::replacements::REVISION.into();
+    }
     if restricted
         && let Ok(candidate) = &result
         && candidate != &request.transcript
