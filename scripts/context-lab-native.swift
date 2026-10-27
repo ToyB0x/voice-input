@@ -25,7 +25,8 @@ func japaneseReading(_ text: String) -> String? {
         output += ns.substring(with: NSRange(location: end, length: range.location-end))
         let token = ns.substring(with: NSRange(location: range.location, length: range.length))
         let japanese = token.unicodeScalars.contains { (0x3040...0x30ff).contains($0.value) || (0x3400...0x9fff).contains($0.value) }
-        if japanese, let latin = CFStringTokenizerCopyCurrentTokenAttribute(tokenizer, kCFStringTokenizerAttributeLatinTranscription) as? String,
+        let identifier = token.unicodeScalars.contains { CharacterSet.latinLettersForReading.contains($0) || (0x30...0x39).contains($0.value) }
+        if japanese && !identifier, let latin = CFStringTokenizerCopyCurrentTokenAttribute(tokenizer, kCFStringTokenizerAttributeLatinTranscription) as? String,
            let kana = latin.applyingTransform(.latinToHiragana, reverse: false),
            !kana.unicodeScalars.contains(where: { CharacterSet.latinLettersForReading.contains($0) }) {
             output += kana

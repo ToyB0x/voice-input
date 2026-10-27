@@ -198,7 +198,7 @@ impl Comparisons {
                 ..Status::default()
             };
             state.lab = Some(Session {
-                report: json!({"schemaVersion":1,"kind":"device-context-lab","sampleSetVersion":1,
+                report: json!({"schemaVersion":1,"kind":"device-context-lab","sampleSetVersion":if options.dataset=="ame-falling-v1" {2} else {1},
                 "reportId":run_id,"appVersion":env!("CARGO_PKG_VERSION"),"sourceRevision":env!("VOICE_INPUT_SOURCE_REVISION"),
                 "platform":"macos","machine":std::env::consts::ARCH,"execution":"local-app","networkDenied":false,
                 "completed":false,"inputKind":options.input,"instructions":instructions,
@@ -278,7 +278,7 @@ impl Comparisons {
         }
         let audio_ms = audio.len() as u64 * 1000 / 16000;
         self.lab_update(epoch,"fixture",json!({"utterance":if options.input=="recorded" {"利用者の録音（期待語は実験シーン側の定義）"} else {utterance},
-            "voice":if options.input=="bundled" {"CIの同梱合成音声（Eddy ja_JP）"} else if options.input=="text" {"音声なし"} else {"利用者の録音"},
+            "voice":if options.input=="bundled" { if options.dataset=="ame-falling-v1" {"ビルド時に生成した日本語システム音声（SHA-256で識別）"} else {"CIの同梱合成音声（Eddy ja_JP）"} } else if options.input=="text" {"音声なし"} else {"利用者の録音"},
             "origin":options.input,"audioMs":audio_ms,"audioSha256":audio_hash,"audioHashFormat":"f32le-16000-mono","hashes":{},"assetHashes":asset_hashes}));
         let mut binaries = serde_json::Map::new();
         for name in [
@@ -555,7 +555,13 @@ impl Comparisons {
                             judgment(row.final_text.as_deref(), expected, opposite).into();
                         if options.dataset == "ame-falling-v1" {
                             r["expectedText"] = format!("{expected}が降っています").into();
-                            r["finalPass"] = json!(final_pass(row.final_text.as_deref(), expected));
+                            r["finalPass"] = if ["accepted", "rejected", "uncorrected"]
+                                .contains(&row.status.as_str())
+                            {
+                                json!(final_pass(row.final_text.as_deref(), expected))
+                            } else {
+                                Value::Null
+                            };
                         }
                         self.lab_publish(epoch, r);
                     }
@@ -667,9 +673,10 @@ fn final_test_summary(rows: &[Value], repeats: usize) -> Value {
         groups.entry(key).or_default().push(r);
     }
     json!(groups.into_iter().map(|((engine,form,source,route,instruction),rs)| {
-        let evaluated = rs.iter().filter(|r| r["finalPass"].is_boolean()).count();
-        let passed = rs.iter().filter(|r| r["finalPass"] == true).count();
-        let identities: std::collections::BTreeSet<_> = rs.iter().filter(|r| r["finalPass"].is_boolean()).map(|r| (r["scene"].as_str().unwrap_or(""),r["repeat"].as_u64().unwrap_or(u64::MAX))).collect();
+        let evaluable = |r: &&&Value| r["finalPass"].is_boolean() && ["accepted", "rejected", "uncorrected"].contains(&r["status"].as_str().unwrap_or(""));
+        let evaluated = rs.iter().filter(evaluable).count();
+        let passed = rs.iter().filter(evaluable).filter(|r| r["finalPass"] == true).count();
+        let identities: std::collections::BTreeSet<_> = rs.iter().filter(evaluable).map(|r| (r["scene"].as_str().unwrap_or(""),r["repeat"].as_u64().unwrap_or(u64::MAX))).collect();
         let complete = evaluated == 2 * repeats && identities.len() == evaluated
             && ["rainfall","candy-shower"].iter().all(|scene| (0..repeats).all(|repeat|identities.contains(&(*scene,repeat as u64))));
         json!({"engine":engine,"inputForm":form,"source":source,"route":route,"instruction":instruction,
@@ -1239,7 +1246,7 @@ mod tests {
     }
     #[test]
     fn final_summary_requires_both_scenes_and_each_repeat_and_does_not_pool_readings() {
-        let row = |scene: &str, repeat: usize, form: &str| json!({"scene":scene,"repeat":repeat,"engine":"apple-foundation","source":"vision-labels","route":"correction","instruction":"custom","inputForm":form,"finalPass":true});
+        let row = |scene: &str, repeat: usize, form: &str| json!({"scene":scene,"repeat":repeat,"engine":"apple-foundation","source":"vision-labels","route":"correction","instruction":"custom","inputForm":form,"status":"accepted","finalPass":true});
         let mut rows = vec![
             row("rainfall", 0, "reading"),
             row("candy-shower", 0, "reading"),
@@ -1258,6 +1265,9 @@ mod tests {
         assert_eq!(final_test_summary(&rows, 2)[1]["status"], "passed");
         rows[0]["finalPass"] = false.into();
         assert_eq!(final_test_summary(&rows, 2)[1]["status"], "failed");
+        rows[0]["finalPass"] = true.into();
+        rows[0]["status"] = "unavailable".into();
+        assert_eq!(final_test_summary(&rows, 2)[1]["status"], "not-evaluated");
     }
     #[test]
     fn phonetic_model_input_keeps_original_as_guard_source_and_rejection_fallback() {
