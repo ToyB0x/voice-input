@@ -18,6 +18,8 @@ def main():
     for r in asr['rows']:validate_asr(r['result']['text'])
     spec=json.loads((ROOT/'evaluation/local-vlm/model.json').read_text())
     if subprocess.check_output(['git','-C',str(a.source),'rev-parse','HEAD'],text=True).strip()!=spec['runtime']['revision']:raise ValueError('Wrong runtime')
+    text_binary=a.binary.resolve().with_name('llama-completion')
+    if not text_binary.is_file():raise ValueError('Missing text runtime')
     paths={}
     for entry in spec['files']:
         path=(a.models/entry['file']).resolve()
@@ -28,7 +30,7 @@ def main():
     a.output.mkdir(parents=True,exist_ok=True)
     report=dict(complete=False,kind='ame-lt-three-stages',source_revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         config=c,config_sha256=checksum(ROOT/'evaluation/ame-lt/scenarios.json'),asr=asr,asr_report_sha256=checksum(a.asr),
-        model=spec,binary_sha256=checksum(a.binary),backend='cpu',network_denied=True,platform=platform.platform(),
+        model=spec,binary_sha256=checksum(a.binary),text_binary_sha256=checksum(text_binary),backend='cpu',network_denied=True,platform=platform.platform(),
         output_schema=SCHEMA,rows=[],limitation='LT-only rain/candy choice on one reused synthetic audio and constructed helpful contexts. Not general dictation accuracy or acoustic accent recognition. A text/vision model receives ASR text, not audio bytes. No OCR or authored caption is used in image mode.')
     def save():(a.output/'results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     save()
@@ -39,19 +41,20 @@ def main():
         for stage,case in cases if repeat==0 else reversed(cases):
             prompt=prompt_for(raw,stage,case);image_copy=a.output/'input.png'
             command=[str(a.binary.resolve()),'-m',str(paths['model']),'--mmproj',str(paths['projector']),
-                '--simple-io','-c','8192','-n','128','--temp','0','--seed','0','--json-schema',json.dumps(SCHEMA),
+                '-c','8192','-n','128','--temp','0','--seed','0','--json-schema',json.dumps(SCHEMA),
                 '--threads','4','--image-max-tokens','4096','--no-warmup','-ngl','0','--no-mmproj-offload']
             if stage=='image':
                 image_copy.write_bytes((ROOT/case['file']).read_bytes());command+=['--image',str(image_copy.resolve()),'-p',prompt]
+            else:
+                command=[str(text_binary),'-m',str(paths['model']),'-cnv','-st','--simple-io','--no-display-prompt',
+                    '-c','8192','-n','128','--temp','0','--seed','0','--json-schema',json.dumps(SCHEMA),
+                    '--threads','4','--no-warmup','-ngl','0','-p',prompt]
             row=dict(stage=stage,id=case['id'],repeat=repeat,audio_sha256=c['audio_sha256'],raw=raw,
                 context=case['text'] if stage=='text' else '',image=case.get('file'),image_sha256=case.get('sha256'),
                 prompt=prompt,expected=c['utterance'].replace('あめ',case['expected']),model_called=True,status='runtime-error')
             start=time.monotonic()
             try:
-                # This pinned mtmd CLI uses -p only when an image is present.
-                # Text-only input is one stdin chat turn, followed by /quit.
-                model_input=prompt+'\n/quit\n' if stage=='text' else ''
-                result=run_inference(command,model_input,timeout=1800)
+                result=run_inference(command,'',timeout=1800)
                 (a.output/f"{stage}-{case['id']}-{repeat}.stderr.txt").write_text(result.stderr)
                 row.update(model_output=result.stdout,exit_status=result.returncode)
                 if result.returncode:raise ValueError('Model runtime failure')

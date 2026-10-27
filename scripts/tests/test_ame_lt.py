@@ -20,13 +20,8 @@ class LTTest(unittest.TestCase):
         self.assertEqual(parse_choice('{"spelling":"飴"}'),'飴')
         for raw in ['{"spelling":"飴","text":"お祭りです"}','{"spelling":"お祭り"}','null']:
             with self.assertRaises(ValueError):parse_choice(raw)
-    def test_text_transport_accepts_one_response_only(self):
-        banner = ('\n Running in chat mode, available commands:\n'
-                  '   /image <path>    load an image\n'
-                  '   /clear           clear the chat history\n'
-                  '   /quit or /exit   exit the program\n\n> ')
-        response = '{"spelling":"飴"}'
-        self.assertEqual(parse_runtime_choice(banner+response+'\n\n> \n\n','text'),'飴')
-        for output in [banner+response+'\n> '+response+'\n> ', banner+'説明'+response+'\n> ',response]:
-            with self.assertRaises(ValueError):parse_runtime_choice(output,'text')
+    def test_text_runtime_marker_does_not_relax_json_validation(self):
+        self.assertEqual(parse_runtime_choice('{"spelling":"雨"} [end of text]\n','text'),'雨')
+        for raw in ['{"spelling":"雨"}', '説明 {"spelling":"雨"} [end of text]', '{"spelling":"雨"} {} [end of text]']:
+            with self.assertRaises(ValueError):parse_runtime_choice(raw,'text')
 if __name__=='__main__':unittest.main()

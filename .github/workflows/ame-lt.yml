@@ -64,7 +64,7 @@ jobs:
       - name: Build the fixed CPU text and vision runtime
         run: |
           cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build" -G Ninja             -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF             -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DMTMD_VIDEO=OFF
-          cmake --build "$RUNNER_TEMP/llama-build" --target llama-mtmd-cli -j 4
+          cmake --build "$RUNNER_TEMP/llama-build" --target llama-mtmd-cli llama-completion -j 4
       - name: Compare the three stages offline
         run: |
           python3 scripts/run-offline-linux.py python3 scripts/evaluate-ame-lt.py             --binary "$RUNNER_TEMP/llama-build/bin/llama-mtmd-cli" --models "$RUNNER_TEMP/models"             --source "$RUNNER_TEMP/llama.cpp" --asr asr/asr.json --output evidence
