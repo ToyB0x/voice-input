@@ -1,0 +1,75 @@
+name: Image-to-correction quality
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/image-correction-evidence.yml'
+      - 'scripts/evaluate_image_correction.py'
+      - 'scripts/tests/test_image_correction.py'
+  workflow_dispatch:
+    inputs:
+      observation_run:
+        description: Successful Local VLM image evidence run ID in this repository
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: image-correction-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dependency-policy:
+    uses: ./.github/workflows/dependency-policy.yml
+  evidence:
+    if: github.event_name == 'workflow_dispatch'
+    needs: dependency-policy
+    runs-on: ubuntu-26.04
+    timeout-minutes: 150
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify the selected run is a successful VLM workflow
+        env:
+          OBSERVATION_RUN: ${{ inputs.observation_run }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$OBSERVATION_RUN" =~ ^[0-9]+$ ]] || exit 1
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$OBSERVATION_RUN" --jq '.conclusion == "success" and .path == ".github/workflows/local-vlm-evidence.yml"')" = true
+      - name: Download the explicitly selected public observation artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: local-vlm-observations
+          path: observations
+          run-id: ${{ inputs.observation_run }}
+          github-token: ${{ github.token }}
+      - name: Install CPU build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libclang-dev libseccomp2
+          rustup show
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-correction/target
+          key: ubuntu26-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Build production helper and prepare pinned Qwen3-8B
+        run: |
+          cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked --bin local-correction
+          python3 scripts/prepare-correction-model.py --model qwen3-8b "$RUNNER_TEMP/model.gguf"
+      - name: Measure actual observations through correction offline
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/evaluate_image_correction.py \
+            --observations observations/report.json --binary crates/local-correction/target/release/local-correction \
+            --model "$RUNNER_TEMP/model.gguf" --output "$RUNNER_TEMP/image-correction" --require-network-denied
+      - name: Publish summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/image-correction/summary.md" ]; then cat "$RUNNER_TEMP/image-correction/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: image-correction-quality
+          path: ${{ runner.temp }}/image-correction/
+          retention-days: 14
