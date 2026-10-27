@@ -3,7 +3,7 @@
   "audio": "evaluation/context-evidence/baseline/fixtures/speech.wav",
   "audio_sha256": "1da8846a64c35951720b445ed6f52e7fc535b0c3641178ab75302bbde02c4e0d",
   "texts": [
-    {"id": "weather", "text": "今日は台風で、外は大雨だ。", "expected": "雨"},
+    {"id": "weather", "text": "今日は台風だ。", "expected": "雨"},
     {"id": "halloween", "text": "今日はハロウィン。特別なキャンディがたくさん用意されているらしい。", "expected": "飴"}
   ],
   "images": [
