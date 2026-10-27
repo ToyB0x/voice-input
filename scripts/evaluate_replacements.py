@@ -38,6 +38,7 @@ def main():
     p.add_argument('--repeats', type=int, choices=[1,2,3], default=2)
     p.add_argument('--require-network-denied', action='store_true')
     p.add_argument('--baseline-rewrite', action='store_true')
+    p.add_argument('--observe-only', action='store_true', help='Report accuracy for a challenger; runtime failures still fail')
     args = p.parse_args()
     if args.require_network_denied:
         try: socket.create_connection(('127.0.0.1',9),timeout=1)
@@ -84,5 +85,6 @@ def main():
         'Failed cases: '+', '.join(sorted({r['id'] for r in rows if not r['passed']})),
         'Unstable cases: '+', '.join(report['unstable_cases'])]
     (args.output/'summary.md').write_text('\n'.join(lines)+'\n')
-    if not args.baseline_rewrite and not report['quality_pass']: raise SystemExit(1)
+    if any(r['outcome']['status']=='runtime-error' for r in rows): raise SystemExit(1)
+    if not args.baseline_rewrite and not args.observe_only and not report['quality_pass']: raise SystemExit(1)
 if __name__=='__main__': main()

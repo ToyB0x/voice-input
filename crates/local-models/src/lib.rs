@@ -538,7 +538,7 @@ mod tests {
     #[test]
     fn pinned_catalog_has_safe_unique_identities() {
         let models = catalog();
-        assert_eq!(models.len(), 8);
+        assert_eq!(models.len(), 9);
         for m in &models {
             assert!(
                 m.id.chars()
@@ -548,7 +548,7 @@ mod tests {
             assert_eq!(m.identity.revision.len(), 40);
             assert!(!m.identity.file.contains('/'));
             assert!(m.url().starts_with("https://huggingface.co/"));
-            assert!(m.bytes > 100_000_000 && m.bytes < 6_000_000_000);
+            assert!(m.bytes > 100_000_000 && m.bytes < 10_000_000_000);
         }
         assert_eq!(
             models
@@ -556,7 +556,7 @@ mod tests {
                 .map(|m| &m.id)
                 .collect::<std::collections::BTreeSet<_>>()
                 .len(),
-            8
+            models.len()
         );
     }
     #[test]

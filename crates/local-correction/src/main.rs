@@ -305,6 +305,7 @@ fn infer(
     let generation_started = Instant::now();
     const GRAMMAR: &str = "root ::= \"{\" ws \"\\\"text\\\"\" ws \":\" ws string ws \"}\"\nws ::= [ \\t\\n\\r]*\nstring ::= \"\\\"\" char* \"\\\"\"\nchar ::= [^\"\\\\\\x00-\\x1F] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])";
     let restricted = request.mode == local_correction::Mode::Replacements;
+    let long_cpu_budget = !metal && (restricted || comparison);
     let grammar = if restricted {
         local_correction::replacements::GRAMMAR
     } else {
@@ -317,10 +318,10 @@ fn infer(
     let mut generated = Vec::new();
     let mut ended = false;
     for position in tokens.len()..tokens.len() + 512 {
-        if started.elapsed().as_secs() > if restricted && !metal { 1800 } else { 120 } {
+        if started.elapsed().as_secs() > if long_cpu_budget { 1800 } else { 120 } {
             return Err(SafeRuntimeError("total-time-budget").into());
         }
-        if generation_started.elapsed().as_secs() > if restricted && !metal { 900 } else { 60 } {
+        if generation_started.elapsed().as_secs() > if long_cpu_budget { 900 } else { 60 } {
             return Err(SafeRuntimeError("generation-time-budget").into());
         }
         let token = sampler.sample(&context, -1);

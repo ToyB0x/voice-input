@@ -55,6 +55,13 @@
         "file": "Qwen3-8B-Q4_K_M.gguf",
         "bytes": 5027783488,
         "sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785"
+      },
+      "qwen3-14b": {
+        "repo": "Qwen/Qwen3-14B-GGUF",
+        "revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+        "file": "Qwen3-14B-Q4_K_M.gguf",
+        "bytes": 9001752960,
+        "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
       }
     }
   },
@@ -90,6 +97,10 @@
     "qwen3-8b": {
       "name": "Qwen3 8B",
       "memoryHint": "CI CPUの最大RSS約8.5 GiB。音声モデルやアプリのメモリは別途必要です。"
+    },
+    "qwen3-14b": {
+      "name": "Qwen3 14B（精度比較）",
+      "memoryHint": "モデルの取得は約9.00GB。実行時にはそれ以上のメモリが必要です。精度・CPU／Metalの実測を比較して選んでください。"
     }
   }
 }

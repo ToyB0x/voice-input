@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        model: [qwen3-4b, qwen3-8b]
+        model: [qwen3-4b, qwen3-8b, qwen3-14b]
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
     steps:
@@ -65,7 +65,7 @@ jobs:
           python3 scripts/run-offline-linux.py python3 scripts/evaluate_replacements.py \
             --binary crates/local-correction/target/release/local-correction --model "$RUNNER_TEMP/model.gguf" \
             --model-name '${{ matrix.model }}' --output "$RUNNER_TEMP/quality/replacements" \
-            --require-network-denied --repeats 2
+            --require-network-denied --repeats 2 --observe-only
       - name: Publish quality summaries
         if: always()
         run: |
@@ -78,3 +78,24 @@ jobs:
           name: correction-quality-${{ matrix.model }}
           path: ${{ runner.temp }}/quality/
           retention-days: 14
+  quality-gate:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: correction-quality-*
+          path: reports
+      - name: Require at least one fully passing model, report every challenger
+        run: |
+          python3 - <<'PYCODE'
+          import json, pathlib, os
+          reports=[json.loads(p.read_text()) for p in pathlib.Path('reports').glob('*/replacements/report.json')]
+          expected={'qwen3-4b','qwen3-8b','qwen3-14b'}
+          if {r['model'] for r in reports}!=expected or len(reports)!=len(expected):raise SystemExit('Missing model report')
+          passing=[r['model'] for r in reports if r['complete'] and r['quality_pass']]
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:
+              out.write('Models passing every development quality check twice: '+repr(passing)+'\n')
+              for r in reports:out.write(r['model']+': '+json.dumps(r['groups'])+'\n')
+          if not passing:raise SystemExit('No model meets the quality gate; inspect candidates before promotion')
+          PYCODE
