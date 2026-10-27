@@ -286,6 +286,7 @@ fn infer(
                 "candidate":request.transcript,"accepted":true,"reason":null,
                 "inferenceSkipped":true,"decision":"no-authorized-edits","model_reused":reused,
                 "selection":{"evidenceId":null,"evidence":"","edits":[],"appliedEdits":[],
+                    "inferenceSkipped":true,"decision":"no-authorized-edits",
                     "promptRevision":local_correction::replacements::REVISION},
                 "performance":performance,"backend":if metal {"metal"} else {"cpu"},
                 "offloaded_layers":layers,"elapsed_ms":started.elapsed().as_millis() as u64
