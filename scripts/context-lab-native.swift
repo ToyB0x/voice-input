@@ -108,7 +108,7 @@ func regionalClassification(_ image: CGImage) -> [String: Any] {
     for grid in [3, 5] {
         for y in 0..<grid { for x in 0..<grid {
             let x0 = image.width*x/grid, y0 = image.height*y/grid
-            let rect = CGRect(x: x0, y: y0, width: image.width*(x+1)/grid-x0, height: image.height*(y+1)/grid-y0)
+            let rect = CGRect(x: CGFloat(x0), y: CGFloat(y0), width: CGFloat(image.width*(x+1)/grid-x0), height: CGFloat(image.height*(y+1)/grid-y0))
             guard let crop = image.cropping(to: rect) else { failures += 1; continue }
             let request = VNClassifyImageRequest()
             do {
