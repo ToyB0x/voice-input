@@ -5,12 +5,18 @@ on:
       - '.github/workflows/image-correction-evidence.yml'
       - 'scripts/evaluate_image_correction.py'
       - 'scripts/tests/test_image_correction.py'
+      - 'scripts/observation_lexicon.py'
+      - 'evaluation/observation-lexicon.json'
   workflow_dispatch:
     inputs:
       observation_run:
         description: Successful Local VLM image evidence run ID in this repository
         required: true
         type: string
+      use_lexicon:
+        description: Annotate observations with the explicit synonym dictionary (keep literal run as baseline)
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -59,10 +65,14 @@ jobs:
           cargo build --manifest-path crates/local-correction/Cargo.toml --release --locked --bin local-correction
           python3 scripts/prepare-correction-model.py --model qwen3-8b "$RUNNER_TEMP/model.gguf"
       - name: Measure actual observations through correction offline
+        env:
+          USE_LEXICON: ${{ inputs.use_lexicon }}
         run: |
+          lexical_args=()
+          if [ "$USE_LEXICON" = true ]; then lexical_args=(--lexicon evaluation/observation-lexicon.json); fi
           python3 scripts/run-offline-linux.py python3 scripts/evaluate_image_correction.py \
             --observations observations/report.json --binary crates/local-correction/target/release/local-correction \
-            --model "$RUNNER_TEMP/model.gguf" --output "$RUNNER_TEMP/image-correction" --require-network-denied
+            --model "$RUNNER_TEMP/model.gguf" --output "$RUNNER_TEMP/image-correction" --require-network-denied "${lexical_args[@]}"
       - name: Publish summary
         if: always()
         run: |

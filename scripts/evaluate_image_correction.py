@@ -8,6 +8,7 @@ from pathlib import Path
 from correction_models import MODELS
 from transcription_models import checksum
 from evaluate_replacements import evaluate
+from observation_lexicon import load_lexicon, annotate
 ROOT=Path(__file__).resolve().parents[1]
 SCENES={'storm':('雨ですね。','雨ですね。'),'candy':('雨ですね。','飴ですね。'),
         'rainfall':('雨が降っています。','雨が降っています。'),'candy-shower':('雨が降っています。','飴が降っています。')}
@@ -45,6 +46,7 @@ def main():
     p.add_argument('--model-name',choices=['qwen3-8b','qwen3-14b'],default='qwen3-8b')
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--require-network-denied',action='store_true')
+    p.add_argument('--lexicon',type=Path,help='Explicit caller-supplied synonyms; omitted for the literal baseline')
     args=p.parse_args()
     if args.require_network_denied:
         try:socket.create_connection(('127.0.0.1',9),timeout=1)
@@ -52,10 +54,12 @@ def main():
         else:raise ValueError('Network denial not enforced')
     if checksum(args.model)!=MODELS[args.model_name]['sha256']:raise ValueError('Wrong correction model')
     upstream=load_observations(args.observations)
+    aliases=load_lexicon(args.lexicon) if args.lexicon else {}
     args.output.mkdir(parents=True,exist_ok=True)
     report=dict(complete=False,source_revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         binary_sha256=checksum(args.binary),model=args.model_name,model_sha256=checksum(args.model),
         observation_report_sha256=checksum(args.observations),upstream=upstream,network_denied=args.require_network_denied,rows=[],
+        lexicon=aliases,lexicon_sha256=checksum(args.lexicon) if args.lexicon else None,
         limitation='Public synthetic images and replayed ASR text, not a fresh audio-to-text run or independent speech. Image observation is answer-blind; correction receives a caller-supplied homophone dictionary. Mismatched observations can mislead.')
     cases=[]
     for raw in sorted({raw for raw,_ in SCENES.values()}):cases.append(dict(group='no-context',raw=raw,expected=raw,context='',gate=True))
@@ -69,6 +73,8 @@ def main():
     def save():(args.output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     save()
     for case in cases:
+        case['raw_context']=case['context']
+        case['context']=annotate(case['context'],aliases)
         outcome=evaluate(args.binary,args.model,dict(mode='replacements',transcript=case['raw'],context=case['context'],dictionary=DICTIONARY),'cpu')
         passed=outcome['status']=='accepted' and outcome.get('candidate')==case['expected']
         report['rows'].append(dict(case,outcome=outcome,passed=passed));save()

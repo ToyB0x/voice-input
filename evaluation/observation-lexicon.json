@@ -1,0 +1,8 @@
+[
+  {"term": "キャンディー", "canonical": "飴"},
+  {"term": "キャンディ", "canonical": "飴"},
+  {"term": "キャンデー", "canonical": "飴"},
+  {"term": "航空機", "canonical": "飛行機"},
+  {"term": "自動車", "canonical": "車"},
+  {"term": "りんご", "canonical": "林檎"}
+]
