@@ -797,6 +797,7 @@ fn correct_text_profile(
         epoch,
         current,
         foundation_profile,
+        None,
     )
 }
 #[allow(clippy::too_many_arguments)]
@@ -813,6 +814,7 @@ fn correct_text_input(
     epoch: &AtomicU64,
     current: u64,
     foundation_profile: &str,
+    qwen_dictionary: Option<&serde_json::Value>,
 ) -> Result<(), String> {
     let mut correction_started = None;
     let outcome = (|| -> Result<(), String> {
@@ -836,6 +838,12 @@ fn correct_text_input(
         let mut payload = serde_json::json!({"transcript":correction_input,"context":if case.correction_context(){context}else{""}});
         if !instruction.is_empty() {
             payload["instruction"] = instruction.into();
+        }
+        if case.correction != "apple-foundation"
+            && let Some(dictionary) = qwen_dictionary
+        {
+            payload["mode"] = "replacements".into();
+            payload["dictionary"] = dictionary.clone();
         }
         if case.correction == "apple-foundation" {
             payload["profile"] = foundation_profile.into();
@@ -913,7 +921,13 @@ fn correct_text_input(
                 payload,
                 epoch,
                 current,
-                Duration::from_secs(150),
+                Duration::from_secs(
+                    if qwen_dictionary.is_some() && case.correction_backend == "cpu" {
+                        1900
+                    } else {
+                        150
+                    },
+                ),
             )?;
             if !output.status.success() {
                 return Err("correction-runtime-failed".into());

@@ -84,3 +84,18 @@ test('final test preset selects both AFM inputs and real falling fixtures withou
   assert.equal(opts.foundationProfile,'screen-reading-v3');assert.equal(opts.inputForm,'both');
   assert.equal(opts.dataset,'ame-falling-v1');assert.equal(opts.kanaHint,true);
 });
+
+test('Qwen dictionary preset is local to the experiment and starts only on request',async()=>{
+  const a=await setup();await a.click('lab-qwen-preset');
+  assert.equal(a.elements.get('lab-qwen').checked,true);
+  assert.equal(a.elements.get('lab-apple').checked,false);
+  assert.equal(a.elements.get('lab-qwen-mode').value,'replacements');
+  assert.equal(a.elements.get('lab-input-form').value,'original');
+  assert.equal(a.elements.get('lab-include-text').checked,false);
+  assert.ok(!a.requests.some(x=>!['context_lab_status','comparison_models'].includes(x.command)));
+  a.elements.get('lab-join-ocr').checked=true;
+  await a.click('lab-start');const opts=a.requests.find(x=>x.command==='start_context_lab').args.options;
+  assert.equal(opts.qwenMode,'replacements');assert.equal(opts.joinOcrKatakana,true);
+  assert.match(opts.qwenDictionary,/あめ=雨,飴,あめ/);
+  assert.equal(opts.kanaHint,false);
+});

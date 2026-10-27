@@ -30,6 +30,9 @@ const FALLING_TEXTS: [(&str, &str); 2] = [
 fn default_dataset() -> String {
     "ame-sugoi-v1".into()
 }
+fn default_qwen_mode() -> String {
+    "rewrite".into()
+}
 fn default_input_form() -> String {
     "original".into()
 }
@@ -45,6 +48,12 @@ pub struct Options {
     pub kana_hint: bool,
     pub apple: bool,
     pub qwen: bool,
+    #[serde(default = "default_qwen_mode")]
+    pub qwen_mode: String,
+    #[serde(default)]
+    pub qwen_dictionary: String,
+    #[serde(default)]
+    pub join_ocr_katakana: bool,
     pub ax: bool,
     pub repeats: usize,
     pub compare_instruction: bool,
@@ -67,6 +76,8 @@ impl Options {
             || !["ame-sugoi-v1", "ame-falling-v1"].contains(&self.dataset.as_str())
             || !["original", "reading", "both"].contains(&self.input_form.as_str())
             || (self.input_form != "original" && !self.apple)
+            || !["rewrite", "replacements"].contains(&self.qwen_mode.as_str())
+            || self.qwen_dictionary.len() > 4096
             || !(1..=2).contains(&self.repeats)
             || (!self.apple && !self.qwen)
             || self.instruction.len() > 1536
@@ -75,8 +86,71 @@ impl Options {
         {
             return Err("入力・補正方式・反復回数・追加指示を確認してください。".into());
         }
+        if self.qwen && self.qwen_mode == "replacements" {
+            parse_reading_dictionary(&self.qwen_dictionary)?;
+        }
         Ok(())
     }
+}
+fn parse_reading_dictionary(text: &str) -> Result<Value, String> {
+    let invalid = || {
+        "同音語辞書は1行に「読み=表記1,表記2」の形式で入力してください。同じ表記の重複、数字・記号、空欄は使えません。".to_owned()
+    };
+    if text.len() > 4096 {
+        return Err(invalid());
+    }
+    let mut entries = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for line in text.lines().map(str::trim).filter(|s| !s.is_empty()) {
+        let (reading, forms) = line.split_once('=').ok_or_else(invalid)?;
+        let reading = reading.trim();
+        let forms: Vec<_> = forms.split(',').map(str::trim).collect();
+        if reading.is_empty()
+            || reading.chars().count() > 40
+            || !reading
+                .chars()
+                .all(|c| ('ぁ'..='ゖ').contains(&c) || c == 'ー')
+            || !(2..=8).contains(&forms.len())
+        {
+            return Err(invalid());
+        }
+        for form in &forms {
+            if form.is_empty()
+                || form.chars().count() > 40
+                || !seen.insert(*form)
+                || !form.chars().all(|c| {
+                    ('\u{3400}'..='\u{9fff}').contains(&c)
+                        || ('ぁ'..='ゖ').contains(&c)
+                        || ('ァ'..='ヶ').contains(&c)
+                        || c == 'ー'
+                })
+            {
+                return Err(invalid());
+            }
+        }
+        entries.push(json!({"reading":reading,"forms":forms}));
+    }
+    if entries.is_empty() || entries.len() > 64 {
+        return Err(invalid());
+    }
+    Ok(json!(entries))
+}
+// Conservative A/B: join only katakana-to-katakana line wraps. Keep paragraph
+// boundaries, Latin spacing and punctuation intact; raw OCR stays in captures.
+fn join_katakana_wraps(text: &str) -> String {
+    let is_katakana = |c: char| ('ァ'..='ヶ').contains(&c) || c == 'ー';
+    let mut output = String::new();
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\n'
+            && output.chars().last().is_some_and(is_katakana)
+            && chars.peek().copied().is_some_and(is_katakana)
+        {
+            continue;
+        }
+        output.push(c);
+    }
+    output
 }
 fn validate_model_paths(
     preferences: &crate::settings::Preferences,
@@ -313,9 +387,15 @@ impl Comparisons {
         } else {
             Value::Null
         };
+        let qwen_dictionary = if options.qwen && options.qwen_mode == "replacements" {
+            Some(parse_reading_dictionary(&options.qwen_dictionary)?)
+        } else {
+            None
+        };
+        self.lab_update(epoch, "qwenDictionary", json!(options.qwen_dictionary));
         self.lab_update(epoch,"models",json!({"speech":if options.input=="text" {"なし（かな原文）"} else {"設定中のWhisper"},
             "speechSha256":speech_hash,"speechBackend":if options.input=="text" {"none"} else {prefs.backend.as_str()},"correction":if options.apple {"Apple Foundation Models"} else {"設定中のQwen"},
-            "qwenSha256":qwen_hash,"qwenBackend":prefs.correction_backend,"qwenModelReuse":false,"afmSessionReuse":false,"foundationProfile":options.foundation_profile,"qwenPromptRevision":"grounded-v2"}));
+            "qwenSha256":qwen_hash,"qwenBackend":prefs.correction_backend,"qwenModelReuse":false,"afmSessionReuse":false,"foundationProfile":options.foundation_profile,"qwenMode":options.qwen_mode,"ocrKatakanaJoin":options.join_ocr_katakana,"qwenPromptRevision":if options.qwen_mode=="replacements" {"dictionary-selection-v1"} else {"grounded-v2"}}));
         let apple = self.foundation_check(&resources, epoch);
         if let Ok(state) = self.inner.lock()
             && let Some(d) = &state.status.foundation
@@ -426,6 +506,11 @@ impl Comparisons {
                         }
                         continue;
                     };
+                    let context = if source == "ocr" && options.join_ocr_katakana {
+                        join_katakana_wraps(&context)
+                    } else {
+                        context
+                    };
                     let contextual_hint = if ["hint", "both"].contains(&route) {
                         context.as_str()
                     } else {
@@ -515,6 +600,7 @@ impl Comparisons {
                                     &self.epoch,
                                     epoch,
                                     &options.foundation_profile,
+                                    qwen_dictionary.as_ref(),
                                 )
                             });
                             if let Err(error) = result {
@@ -523,6 +609,12 @@ impl Comparisons {
                         }
                         let mut r = base.clone();
                         r["engine"] = engine.into();
+                        r["correctionMode"] = if engine == "qwen3" {
+                            options.qwen_mode.as_str()
+                        } else {
+                            "rewrite"
+                        }
+                        .into();
                         r["instruction"] = key.into();
                         r["inputForm"] = form.into();
                         r["correctionInput"] = if engine == "none" {
@@ -585,6 +677,7 @@ impl Comparisons {
                         &self.epoch,
                         epoch,
                         &options.foundation_profile,
+                        qwen_dictionary.as_ref(),
                     );
                     kana.push(json!({"scene":scene,"engine":engine,"instruction":key,"input":utterance,"result":control_result(&row)}));
                     self.lab_update(epoch, "kanaControls", json!(kana));
@@ -614,6 +707,7 @@ impl Comparisons {
                         &self.epoch,
                         epoch,
                         &options.foundation_profile,
+                        qwen_dictionary.as_ref(),
                     );
                     controls.push(json!({"engine":engine,"input":raw,"instruction":key,"result":control_result(&row),"finalText":row.final_text}));
                     self.lab_update(epoch, "preservationControls", json!(controls));
@@ -756,14 +850,16 @@ fn control(
     epoch: &AtomicU64,
     current: u64,
     foundation_profile: &str,
+    qwen_dictionary: Option<&Value>,
 ) -> Row {
     let mut r = Row::new(0, lab_case(engine, prefs, "correction"));
     r.raw = Some(raw.into());
     r.final_text = r.raw.clone();
-    if let Err(e) = correct_text_profile(
+    if let Err(e) = correct_text_input(
         resources,
         &r.case.clone(),
         &mut r,
+        raw,
         raw,
         context,
         instruction,
@@ -772,6 +868,7 @@ fn control(
         epoch,
         current,
         foundation_profile,
+        qwen_dictionary,
     ) {
         record_error(&mut r, e);
     }
@@ -1137,6 +1234,7 @@ fn export(
     result["includesText"] = include_text.into();
     if !include_text {
         result["instructions"] = json!({"redacted":true});
+        result.as_object_mut().map(|o| o.remove("qwenDictionary"));
         for key in ["kanaControls", "preservationControls"] {
             result[key] = json!([]);
         }
@@ -1208,6 +1306,68 @@ pub fn copy_context_lab_report(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dictionary_and_ocr_options_are_bounded_and_conservative() {
+        let dictionary = parse_reading_dictionary("はし=橋,箸,はし").unwrap();
+        assert_eq!(dictionary[0]["reading"], "はし");
+        for invalid in [
+            "",
+            "はし=橋",
+            "はし=橋,橋",
+            "hashi=橋,箸",
+            "はし=橋,1",
+            "はし=橋,箸\nあめ=雨,橋",
+        ] {
+            assert!(parse_reading_dictionary(invalid).is_err(), "{invalid}");
+        }
+        assert_eq!(join_katakana_wraps("キャン\nディ"), "キャンディ");
+        for keep in [
+            "hello\nworld",
+            "雨です。\n飴です。",
+            "カタカナ\n\nディ",
+            "雨\n水",
+        ] {
+            assert_eq!(join_katakana_wraps(keep), keep);
+        }
+    }
+    #[test]
+    fn selected_qwen_mode_is_forwarded_to_controls() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(now_id(0));
+        std::fs::create_dir(&root).unwrap();
+        let helper = root.join("local-correction");
+        std::fs::write(&helper, r#"#!/usr/bin/python3
+import sys,json
+p=json.load(sys.stdin)
+assert p['mode']=='replacements'
+assert p['dictionary']==[dict(reading='はし',forms=['橋','箸','はし'])]
+print(json.dumps(dict(candidate=p['transcript'],accepted=True,reason=None,backend='cpu',offloaded_layers=0)))
+"#).unwrap();
+        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let prefs = crate::settings::Preferences {
+            correction_backend: "cpu".into(),
+            ..Default::default()
+        };
+        let paths = BTreeMap::from([("current-correction".into(), Ok(root.join("model.gguf")))]);
+        let dictionary = parse_reading_dictionary("はし=橋,箸,はし").unwrap();
+        let row = control(
+            &root,
+            "qwen3",
+            &prefs,
+            "田中さんへ資料を送ります",
+            "",
+            "",
+            &paths,
+            &Ok(()),
+            &AtomicU64::new(1),
+            1,
+            "grounded-structured-v2",
+            Some(&dictionary),
+        );
+        assert_eq!(row.status, "accepted");
+        assert_eq!(row.final_text.as_deref(), Some("田中さんへ資料を送ります"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn old_requests_default_to_grounded_structured_and_unknown_profiles_are_rejected() {
         let mut options: Options = serde_json::from_value(json!({"input":"text","apple":true,
@@ -1301,6 +1461,7 @@ else:
             &AtomicU64::new(1),
             1,
             "screen-reading-v3",
+            None,
         )
         .unwrap();
         assert_eq!(row.accepted, Some(false));
@@ -1344,6 +1505,7 @@ else:
                 &AtomicU64::new(1),
                 1,
                 profile,
+                None,
             );
             assert_eq!(row.status, "accepted");
             assert_eq!(
@@ -1363,6 +1525,9 @@ else:
             kana_hint: false,
             apple: true,
             qwen: false,
+            qwen_mode: default_qwen_mode(),
+            qwen_dictionary: String::new(),
+            join_ocr_katakana: false,
             ax: false,
             repeats: 1,
             compare_instruction: true,
@@ -1521,7 +1686,7 @@ time.sleep(30)
     fn metadata_export_redacts_bodies_instructions_and_control_candidates() {
         let r = json!({"reportId":"run","rows":[{"raw":"PRIVATE","candidate":"PRIVATE","finalText":"PRIVATE","context":"PRIVATE","correctionInput":"PRIVATE","status":"accepted"}],
             "captures":{"storm":{"fixtureText":"PRIVATE","ax":{"status":"completed","text":"PRIVATE"},"ocr":{"text":"PRIVATE"},"imageOCR":{"text":"PRIVATE"}}},
-            "instructions":{"custom":"PRIVATE"},"kanaControls":["PRIVATE"],"preservationControls":["PRIVATE"]});
+            "qwenDictionary":"PRIVATE","instructions":{"custom":"PRIVATE"},"kanaControls":["PRIVATE"],"preservationControls":["PRIVATE"]});
         assert!(!export(&r, false, None, "done").unwrap().contains("PRIVATE"));
         assert!(export(&r, true, None, "done").unwrap().contains("PRIVATE"));
     }

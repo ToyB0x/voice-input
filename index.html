@@ -243,6 +243,13 @@
             <p class="hint">通常入力は新しい構造化方式を使用します。この選択は実機検証だけに適用します。新方式同士ではプロンプトと生成上限を固定して出力方式を比較し、旧方式は従来の指示・512トークン上限を使います。</p>
             <label class="check"><input id="lab-apple" type="checkbox" checked>Apple Foundation Modelsで補正する</label>
             <label class="check"><input id="lab-qwen" type="checkbox">保存済みのQwenも比較する（モデルパスの保存が必要）</label>
+            <label for="lab-qwen-mode">Qwenの補正方法</label>
+            <select id="lab-qwen-mode"><option value="rewrite">全文を整形（従来方式）</option><option value="replacements">辞書の同音語だけを変更（実験）</option></select>
+            <label for="lab-qwen-dictionary">同音語辞書（1行に 読み=表記1,表記2）</label>
+            <textarea id="lab-qwen-dictionary" rows="3" maxlength="1365" placeholder="はし=橋,箸,はし"></textarea>
+            <p class="hint">辞書に登録した同じ読みの表記だけを候補にします。対象外の本文・語尾は保持します。辞書はこの比較中だけ使用し、本文共有をオンにしたJSONにだけ含めます。</p>
+            <label class="check"><input id="lab-join-ocr" type="checkbox">OCRのカタカナ途中の改行を接続して比較する（実験）</label>
+            <button id="lab-qwen-preset">Qwenの雨／飴まき試験を設定（取得・推論は開始しません）</button>
             <p id="lab-model-readiness" class="hint" role="status"></p>
             <button type="button" data-view-target="models">比較用モデルを準備・設定する</button>
             <label class="check"><input id="lab-ax" type="checkbox" checked>専用サンプルウィンドウからAX取得も試す</label>
