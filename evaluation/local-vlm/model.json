@@ -1,0 +1,16 @@
+{
+  "id": "qwen3-vl-8b-instruct-q4-k-m",
+  "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF",
+  "revision": "f982a07559d4a2f6c8744d840bf6fccab30eea96",
+  "license": "Apache-2.0",
+  "files": [
+    {"role": "model", "file": "Qwen3VL-8B-Instruct-Q4_K_M.gguf", "bytes": 5027784800, "sha256": "67d1659bfe71b89d50b45a4ad1a9e5b997e5bb16ce5da66a6a6167abd569e9e2"},
+    {"role": "projector", "file": "mmproj-Qwen3VL-8B-Instruct-F16.gguf", "bytes": 1159029824, "sha256": "ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38"}
+  ],
+  "runtime": {
+    "repo": "https://github.com/ggml-org/llama.cpp.git",
+    "revision": "9ae73e68f5a78933c0d988bbd17bf4647ad6a0b2",
+    "committed_at": "2026-10-23T23:09:50Z",
+    "license": "MIT"
+  }
+}
