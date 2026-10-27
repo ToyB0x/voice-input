@@ -401,7 +401,7 @@ fn infer(
         let verdict: local_correction::replacements::Verification =
             serde_json::from_slice(&answer)?;
         return Ok(
-            serde_json::json!({"approved":verdict.approved, "elapsed_ms":started.elapsed().as_millis() as u64, "performance":performance}),
+            serde_json::json!({"approved":verdict.approved(), "relation":verdict.relation, "choice":verdict.choice, "elapsed_ms":started.elapsed().as_millis() as u64, "performance":performance}),
         );
     }
     // The verification pass gets a fresh KV cache and sampler, sharing only weights.
