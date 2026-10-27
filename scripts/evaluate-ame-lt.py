@@ -2,7 +2,7 @@
 """Measured LT-only bounded choice: audio alone, audio+text, audio+image."""
 import argparse,json,platform,re,socket,subprocess,time
 from pathlib import Path
-from ame_lt import ROOT,SCHEMA,config,prompt_for,parse_choice,apply_spelling,normalized,validate_asr
+from ame_lt import ROOT,SCHEMA,config,prompt_for,parse_runtime_choice,apply_spelling,normalized,validate_asr
 from transcription_models import checksum
 from evaluate_correction import run_inference
 def main():
@@ -56,7 +56,7 @@ def main():
                 row.update(model_output=result.stdout,exit_status=result.returncode)
                 if result.returncode:raise ValueError('Model runtime failure')
                 if any(int(n)>0 for n in re.findall(r'offloaded (\d+)/\d+ layers to GPU',result.stderr)):raise ValueError('Unexpected GPU')
-                spelling=parse_choice(result.stdout);final=apply_spelling(raw,spelling)
+                spelling=parse_runtime_choice(result.stdout,stage);final=apply_spelling(raw,spelling)
                 row.update(status='completed',spelling=spelling,final=final,passed=spelling!='不明' and normalized(final)==row['expected'])
             except (ValueError,subprocess.TimeoutExpired) as e:row['error']=str(e)[:300]
             finally:image_copy.unlink(missing_ok=True)

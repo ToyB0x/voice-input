@@ -36,3 +36,20 @@ def parse_choice(raw):
     if not isinstance(value,dict) or set(value)!={'spelling'} or value['spelling'] not in ['雨','飴','不明']:
         raise ValueError('Invalid bounded spelling output')
     return value['spelling']
+
+def parse_runtime_choice(raw, stage):
+    if stage == 'image':
+        return parse_choice(raw)
+    # The pinned mtmd CLI writes its chat banner and two input prompts to stdout.
+    # Strip only this known transport envelope; the response remains strict JSON.
+    banner = ('Running in chat mode, available commands:\n'
+              '   /image <path>    load an image\n'
+              '   /clear           clear the chat history\n'
+              '   /quit or /exit   exit the program')
+    value = raw.strip()
+    if not value.startswith(banner):
+        raise ValueError('Unexpected text runtime banner')
+    turns = value[len(banner):].split('\n>')
+    if len(turns) != 3 or turns[0].strip() or turns[-1].strip():
+        raise ValueError('Expected exactly one text runtime response')
+    return parse_choice(turns[1])
