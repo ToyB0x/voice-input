@@ -104,6 +104,7 @@ pub fn parse_answer(json: &[u8], original: &str) -> Result<String, &'static str>
     preserve_negation_targets(&comparison_source, &text)?;
     preserve_contrasts(&comparison_source, &text)?;
     preserve_connectives(&comparison_source, &text)?;
+    preserve_named_mentions(&comparison_source, &text)?;
     if let Some(repair) = explicit_repair(original) {
         let source = normalized(original);
         let candidate = normalized(&text);
@@ -146,6 +147,58 @@ pub fn parse_answer(json: &[u8], original: &str) -> Result<String, &'static str>
     }
     Ok(text)
 }
+/// Conservative literal backstop for named mentions. This is not entity
+/// recognition: kana-only names and names without a suffix can remain ambiguous.
+/// Restricted replacement mode additionally preserves every unselected byte.
+fn preserve_named_mentions(original: &str, candidate: &str) -> Result<(), &'static str> {
+    fn name_char(c: char) -> bool {
+        ('\u{3400}'..='\u{9fff}').contains(&c)
+            || ('ァ'..='ヶ').contains(&c)
+            || c == 'ー'
+            || c.is_ascii_alphanumeric()
+    }
+    // Retired alternatives in an explicit self-repair are allowed to disappear.
+    // The existing repair guard independently requires the final target. Decline
+    // entity extraction from the ambiguous prefix, while retaining other clauses.
+    let source_clauses: Vec<_> = original
+        .split(['。', '！', '？', '\n'])
+        .map(|clause| {
+            if explicit_repair(clause).is_some() {
+                clause.rsplit_once("いや").map_or(clause, |(_, tail)| tail)
+            } else {
+                clause
+            }
+        })
+        .collect();
+    let original = source_clauses.join("。");
+    let original = original.as_str();
+    let candidate = normalized(candidate);
+    let mut mentions = std::collections::BTreeSet::new();
+    for suffix in ["さん", "様", "氏", "先生"] {
+        for (index, _) in original.match_indices(suffix) {
+            let name: String = original[..index]
+                .chars()
+                .rev()
+                .take_while(|c| name_char(*c))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            let name = name.trim_start_matches('ー');
+            if !name.is_empty() {
+                mentions.insert(format!("{name}{suffix}"));
+            }
+        }
+    }
+    let source = normalized(original);
+    for mention in mentions {
+        if candidate.matches(&mention).count() < source.matches(&mention).count() {
+            return Err("correction removed or changed a named mention");
+        }
+    }
+    Ok(())
+}
+
 /// Reject new repeated sentences, while preserving intentional repetition in speech.
 fn generated_repetition(original: &str, candidate: &str) -> bool {
     let segments = |text: &str| -> Vec<String> {
@@ -973,7 +1026,16 @@ mod tests {
             "../../../evaluation/correction-guard-cases.json"
         ))
         .unwrap();
-        for case in fixture["cases"].as_array().unwrap() {
+        let names: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../evaluation/correction-named-guard-cases.json"
+        ))
+        .unwrap();
+        for case in fixture["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .chain(names["cases"].as_array().unwrap())
+        {
             let json = serde_json::to_vec(&Answer {
                 text: case["candidate"].as_str().unwrap().into(),
             })
