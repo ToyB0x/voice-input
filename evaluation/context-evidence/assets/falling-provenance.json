@@ -1,0 +1,8 @@
+{
+  "origin": "AI-generated synthetic test scenes; not actual user screen captures",
+  "purpose": "Held-out falling homophone evaluation; expected words are not injected into correction prompts",
+  "assets": {
+    "rainfall.png": "5fd8505043bac7bf6510bd3be10c37738b0762d7ce4986ce2872dbf5390ef5dc",
+    "candy-shower.png": "21a3a5e819566f84f75f5762683e572a37e2e9502b4c75345979a9d2b7dbbcbd"
+  }
+}

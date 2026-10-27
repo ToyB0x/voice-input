@@ -23,3 +23,6 @@ src-tauri/resources/apple-foundation-correction
 
 crates/local-comparison/target/
 src-tauri/resources/compare-transcription
+
+src-tauri/resources/speech-falling.wav
+src-tauri/resources/speech-falling.aiff

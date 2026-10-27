@@ -33,7 +33,7 @@ def omitted_fragments(controls, instruction):
     return list(dict.fromkeys(removed))
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--report',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--engine',choices=['qwen3','apple-foundation']);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--report',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--engine',choices=['qwen3','apple-foundation']);p.add_argument('--input-form',choices=['original','reading'],default='original');a=p.parse_args()
     r=json.loads(a.report.read_text());assert r.get('completed') is True, 'Incomplete experiment; do not publish measured slides'
     a.output.mkdir(parents=True,exist_ok=True)
     engine=a.engine or r.get('presentationEngine','qwen3')
@@ -42,34 +42,45 @@ def main():
     route=r.get('presentationRoute','correction' if r.get('inputKind')=='text' else 'both')
     engine_label='Apple Foundation Models' if engine=='apple-foundation' else r['models'].get('qwenName',r['models']['correction'] if 'Qwen' in r['models']['correction'] else 'Qwen（SHA-256はJSON）')
     footer_label={'recorded':'録音','text':'かな原文','bundled':'同梱音声'}.get(r.get('inputKind'),'合成音声')
-    rows=r['rows'];slides=[]
+    rows=[x for x in r['rows'] if x.get('inputForm','original')==a.input_form or x.get('engine')=='none'];slides=[]
+    falling=r.get('experiment',{}).get('dataset')=='ame-falling-v1'
+    scenes=['rainfall','candy-shower'] if falling else ['storm','candy']
+    scene_names=['降雨 → 雨','屋根からの飴まき → 飴'] if falling else ['台風 → 雨','お菓子 → 飴']
     repeats=len({x['repeat'] for x in rows if 'repeat' in x})
     def add(title,body): slides.append('<section><h1>'+title+'</h1>'+body+'<footer>Voice Input / '+footer_label+'による小規模実験 · '+str(len(slides)+1)+'</footer></section>')
-    add('音声だけで、漢字は決まる？','<p class="lead">あめがすごいですね</p><p class="lead">雨 ☔　／　飴 🍬</p><p>音声入力＋ローカルな画面文脈で、同音語の表記を比較する。</p><p>「音声入力 → 整文」を提供する製品例：<a href="https://www.typeless.com/ja">Typeless</a>、<a href="https://wisprflow.ai/">Wispr Flow</a>。製品間の性能比較や市場成長率は本実験の対象外。</p>')
+    add('音声だけで、漢字は決まる？','<p class="lead">'+e(r['fixture']['utterance'])+'</p><p class="lead">雨 ☔　／　飴 🍬</p><p>音声入力＋ローカルな画面文脈で、同音語の表記を比較する。</p><p>「音声入力 → 整文」を提供する製品例：<a href="https://www.typeless.com/ja">Typeless</a>、<a href="https://wisprflow.ai/">Wispr Flow</a>。製品間の性能比較や市場成長率は本実験の対象外。</p>')
     add('日本語について、何を検証するか','<p>日本語には同音異義語と複数の表記がある。アクセントも手掛かりになるが、音声だけで意図が一意になるとは限らない。</p><p><b>仮説：</b>関連する画面文脈で、意図した表記を選びやすくなる。逆の文脈では、誤誘導も起こり得る。</p><p>「海外言語より日本語が弱い」は今回のデータでは検証していない。他言語の対照群が必要。</p>')
     add('同じ原文・同じモデルで条件を変える' if text_only else '同じ音声・同じモデルで条件を変える',table(['項目','実験条件'],[
         ['入力',r['fixture']['utterance']+' / '+r['fixture']['voice']],
         ['音声認識',r['models']['speech']+' / '+r['models'].get('speechBackend','cpu')],['最終補正',engine_label+' / '+('OS管理' if engine=='apple-foundation' else r['models'].get('qwenBackend','cpu'))],
-        ['利用先','最終補正のみ（音声・Whisperなし）' if text_only else 'Whisperヒントのみ／最終補正のみ／両方'],['追加指示','標準／自然な漢字表記を希望'],
+        ['利用先','最終補正のみ（音声・Whisperなし）' if text_only else 'Whisperヒントのみ／最終補正のみ／両方'],['入力方式',a.input_form+' / AFM '+r['models'].get('foundationProfile','従来')],['追加指示',' / '.join(k+': '+('空欄' if not v else 'あり') for k,v in r['instructions'].items())],
         ['反復',f'{repeats}回・偶数回目はシーンと条件の順序を反転'],['推論','直列実行 / '+('対象プロセスの通信禁止' if r.get('networkDenied') else 'ローカルモデルAPI（通信Sandboxなし）')]])+'<p class="small">同じ入力を雨／飴の2シーンへ再利用。反復は独立した話者・発話サンプルではない。</p>')
     if text_only:
-        add('何を測っていて、何は測っていないか','<p class="lead">かな原文 → 文脈付き補正</p><p>入力は「あめがすごいですね」。音声認識を外し、文脈と追加指示による表記選択を切り分ける。</p><p>Whisperの認識精度やヒントの効果は未測定。先行CIのQwen＋合成音声とは入力・モデル・端末が異なるため、モデルの優劣を直接比較しない。</p>')
+        add('何を測っていて、何は測っていないか','<p class="lead">かな原文 → 文脈付き補正</p><p>入力は共有JSONのかな原文。音声認識を外し、文脈と追加指示による表記選択を切り分ける。</p><p>Whisperの認識精度やヒントの効果は未測定。先行CIのQwen＋合成音声とは入力・モデル・端末が異なるため、モデルの優劣を直接比較しない。</p>')
     captures=[]
     for scene,c in r['captures'].items():
         captures.append([scene,c['ax']['status'],c['ocr']['status'],len(c['ocr'].get('text','')),c['vision']['status'],c['imageOCR']['status'],len(c['imageOCR'].get('text',''))])
     add('取得を測る：AX・OCR・画像分類',table(['シーン','AX','文字OCR','文字数','画像分類','画像OCR','文字数'],captures)+'<p>AXは実際のconsumer APIを呼び、権限拒否などは未取得のまま記録。直接与えた対照テキストとは区別する。</p><p>PNGは専用AppKitウィンドウの描画結果。別アプリの撮影・画面収録権限の成功を証明するものではない。</p>')
     summary=[]
     for source in LABELS:
-        for scene in ['storm','candy']:
+        for scene in scenes:
             selected=comparable(rows,scene,source,engine,instruction_key,route)
             count=Counter(x.get('judgment') for x in selected)
             summary.append([LABELS[source],scene,f"{count['target']}/{len(selected)}" if selected else '未実行',
                 f"{count['opposite']}/{len(selected)}" if selected else '—',selected[0].get('finalText','') if selected else '取得不可'])
     # One page per scene keeps all source conditions legible.
-    for scene,name in [('storm','台風 → 雨'),('candy','お菓子 → 飴')]:
+    for scene,name in zip(scenes,scene_names):
         add('実測：'+name,table(['条件','期待語／実行数','逆の語／実行数','最初の最終出力'],[[x[0],*x[2:]] for x in summary if x[1]==scene])+'<p class="small">選択エンジン・追加指示での最終出力。利用先とモデル設定は実験条件とJSONを参照。未実行は0点と混同しない。期待語の出現判定であり、全文の意味保持を採点したものではない。</p>')
+    if falling:
+        full=[]
+        for source in LABELS:
+            for scene in scenes:
+                xs=comparable(rows,scene,source,engine,instruction_key,route)
+                full.append([LABELS[source],scene,f"{sum(x.get('finalPass') is True for x in xs)}/{len(xs)}" if xs else '未実行'])
+        for offset in range(0,len(full),7):
+            add('最終試験：語尾を含む文全体の一致',table(['取得元','シーン','期待文との一致／実行数'],full[offset:offset+7])+'<p>期待文は「雨が降っています／飴が降っています」。句読点と空白だけを除外。文字対照・画像分類・逆の文脈は別集計。</p>')
     pics=[]
-    for scene in ['storm','candy']:
+    for scene in scenes:
         c=r['captures'][scene]
         labels=c['vision'].get('labels',[])
         pics.append('<div><img src="'+image(ROOT/'evaluation/context-evidence/assets'/f'{scene}.png')+'"><p>'+e(', '.join(f"{x['label']} {x['confidence']:.2f}" for x in labels[:5]) or '分類未取得')+'</p></div>')

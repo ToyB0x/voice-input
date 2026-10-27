@@ -52,3 +52,17 @@ lab=ROOT/'src-tauri/resources/context-lab-native'
 subprocess.run(['xcrun','swiftc','-O','-target',f'{platform.machine()}-apple-macos{minimum}',str(ROOT/'scripts/context-lab-native.swift'),'-o',str(lab)],check=True,env=build_env)
 subprocess.run(['codesign','--force','--sign','-',str(lab)],check=True)
 print('Controlled context lab helper prepared (no user screen capture).')
+
+# A separate synthetic utterance for the falling-homophone test. Build-time only;
+# never synthesize a reference answer or write user recordings.
+falling=ROOT/'src-tauri/resources/speech-falling.wav'
+aiff=ROOT/'src-tauri/resources/speech-falling.aiff'
+voices=subprocess.check_output(['/usr/bin/say','-v','?'],text=True)
+voice=next((line.split(' ja_JP')[0].strip() for line in voices.splitlines() if ' ja_JP ' in line),None)
+if not voice: raise RuntimeError('No installed Japanese voice for the synthetic falling fixture')
+try:
+    subprocess.run(['/usr/bin/say','-v',voice,'-r','155','-o',str(aiff),'あめがふっています'],check=True,timeout=90)
+    subprocess.run(['/usr/bin/afconvert',str(aiff),str(falling),'-f','WAVE','-d','LEI16@16000','-c','1'],check=True,timeout=30)
+finally:
+    aiff.unlink(missing_ok=True)
+subprocess.run([str(lab),'--reading-self-test'],check=True,timeout=15)

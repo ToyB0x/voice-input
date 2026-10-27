@@ -11,6 +11,7 @@ async function setup(){
       addEventListener(k,fn){this.listeners.set(k,fn);},replaceChildren(){this.rows=[];},
       insertRow(){const row={cells:[],insertCell(){const c={textContent:''};this.cells.push(c);return c;}};this.rows.push(row);return row;}});
   }
+  elements.get('lab-dataset').value='ame-sugoi-v1';elements.get('lab-input-form').value='original';
   elements.get('lab-foundation-profile').value='grounded-structured-v2';elements.get('lab-input').value='text';elements.get('lab-repeats').value='1';elements.get('lab-apple').checked=true;elements.get('lab-compare-instruction').checked=true;
   const state={runId:null,working:false,phase:'idle',message:'',planned:0,completed:0,rows:[],next:0,more:false,parts:0,foundation:null};
   const requests=[];let poll,startError;
@@ -70,4 +71,16 @@ test('AFM output profile is sent only on explicit start',async()=>{
   assert.ok(!a.requests.some(x=>x.command==='start_context_lab'));
   await a.click('lab-start');
   assert.equal(a.requests.find(x=>x.command==='start_context_lab').args.options.foundationProfile,'grounded-text-v2');
+});
+
+test('final test preset selects both AFM inputs and real falling fixtures without starting work',async()=>{
+  const a=await setup();await a.click('lab-final-preset');
+  assert.equal(a.elements.get('lab-dataset').value,'ame-falling-v1');
+  assert.equal(a.elements.get('lab-input-form').value,'both');
+  assert.equal(a.elements.get('lab-kana-hint').checked,true);
+  assert.equal(a.elements.get('lab-qwen').checked,false);
+  assert.ok(!a.requests.some(x=>x.command==='start_context_lab'));
+  await a.click('lab-start');const opts=a.requests.find(x=>x.command==='start_context_lab').args.options;
+  assert.equal(opts.foundationProfile,'screen-reading-v3');assert.equal(opts.inputForm,'both');
+  assert.equal(opts.dataset,'ame-falling-v1');assert.equal(opts.kanaHint,true);
 });

@@ -227,12 +227,19 @@
           <details id="lab-panel">
             <summary>発表用レポートと同じ条件を、このMacで比較する</summary>
             <p>「あめがすごいですね」を台風／キャンディの2シーンで比較します。Apple Visionで同梱ウィンドウの文字と画像を解析し、AFMやQwenへ文脈を渡します。処理は1件ずつ実行します。</p>
-            <div class="lab-pictures"><figure><img id="lab-storm" alt="台風の合成画像" loading="lazy"><figcaption>台風 → 期待語「雨」</figcaption></figure><figure><img id="lab-candy" alt="キャンディの合成画像" loading="lazy"><figcaption>キャンディ → 期待語「飴」</figcaption></figure></div>
+            <div class="lab-pictures"><figure><img id="lab-storm" alt="台風の合成画像" loading="lazy"><figcaption id="lab-scene-a">台風 → 期待語「雨」</figcaption></figure><figure><img id="lab-candy" alt="キャンディの合成画像" loading="lazy"><figcaption id="lab-scene-b">キャンディ → 期待語「飴」</figcaption></figure></div>
+            <label for="lab-dataset">試験セット</label>
+            <select id="lab-dataset"><option value="ame-sugoi-v1">従来：あめがすごいですね（台風／キャンディ）</option><option value="ame-falling-v1">最終試験：あめがふっています（雨／屋根からの飴まき）</option></select>
+            <button id="lab-final-preset">雨／飴まき試験を設定（取得・推論は開始しません）</button>
+            <label for="lab-input-form">AFMへ渡す発話</label>
+            <select id="lab-input-form"><option value="original">Whisper原文</option><option value="reading">日本語の読みへ変換（実験）</option><option value="both">原文と読みを直列比較（推奨）</option></select>
+            <label class="check"><input id="lab-kana-hint" type="checkbox">Whisperにひらがな表記を促すヒントを付ける（強制ではありません）</label>
+            <p class="hint">読み変換はmacOSの日本語解析を使用します。固有名詞や多義語の読みを誤る可能性があります。原文・補正入力を別々に記録し、採否チェックと棄却時の復帰にはWhisper原文を使います。Qwenは原文のまま比較します。</p>
             <label for="lab-input">比較する入力</label>
             <select id="lab-input"><option value="bundled">CIと同じ同梱音声（Whisperモデルが必要）</option><option value="recorded">直前の録音（同じ音声を両シーンへ再利用）</option><option value="text">かな原文のみ（音声認識・マイク不要）</option></select>
             <p class="hint">同梱音声／録音は設定中のWhisperとCPU / Metalを使用します。録音は先に完了してください。録音時の通常AX/OCRは使わず、下の同梱シーンを新たに取得します。音声モデルは検証開始時に解放されるため、通常入力へ戻る際は再読み込みしてください。</p>
             <label for="lab-foundation-profile">AFMの補正方式（実機で比較）</label>
-            <select id="lab-foundation-profile"><option value="grounded-structured-v2">新方式：発話と参考を分離＋構造化出力</option><option value="grounded-text-v2">新方式：発話と参考を分離＋テキスト出力</option><option value="legacy-structured-v1">旧方式：JSON入力＋構造化出力（対照）</option></select>
+            <select id="lab-foundation-profile"><option value="grounded-structured-v2">新方式：発話と参考を分離＋構造化出力</option><option value="grounded-text-v2">新方式：発話と参考を分離＋テキスト出力</option><option value="screen-reading-v3">画面文脈優先：同じ読みの誤漢字を訂正（実験）</option><option value="legacy-structured-v1">旧方式：JSON入力＋構造化出力（対照）</option></select>
             <p class="hint">通常入力は新しい構造化方式を使用します。この選択は実機検証だけに適用します。新方式同士ではプロンプトと生成上限を固定して出力方式を比較し、旧方式は従来の指示・512トークン上限を使います。</p>
             <label class="check"><input id="lab-apple" type="checkbox" checked>Apple Foundation Modelsで補正する</label>
             <label class="check"><input id="lab-qwen" type="checkbox">保存済みのQwenも比較する（モデルパスの保存が必要）</label>

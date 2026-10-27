@@ -48,7 +48,10 @@
       "resources/context-lab-native": "bin/context-lab-native",
       "../evaluation/context-evidence/assets/storm.png": "lab/storm.png",
       "../evaluation/context-evidence/assets/candy.png": "lab/candy.png",
-      "../evaluation/context-evidence/baseline/fixtures/speech.wav": "lab/speech.wav"
+      "../evaluation/context-evidence/baseline/fixtures/speech.wav": "lab/speech.wav",
+      "../evaluation/context-evidence/assets/rainfall.png": "lab/rainfall.png",
+      "../evaluation/context-evidence/assets/candy-shower.png": "lab/candy-shower.png",
+      "resources/speech-falling.wav": "lab/speech-falling.wav"
     }
   },
   "plugins": {

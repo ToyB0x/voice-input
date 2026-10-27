@@ -1,8 +1,10 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import storm from "../evaluation/context-evidence/assets/storm.png";
+import rainfall from "../evaluation/context-evidence/assets/rainfall.png";
+import candyShower from "../evaluation/context-evidence/assets/candy-shower.png";
 import candy from "../evaluation/context-evidence/assets/candy.png";
 
-type LabRow = {scene:string;source:string;route:string;engine:string;instruction:string;repeat:number;status:string;raw?:string|null;candidate?:string|null;finalText?:string|null;judgment?:string;reason?:string;correctionMs?:number|null;asrMs?:number|null};
+type LabRow = {scene:string;source:string;route:string;engine:string;instruction:string;repeat:number;status:string;raw?:string|null;candidate?:string|null;finalText?:string|null;judgment?:string;reason?:string;correctionMs?:number|null;asrMs?:number|null;inputForm?:string;correctionInput?:string|null;finalPass?:boolean};
 type LabStatus = {runId:string|null;working:boolean;phase:string;message:string;planned:number;completed:number;rows:LabRow[];next:number;more:boolean;parts:number;foundation:{status:{availability:string}|null;error:string|null}|null};
 const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 let state:LabStatus|undefined;
@@ -15,7 +17,7 @@ function setText(id:string,value:string){const node=el(id);if(node.textContent!=
 const append=(row:LabRow)=>{
   const tr=el<HTMLTableSectionElement>("lab-rows").insertRow();
   const ms=(n:number|null|undefined)=>n==null?"—":`${(n/1000).toFixed(2)}秒`;
-  for(const text of [`${row.scene} / ${row.source} → ${row.route}\n${row.engine} / ${row.instruction} / #${row.repeat+1}`,`${row.status}\n${row.judgment??""}\n${row.reason??""}`,`ASR ${ms(row.asrMs)}\n補正 ${ms(row.correctionMs)}`,`原文: ${row.raw??"—"}\n候補: ${row.candidate??"—"}\n最終: ${row.finalText??"—"}`]) tr.insertCell().textContent=text;
+  for(const text of [`${row.scene} / ${row.source} → ${row.route}\n${row.engine} / ${row.inputForm??"original"} / ${row.instruction} / #${row.repeat+1}`,`${row.status}\n${row.judgment??""}\n${row.reason??""}${row.finalPass==null?"":`\n文全体: ${row.finalPass?"一致":"不一致"}`}`,`ASR ${ms(row.asrMs)}\n補正 ${ms(row.correctionMs)}`,`原文: ${row.raw??"—"}\n補正入力: ${row.correctionInput??"—"}\n候補: ${row.candidate??"—"}\n最終: ${row.finalText??"—"}`]) tr.insertCell().textContent=text;
 };
 function render(){
   const busy=acting||!!state?.working;
@@ -24,7 +26,7 @@ function render(){
   for(const id of ["lab-copy","lab-copy-part"]) el<HTMLButtonElement>(id).disabled=busy||!state?.runId||!!state.more;
   el<HTMLButtonElement>("lab-copy-part").disabled = busy || !state?.runId || !state.parts || !!state.more;
   el<HTMLButtonElement>("lab-clear").disabled = acting || !state?.runId;
-  for(const id of ["lab-input","lab-apple","lab-qwen","lab-ax","lab-repeats","lab-instruction","lab-compare-instruction","lab-foundation-profile"]) (el(id) as HTMLInputElement).disabled=busy;
+  for(const id of ["lab-input","lab-apple","lab-qwen","lab-ax","lab-repeats","lab-instruction","lab-compare-instruction","lab-foundation-profile","lab-dataset","lab-input-form","lab-kana-hint","lab-final-preset"]) (el(id) as HTMLInputElement).disabled=busy;
   const qwen=el<HTMLInputElement>("lab-qwen").checked;
   const speech=el<HTMLSelectElement>("lab-input").value!=="text";
   const ready=(id:string)=>modelChoices.find(x=>x.id===id)?.available===true;
@@ -64,9 +66,32 @@ async function copy(partial:boolean){
   setMessage(partial?`分割 ${part+1}/${state.parts} をコピーしました。続きも順番にコピーしてください。`:"JSONをコピーしました。解析用には本文・文脈を含める選択が必要です。");
   if(partial)part=(part+1)%Math.max(1,state.parts);
 }
+function updatePictures(){
+  const falling=el<HTMLSelectElement>("lab-dataset").value==="ame-falling-v1";
+  const a=el<HTMLImageElement>("lab-storm"),b=el<HTMLImageElement>("lab-candy");
+  a.src=falling?rainfall:storm;b.src=falling?candyShower:candy;
+  a.alt=falling?"雨が降る住宅街の合成画像":"台風の合成画像";
+  setText("lab-scene-a",falling?"降雨 → 期待文「雨が降っています」":"台風 → 期待語「雨」");
+  setText("lab-scene-b",falling?"屋根からの飴まき → 期待文「飴が降っています」":"キャンディ → 期待語「飴」");
+  b.alt=falling?"屋根から飴をまくお祭りの合成画像":"キャンディの合成画像";
+}
 export function setupContextLab(){
-  el<HTMLImageElement>("lab-storm").src=storm;el<HTMLImageElement>("lab-candy").src=candy;
+  updatePictures();
+  el("lab-dataset").addEventListener("change",updatePictures);
+  el("lab-final-preset").addEventListener("click",()=>{
+    el<HTMLSelectElement>("lab-dataset").value="ame-falling-v1";
+    el<HTMLSelectElement>("lab-input-form").value="both";
+    el<HTMLSelectElement>("lab-input").value="bundled";
+    el<HTMLSelectElement>("lab-foundation-profile").value="screen-reading-v3";
+    el<HTMLInputElement>("lab-apple").checked=true;el<HTMLInputElement>("lab-qwen").checked=false;
+    el<HTMLInputElement>("lab-kana-hint").checked=true;
+    el<HTMLSelectElement>("lab-repeats").value="2";
+    el<HTMLInputElement>("lab-compare-instruction").checked=false;
+    el<HTMLTextAreaElement>("lab-instruction").value="";
+    updatePictures();setMessage("雨／飴まき試験を設定しました。AXは現在の選択を維持します。開始ボタンで実行してください。");render();
+  });
   el("lab-start").addEventListener("click",()=>void action(()=>invoke("start_context_lab",{options:{
+    dataset:el<HTMLSelectElement>("lab-dataset").value,inputForm:el<HTMLSelectElement>("lab-input-form").value,kanaHint:el<HTMLInputElement>("lab-kana-hint").checked,
     input:el<HTMLSelectElement>("lab-input").value,apple:el<HTMLInputElement>("lab-apple").checked,qwen:el<HTMLInputElement>("lab-qwen").checked,
     ax:el<HTMLInputElement>("lab-ax").checked,repeats:Number(el<HTMLSelectElement>("lab-repeats").value),compareInstruction:el<HTMLInputElement>("lab-compare-instruction").checked,instruction:el<HTMLTextAreaElement>("lab-instruction").value,foundationProfile:el<HTMLSelectElement>("lab-foundation-profile").value,
   }})));

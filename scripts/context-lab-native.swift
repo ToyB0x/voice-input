@@ -1,16 +1,67 @@
 // Opt-in controlled fixture. No screen capture or access to other applications.
 import AppKit
 import Vision
+import CoreFoundation
 
 func emit(_ value: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]), data.count <= 32768 else { exit(2) }
     FileHandle.standardOutput.write(data); FileHandle.standardOutput.write(Data("\n".utf8))
 }
 func finish(_ reason: String) -> Never { emit(["error": reason]); exit(1) }
+// Japanese locale token readings, not generic Any-Latin (which can read kanji as Chinese).
+// Only Japanese tokens change; numbers, Latin identifiers and separators remain byte-for-byte.
+func japaneseReading(_ text: String) -> String? {
+    let ns = text as NSString
+    let tokenizer = CFStringTokenizerCreate(kCFAllocatorDefault, text as CFString,
+        CFRange(location: 0, length: ns.length), kCFStringTokenizerUnitWord,
+        CFLocaleCreate(kCFAllocatorDefault, "ja_JP" as CFString))!
+    var kind = CFStringTokenizerGoToTokenAtIndex(tokenizer, 0)
+    var end = 0, output = ""
+    while kind.rawValue != 0 {
+        let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+        guard range.location >= end, range.length > 0, range.location + range.length <= ns.length else { return nil }
+        output += ns.substring(with: NSRange(location: end, length: range.location-end))
+        let token = ns.substring(with: NSRange(location: range.location, length: range.length))
+        let japanese = token.unicodeScalars.contains { (0x3040...0x30ff).contains($0.value) || (0x3400...0x9fff).contains($0.value) }
+        if japanese, let latin = CFStringTokenizerCopyCurrentTokenAttribute(tokenizer, kCFStringTokenizerAttributeLatinTranscription) as? String,
+           let kana = latin.applyingTransform(.latinToHiragana, reverse: false),
+           !kana.unicodeScalars.contains(where: { CharacterSet.latinLettersForReading.contains($0) }) {
+            output += kana
+        } else { output += token }
+        end = range.location + range.length
+        kind = CFStringTokenizerAdvanceToNextToken(tokenizer)
+    }
+    output += ns.substring(from: end)
+    return output
+}
+extension CharacterSet {
+    static let latinLettersForReading = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+}
+let readingArgs = Array(CommandLine.arguments.dropFirst())
+if readingArgs == ["--reading"] {
+    let data = FileHandle.standardInput.readData(ofLength: 24577)
+    guard data.count <= 24576, let input = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+          let text = input["text"], text.utf8.count <= 8192, !text.contains("\0"),
+          let reading = japaneseReading(text), reading.utf8.count <= 8192 else { finish("reading-input-failed") }
+    emit(["text": reading, "method": "CFStringTokenizer-ja_JP-latinToHiragana-v1"])
+    exit(0)
+}
+if readingArgs == ["--reading-self-test"] {
+    guard japaneseReading("雨が降っています") == "あめがふっています",
+          japaneseReading("飴が降っています") == "あめがふっています",
+          japaneseReading("会議室Bで10人")?.contains("B") == true,
+          japaneseReading("会議室Bで10人")?.contains("10") == true else { finish("reading-self-test-failed") }
+    emit(["status": "passed", "method": "CFStringTokenizer-ja_JP-latinToHiragana-v1", "inferenceTested": false]); exit(0)
+}
 let args = CommandLine.arguments
-if args.count != 3 || !["storm", "candy"].contains(args[2]) { finish("invalid-arguments") }
+if args.count != 3 || !["storm", "candy", "rainfall", "candy-shower"].contains(args[2]) { finish("invalid-arguments") }
 let scene = args[2], assets = URL(fileURLWithPath: args[1])
-let text = scene == "storm" ? "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。" : "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。"
+let text = [
+    "storm": "気象情報。大型の台風が接近中。強い雨と風、降水量の増加に注意してください。",
+    "candy": "お菓子の新商品。カラフルな飴、キャンディ、砂糖菓子を紹介します。",
+    "rainfall": "住宅街で雨が降っています。屋根から雨水が滴り、道路に水たまりができています。",
+    "candy-shower": "お祭りの飴まきです。屋根の上からカラフルな飴やキャンディをばらまいています。"
+][scene]!
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
 let window = NSWindow(contentRect: NSRect(x: 100, y: 120, width: 960, height: 640), styleMask: [.titled], backing: .buffered, defer: false)
