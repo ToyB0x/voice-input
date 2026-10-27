@@ -24,6 +24,8 @@ pub struct Row {
     pub message: String,
     pub raw: Option<String>,
     pub candidate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selection: Option<serde_json::Value>,
     pub final_text: Option<String>,
     pub accepted: Option<bool>,
     pub asr_ms: Option<u64>,
@@ -44,6 +46,7 @@ impl Row {
             message: String::new(),
             raw: None,
             candidate: None,
+            selection: None,
             final_text: None,
             accepted: None,
             asr_ms: None,
@@ -632,6 +635,8 @@ struct AsrReport {
 #[derive(Deserialize)]
 struct Candidate {
     candidate: String,
+    #[serde(default)]
+    selection: Option<serde_json::Value>,
     accepted: bool,
     reason: Option<String>,
     backend: String,
@@ -889,6 +894,7 @@ fn correct_text_input(
                 }
                 Candidate {
                     candidate: apple.text,
+                    selection: None,
                     accepted: false,
                     reason: Some(crate::correction::guard_code(failure["reason"].as_str()).into()),
                     backend: "foundation".into(),
@@ -902,6 +908,7 @@ fn correct_text_input(
                 }
                 Candidate {
                     candidate: apple.text,
+                    selection: None,
                     accepted: true,
                     reason: None,
                     backend: "foundation".into(),
@@ -945,6 +952,7 @@ fn correct_text_input(
         if candidate.candidate.len() > 8192 || candidate.candidate.contains('\0') {
             return Err("invalid-correction-report".into());
         }
+        row.selection = candidate.selection;
         row.accepted = Some(candidate.accepted);
         row.final_text = Some(if candidate.accepted {
             candidate.candidate.clone()
@@ -1164,7 +1172,7 @@ fn comparison_report(status: &Status, include_text: bool) -> Result<String, Stri
     if !include_text && let Some(rows) = rows.as_array_mut() {
         for row in rows {
             if let Some(row) = row.as_object_mut() {
-                for key in ["raw", "candidate", "finalText"] {
+                for key in ["raw", "candidate", "finalText", "selection"] {
                     row.remove(key);
                 }
             }
@@ -1200,6 +1208,7 @@ mod tests {
         let mut row = Row::new(0, case());
         row.raw = Some("PRIVATE_TRANSCRIPT".into());
         row.candidate = Some("PRIVATE_CANDIDATE".into());
+        row.selection = Some(serde_json::json!({"evidence":"PRIVATE_CONTEXT","edits":[0]}));
         row.final_text = row.raw.clone();
         row.status = "error".into();
         row.message = "generation-failed".into();
@@ -1223,7 +1232,7 @@ mod tests {
         let report = comparison_report(&status, false).unwrap();
         assert!(!report.contains("PRIVATE_"));
         let report: serde_json::Value = serde_json::from_str(&report).unwrap();
-        for key in ["raw", "candidate", "finalText"] {
+        for key in ["raw", "candidate", "finalText", "selection"] {
             assert!(report["rows"][0].get(key).is_none());
         }
         assert_eq!(

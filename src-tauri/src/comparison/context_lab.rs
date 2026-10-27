@@ -276,7 +276,7 @@ impl Comparisons {
                 "reportId":run_id,"appVersion":env!("CARGO_PKG_VERSION"),"sourceRevision":env!("VOICE_INPUT_SOURCE_REVISION"),
                 "platform":"macos","machine":std::env::consts::ARCH,"execution":"local-app","networkDenied":false,
                 "completed":false,"inputKind":options.input,"instructions":instructions,
-                "experiment":{"dataset":options.dataset,"afmInputForm":options.input_form,"whisperKanaHint":options.kana_hint,"readingMethod":"CFStringTokenizer-ja_JP-latinToHiragana-v1","guardSource":"original-asr"},
+                "experiment":{"dataset":options.dataset,"afmInputForm":options.input_form,"whisperKanaHint":options.kana_hint,"readingMethod":"CFStringTokenizer-ja_JP-latinToHiragana-v1","guardSource":"engine-specific-see-rows"},
                 "presentationEngine":if options.apple {"apple-foundation"} else {"qwen3"},"presentationInstruction":"custom",
                 "models":{},"foundation":{},"captures":{},"fixture":{},"rows":[],"kanaControls":[],"preservationControls":[],
                 "limits":["Controlled built-in scenes; not other-app screen capture or a direct-image VLM.",
@@ -634,6 +634,15 @@ impl Comparisons {
                         r["reason"] = row.message.clone().into();
                         r["raw"] = json!(asr.raw);
                         r["candidate"] = json!(row.candidate);
+                        r["selection"] = json!(row.selection);
+                        r["guardSource"] = if engine == "none" {
+                            "none"
+                        } else if engine == "apple-foundation" {
+                            "original-asr"
+                        } else {
+                            "correction-input"
+                        }
+                        .into();
                         r["finalText"] = json!(row.final_text);
                         r["accepted"] = json!(row.accepted);
                         r["candidateCharacters"] =
@@ -875,7 +884,7 @@ fn control(
     r
 }
 fn control_result(r: &Row) -> Value {
-    json!({"candidate":r.candidate,"accepted":r.accepted,"reason":r.message,"status":r.status,"elapsed_ms":r.correction_ms,"candidateCharacters":r.candidate.as_ref().map(|s|s.chars().count()),"repetitionDetected":r.message=="guard-repetition"})
+    json!({"candidate":r.candidate,"selection":r.selection,"accepted":r.accepted,"reason":r.message,"status":r.status,"elapsed_ms":r.correction_ms,"candidateCharacters":r.candidate.as_ref().map(|s|s.chars().count()),"repetitionDetected":r.message=="guard-repetition"})
 }
 fn scene_sources(c: &Value, other: &Value) -> Vec<(&'static str, Option<String>)> {
     fn text(v: &Value) -> Option<String> {
@@ -1255,6 +1264,7 @@ fn export(
                         "finalText",
                         "context",
                         "correctionInput",
+                        "selection",
                     ] {
                         o.remove(key);
                     }
@@ -1341,7 +1351,7 @@ import sys,json
 p=json.load(sys.stdin)
 assert p['mode']=='replacements'
 assert p['dictionary']==[dict(reading='はし',forms=['橋','箸','はし'])]
-print(json.dumps(dict(candidate=p['transcript'],accepted=True,reason=None,backend='cpu',offloaded_layers=0)))
+print(json.dumps(dict(candidate=p['transcript'],selection=dict(evidence='',edits=[]),accepted=True,reason=None,backend='cpu',offloaded_layers=0)))
 "#).unwrap();
         std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
         let prefs = crate::settings::Preferences {
@@ -1366,6 +1376,7 @@ print(json.dumps(dict(candidate=p['transcript'],accepted=True,reason=None,backen
         );
         assert_eq!(row.status, "accepted");
         assert_eq!(row.final_text.as_deref(), Some("田中さんへ資料を送ります"));
+        assert_eq!(row.selection, Some(json!({"evidence":"","edits":[]})));
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
@@ -1684,7 +1695,7 @@ time.sleep(30)
     }
     #[test]
     fn metadata_export_redacts_bodies_instructions_and_control_candidates() {
-        let r = json!({"reportId":"run","rows":[{"raw":"PRIVATE","candidate":"PRIVATE","finalText":"PRIVATE","context":"PRIVATE","correctionInput":"PRIVATE","status":"accepted"}],
+        let r = json!({"reportId":"run","rows":[{"raw":"PRIVATE","candidate":"PRIVATE","finalText":"PRIVATE","context":"PRIVATE","correctionInput":"PRIVATE","selection":{"evidence":"PRIVATE","edits":[0]},"status":"accepted"}],
             "captures":{"storm":{"fixtureText":"PRIVATE","ax":{"status":"completed","text":"PRIVATE"},"ocr":{"text":"PRIVATE"},"imageOCR":{"text":"PRIVATE"}}},
             "qwenDictionary":"PRIVATE","instructions":{"custom":"PRIVATE"},"kanaControls":["PRIVATE"],"preservationControls":["PRIVATE"]});
         assert!(!export(&r, false, None, "done").unwrap().contains("PRIVATE"));
