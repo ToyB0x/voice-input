@@ -27,13 +27,24 @@ pub struct Options {
     pub repeats: usize,
     pub compare_instruction: bool,
     pub instruction: String,
+    #[serde(default = "default_foundation_profile")]
+    pub foundation_profile: String,
 }
+fn default_foundation_profile() -> String {
+    "grounded-structured-v2".into()
+}
+const FOUNDATION_PROFILES: &[&str] = &[
+    "legacy-structured-v1",
+    "grounded-structured-v2",
+    "grounded-text-v2",
+];
 impl Options {
     fn validate(&self) -> Result<(), String> {
         if !["bundled", "recorded", "text"].contains(&self.input.as_str())
             || !(1..=2).contains(&self.repeats)
             || (!self.apple && !self.qwen)
             || self.instruction.len() > 1536
+            || !FOUNDATION_PROFILES.contains(&self.foundation_profile.as_str())
             || self.instruction.contains('\0')
         {
             return Err("入力・補正方式・反復回数・追加指示を確認してください。".into());
@@ -253,7 +264,7 @@ impl Comparisons {
         };
         self.lab_update(epoch,"models",json!({"speech":if options.input=="text" {"なし（かな原文）"} else {"設定中のWhisper"},
             "speechSha256":speech_hash,"speechBackend":if options.input=="text" {"none"} else {prefs.backend.as_str()},"correction":if options.apple {"Apple Foundation Models"} else {"設定中のQwen"},
-            "qwenSha256":qwen_hash,"qwenBackend":prefs.correction_backend,"qwenModelReuse":false,"afmSessionReuse":false}));
+            "qwenSha256":qwen_hash,"qwenBackend":prefs.correction_backend,"qwenModelReuse":false,"afmSessionReuse":false,"foundationProfile":options.foundation_profile,"qwenPromptRevision":"grounded-v2"}));
         let apple = self.foundation_check(&resources, epoch);
         if let Ok(state) = self.inner.lock()
             && let Some(d) = &state.status.foundation
@@ -396,7 +407,7 @@ impl Comparisons {
                             && let Some(raw) = &asr.raw
                         {
                             let case = lab_case(engine, prefs, route);
-                            if let Err(error) = correct_text(
+                            if let Err(error) = correct_text_profile(
                                 &resources,
                                 &case,
                                 &mut row,
@@ -407,6 +418,7 @@ impl Comparisons {
                                 &apple,
                                 &self.epoch,
                                 epoch,
+                                &options.foundation_profile,
                             ) {
                                 record_error(&mut row, error);
                             }
@@ -421,6 +433,9 @@ impl Comparisons {
                         r["candidate"] = json!(row.candidate);
                         r["finalText"] = json!(row.final_text);
                         r["accepted"] = json!(row.accepted);
+                        r["candidateCharacters"] =
+                            json!(row.candidate.as_ref().map(|s| s.chars().count()));
+                        r["repetitionDetected"] = (row.message == "guard-repetition").into();
                         r["asrMs"] = json!(asr.asr_ms);
                         r["asrLoadMs"] = json!(asr.asr_load_ms);
                         r["asrShared"] = json!(shared);
@@ -448,6 +463,7 @@ impl Comparisons {
                         &apple,
                         &self.epoch,
                         epoch,
+                        &options.foundation_profile,
                     );
                     kana.push(json!({"scene":scene,"engine":engine,"instruction":key,"input":"あめがすごいですね","result":control_result(&row)}));
                     self.lab_update(epoch, "kanaControls", json!(kana));
@@ -476,6 +492,7 @@ impl Comparisons {
                         &apple,
                         &self.epoch,
                         epoch,
+                        &options.foundation_profile,
                     );
                     controls.push(json!({"engine":engine,"input":raw,"instruction":key,"result":control_result(&row),"finalText":row.final_text}));
                     self.lab_update(epoch, "preservationControls", json!(controls));
@@ -536,11 +553,12 @@ fn control(
     apple: &Result<(), String>,
     epoch: &AtomicU64,
     current: u64,
+    foundation_profile: &str,
 ) -> Row {
     let mut r = Row::new(0, lab_case(engine, prefs, "correction"));
     r.raw = Some(raw.into());
     r.final_text = r.raw.clone();
-    if let Err(e) = correct_text(
+    if let Err(e) = correct_text_profile(
         resources,
         &r.case.clone(),
         &mut r,
@@ -551,13 +569,14 @@ fn control(
         apple,
         epoch,
         current,
+        foundation_profile,
     ) {
         record_error(&mut r, e);
     }
     r
 }
 fn control_result(r: &Row) -> Value {
-    json!({"candidate":r.candidate,"accepted":r.accepted,"reason":r.message,"status":r.status,"elapsed_ms":r.correction_ms})
+    json!({"candidate":r.candidate,"accepted":r.accepted,"reason":r.message,"status":r.status,"elapsed_ms":r.correction_ms,"candidateCharacters":r.candidate.as_ref().map(|s|s.chars().count()),"repetitionDetected":r.message=="guard-repetition"})
 }
 fn scene_sources(c: &Value, other: &Value) -> Vec<(&'static str, Option<String>)> {
     fn text(v: &Value) -> Option<String> {
@@ -988,6 +1007,64 @@ pub fn copy_context_lab_report(
 mod tests {
     use super::*;
     #[test]
+    fn old_requests_default_to_grounded_structured_and_unknown_profiles_are_rejected() {
+        let mut options: Options = serde_json::from_value(json!({"input":"text","apple":true,
+            "qwen":false,"ax":false,"repeats":1,"compareInstruction":true,"instruction":""}))
+        .unwrap();
+        assert_eq!(options.foundation_profile, "grounded-structured-v2");
+        for profile in FOUNDATION_PROFILES {
+            options.foundation_profile = profile.to_string();
+            assert!(options.validate().is_ok());
+        }
+        options.foundation_profile = "unknown".into();
+        assert!(options.validate().is_err());
+    }
+    #[test]
+    fn synthetic_control_forwards_the_selected_afm_profile_to_the_owned_helper() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(now_id(0));
+        std::fs::create_dir(&root).unwrap();
+        let script = format!(
+            r#"#!/usr/bin/python3
+import sys,json
+from pathlib import Path
+p=json.load(sys.stdin)
+if sys.argv[1:] == ['--correct']:
+ Path({marker:?}).write_text(p['profile'])
+ print(json.dumps(dict(text=p['transcript'],backend='foundation',offloaded_layers=0)))
+else:
+ print(json.dumps(dict(text=p['candidate'])))
+"#,
+            marker = root.join("profile").to_str().unwrap()
+        );
+        for helper in ["apple-foundation-correction", "local-correction"] {
+            let path = root.join(helper);
+            std::fs::write(&path, &script).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        for profile in FOUNDATION_PROFILES {
+            let row = control(
+                &root,
+                "apple-foundation",
+                &crate::settings::Preferences::default(),
+                "会議の資料を確認します",
+                "参考資料",
+                "",
+                &BTreeMap::new(),
+                &Ok(()),
+                &AtomicU64::new(1),
+                1,
+                profile,
+            );
+            assert_eq!(row.status, "accepted");
+            assert_eq!(
+                std::fs::read_to_string(root.join("profile")).unwrap(),
+                *profile
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn missing_models_identify_qwen_or_whisper_and_text_mode_does_not_need_whisper() {
         let mut prefs = crate::settings::Preferences::default();
         let mut options = Options {
@@ -998,6 +1075,7 @@ mod tests {
             repeats: 1,
             compare_instruction: true,
             instruction: String::new(),
+            foundation_profile: default_foundation_profile(),
         };
         assert!(validate_model_paths(&prefs, &options).is_ok());
         options.qwen = true;

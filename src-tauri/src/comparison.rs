@@ -756,6 +756,34 @@ fn correct_text(
     epoch: &AtomicU64,
     current: u64,
 ) -> Result<(), String> {
+    correct_text_profile(
+        resources,
+        case,
+        row,
+        transcript,
+        context,
+        instruction,
+        paths,
+        apple,
+        epoch,
+        current,
+        "grounded-structured-v2",
+    )
+}
+#[allow(clippy::too_many_arguments)]
+fn correct_text_profile(
+    resources: &Path,
+    case: &Case,
+    row: &mut Row,
+    transcript: &str,
+    context: &str,
+    instruction: &str,
+    paths: &BTreeMap<String, Result<PathBuf, String>>,
+    apple: &Result<(), String>,
+    epoch: &AtomicU64,
+    current: u64,
+    foundation_profile: &str,
+) -> Result<(), String> {
     let mut correction_started = None;
     let outcome = (|| -> Result<(), String> {
         if case.correction == "none" || transcript.trim().is_empty() {
@@ -778,6 +806,9 @@ fn correct_text(
         let mut payload = serde_json::json!({"transcript":transcript,"context":if case.correction_context(){context}else{""}});
         if !instruction.is_empty() {
             payload["instruction"] = instruction.into();
+        }
+        if case.correction == "apple-foundation" {
+            payload["profile"] = foundation_profile.into();
         }
         let payload = serde_json::to_vec(&payload).map_err(|_| "input-failed")?;
         let candidate = if case.correction == "apple-foundation" {
@@ -1383,7 +1414,7 @@ print(json.dumps(dict(text='raw fixture',backend='cpu',load_ms=1,elapsed_ms=2)))
 import sys,json
 assert sys.argv[1:] == ['--correct']
 p=json.load(sys.stdin)
-assert p=={'transcript':'raw fixture','context':'CONTEXT_FIXTURE'}
+assert p=={'transcript':'raw fixture','context':'CONTEXT_FIXTURE','profile':'grounded-structured-v2'}
 print(json.dumps(dict(text='candidate fixture',backend='foundation',offloaded_layers=0)))
 "#;
         let guard = r#"#!/usr/bin/python3
