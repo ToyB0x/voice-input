@@ -23,6 +23,8 @@ mod models;
 mod ocr;
 #[cfg(any(target_os = "macos", test))]
 mod settings;
+#[cfg(target_os = "macos")]
+mod usage_presets;
 
 #[cfg(target_os = "macos")]
 mod activity;
@@ -123,6 +125,7 @@ fn main() {
             updater::update_status,
             updater::check_updates,
             updater::install_update,
+            usage_presets::apply_usage_preset,
             models::model_catalog,
             models::model_preparation_status,
             models::prepare_models,

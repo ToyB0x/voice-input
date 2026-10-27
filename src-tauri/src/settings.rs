@@ -6,6 +6,8 @@ use std::{fs, io::Write, path::Path};
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Preferences {
     pub version: u8,
+    #[serde(default)]
+    pub usage_preset: Option<String>,
     pub model_path: String,
     pub backend: String,
     pub shortcut: String,
@@ -47,6 +49,7 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             version: 1,
+            usage_preset: None,
             model_path: String::new(),
             backend: "metal".into(),
             shortcut: "Command+Shift+Space".into(),
@@ -67,6 +70,13 @@ impl Default for Preferences {
 }
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
+        if self
+            .usage_preset
+            .as_deref()
+            .is_some_and(|id| !["asr-first", "text-hints", "qwen-preview"].contains(&id))
+        {
+            return Err("保存されたプリセット名が不正です。".into());
+        }
         if self.version != 1
             || !["cpu", "metal"].contains(&self.backend.as_str())
             || !["cpu", "metal"].contains(&self.correction_backend.as_str())

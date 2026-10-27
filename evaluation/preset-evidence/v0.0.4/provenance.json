@@ -1,0 +1,18 @@
+{
+  "reportId": "device-18e2404c35255d20-1",
+  "measurementOrigin": "user-provided Mac, not CI inference",
+  "reportSha256": "9403835287b2cadf0dffd4aa5460c0c036527eeaaaf2c99a6b0989d87cdb0a6c",
+  "sourceRevision": "aae437aae71f357c4343a23b9cdff99dacf77fec",
+  "speechModel": "Whisper large-v3-turbo",
+  "profile": "grounded-text-v2",
+  "instruction": "",
+  "rows": 152,
+  "correctionExecutions": 52,
+  "accepted": 44,
+  "rejected": 8,
+  "repetitionDetected": 0,
+  "candyExpectedWord": 0,
+  "candyExecutions": 20,
+  "medianCorrectionMs": 634.0,
+  "selection": "ASR-first primary; automatic correction disabled. Context hints and Qwen are opt-in experiments; not established globally optimal."
+}

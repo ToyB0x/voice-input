@@ -26,6 +26,12 @@ pub fn prepare_models(
     models.start(ids, download).map_err(str::to_owned)
 }
 #[tauri::command]
-pub fn cancel_model_preparation(models: tauri::State<'_, Manager>) {
+pub fn cancel_model_preparation(
+    app: tauri::AppHandle,
+    models: tauri::State<'_, Manager>,
+) -> Result<(), String> {
+    let activity = app.state::<crate::activity::Activity>();
+    let _gate = activity.lock()?;
     models.cancel();
+    Ok(())
 }

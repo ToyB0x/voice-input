@@ -85,6 +85,19 @@
         </section>
       </div>
       <div id="panel-models" role="tabpanel" aria-labelledby="tab-models" tabindex="0" hidden="">
+        <section aria-labelledby="usage-title">
+          <h2 id="usage-title">かんたん設定：実測を基にしたプリセット</h2>
+          <label for="usage-preset">使い方を選ぶ</label>
+          <select id="usage-preset"><option value="asr-first">原文重視（推奨）</option><option value="text-hints">文字の文脈をヒントにする（実験）</option><option value="qwen-preview">整形をプレビューする（比較用）</option></select>
+          <p id="usage-description"></p><p id="usage-evidence" class="hint"></p>
+          <p id="usage-models" class="hint"></p><p id="usage-current" class="hint"></p>
+          <div class="controls"><button id="usage-prepare" disabled>必要なモデルを準備</button><button id="usage-cancel" disabled>準備を中止</button></div>
+          <progress id="usage-progress" hidden></progress>
+          <button id="usage-apply" disabled>設定を保存して読み込む</button>
+          <p id="usage-status" role="status" aria-live="polite"></p>
+          <p class="hint">保存済みモデルも容量・SHA-256を検証し、不足分だけ公式配布元から取得します。完了後の保存ボタンで現在の設定欄とプリセットを保存し、音声モデルを読み込みます。自動補正とモデル再利用はオフにし、追加指示を空欄にして補正用文脈を無効にします。ショートカット・直接入力・小型表示の設定は保ちます。録音・比較結果が残っている場合は、コピーして破棄してから保存してください。</p>
+          <button type="button" data-view-target="settings">権限・詳細設定を確認する</button>
+        </section>
         <section aria-labelledby="prepare-title">
           <h2 id="prepare-title">1. モデルを準備</h2>
           <label for="model-preset">準備するモデルの組み合わせ</label>

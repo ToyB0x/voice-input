@@ -187,6 +187,18 @@ impl Manager {
             .status
             .clone()
     }
+    /// Only the current successful, uncancelled preparation can configure the app.
+    pub fn ready_status(&self, generation: u64) -> Result<Status> {
+        self.check_cancel()?;
+        let inner = self
+            .inner
+            .lock()
+            .map_err(|_| "モデルの状態を取得できません。")?;
+        if inner.status.generation != generation || inner.status.phase != "ready" {
+            return Err("モデルの準備状態が変わりました。もう一度検証してください。");
+        }
+        Ok(inner.status.clone())
+    }
     pub fn models(&self) -> Vec<Model> {
         catalog()
             .into_iter()
@@ -508,6 +520,20 @@ mod tests {
         model.identity.sha256 =
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".into();
         (manager, model)
+    }
+    #[test]
+    fn configuration_requires_a_ready_current_uncancelled_preparation() {
+        let manager = Manager::new(std::env::temp_dir().join("ready-status-unused"));
+        assert!(manager.ready_status(1).is_err());
+        manager.inner.lock().unwrap().status = Status {
+            generation: 2,
+            phase: "ready".into(),
+            ..Status::default()
+        };
+        assert!(manager.ready_status(1).is_err());
+        assert!(manager.ready_status(2).is_ok());
+        manager.cancel();
+        assert!(manager.ready_status(2).is_err());
     }
     #[test]
     fn pinned_catalog_has_safe_unique_identities() {

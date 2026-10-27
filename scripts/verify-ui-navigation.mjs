@@ -23,7 +23,7 @@ const chrome = spawn(process.env.CHROME_BIN ?? '/usr/bin/chromium', ['--headless
 let socket;
 try {
   const endpoint = await new Promise((done, reject) => {
-    const timer = setTimeout(() => reject(Error('Chromium startup deadline exceeded')), 15000);
+    const timer = setTimeout(() => reject(Error('Chromium startup deadline exceeded')), 45000);
     let log = '';
     chrome.stderr.on('data', bytes => { log += bytes; const match = log.match(/DevTools listening on (ws:\/\/[^\s]+)/); if (match) { clearTimeout(timer); done(match[1]); } });
     chrome.once('error', reject);
@@ -83,8 +83,18 @@ try {
     el('tab-models').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true})); check(active('diagnostics'),'End did not select last tab');
     el('tab-diagnostics').dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true})); check(active('input'),'Home did not return to first tab');
     el('tab-input').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true})); check(active('diagnostics'),'ArrowLeft did not wrap');
+    window.__ui.snapshot.phase='idle';window.__ui.snapshot.working=false;await pause();
+    select('models');await pause();
+    el('usage-prepare').click();await pause();
+    check(!el('usage-apply').disabled,'Verified preset cannot be applied');
+    el('usage-apply').click();
+    for(let i=0;i<20&&!el('usage-status').textContent.includes('準備と設定が完了');i++)await pause();
+    check(window.__ui.preferences.usagePreset==='asr-first' && window.__ui.preferences.autoCorrection===false,'Preset did not save the intended mode');
+    check(el('model-path').value==='/synthetic/large-v3-turbo','Preset did not update the actual model setting');
+    check(el('usage-status').textContent.includes('準備と設定が完了'),'Preset setup did not reach ready');
+    check(window.__ui.calls.filter(c=>c==='apply_usage_preset').length===1 && window.__ui.calls.filter(c=>c==='load_model').length===1,'Preset setup did not explicitly save and load once');
     select('input');
-    return {status:'passed', realBrowser:true, nativeBackend:'synthetic', panels:4, keyboardNavigation:true, fieldsAndRecordingPreserved:true, explicitSharedSave:true, navigationSideEffects:false};
+    return {presetSetup:true,status:'passed' , realBrowser:true, nativeBackend:'synthetic', panels:4, keyboardNavigation:true, fieldsAndRecordingPreserved:true, explicitSharedSave:true, navigationSideEffects:false};
   })()`);
   assert.equal(result.status, 'passed');
   await evaluate(`document.getElementById('tab-input').click(); window.scrollTo(0,0);`);

@@ -17,7 +17,7 @@ async function setup() {
       recognitionContext: false, ocrContext: false, whisperContext: true, correctionContext: false, correctionModelPath: '', correctionEngine: 'apple-foundation', correctionBackend: 'metal' }, shortcutRegistered: true, error: null },
     correction: { working: true, checkingFoundation: false, foundation: null, text: null, error: null, elapsedMs: 0 },
   };
-  let poll;
+  let poll, applyUsage;
   const requests = [];
   const context = vm.createContext({ document: { querySelector: id => elements.get(id.slice(1)) }, window: { setInterval(callback) { poll = callback; } } });
   function stub(exports) { return new vm.SyntheticModule(Object.keys(exports), function () { for (const [name, value] of Object.entries(exports)) this.setExport(name, value); }, { context }); }
@@ -28,10 +28,16 @@ async function setup() {
     if (command === 'correction_status') return structuredClone(state.correction);
     if (command === 'insertion_status') return { enabled: false };
     if (command === 'context_status') return { enabled: false, screenPermitted: false };
+    if (command === 'apply_usage_preset') {
+      state.desktop.preferences={...structuredClone(args.preferences),usagePreset:args.id,modelPath:'/verified/large-v3-turbo.bin',backend:'metal',autoCorrection:false,recognitionContext:false,ocrContext:false,correctionContext:false,correctionInstruction:''};
+      return structuredClone(state.desktop);
+    }
+    if (command === 'load_model') return structuredClone(state.snapshot);
     if (command === 'save_preferences') { state.desktop.preferences = structuredClone(args.preferences); return structuredClone(state.desktop); }
   } });
   const modules = {
     '@tauri-apps/api/core': api,
+    './usage-presets': stub({ setupUsagePresets: (_locked, apply) => { applyUsage=apply; return { refreshControls() {} }; } }),
     './context-lab': stub({ setupContextLab() {} }),
     './comparison': stub({ setupComparison() {}, comparisonWorking: () => false }),
     './updates': stub({ setupUpdates() {}, updateInstalling: () => false }),
@@ -43,7 +49,7 @@ async function setup() {
   const module = new vm.SourceTextModule(source, { context });
   await module.link(name => modules[name]); await module.evaluate();
   const settle = () => new Promise(setImmediate); await settle();
-  return { elements, state, requests, settle, poll: () => poll(), click: id => elements.get(id).listeners.get('click')?.() };
+  return { elements, state, requests, applyUsage: (...args) => applyUsage(...args), settle, poll: () => poll(), click: id => elements.get(id).listeners.get('click')?.() };
 }
 
 test('automatic correction is initially off and saved only by explicit preference action', async () => {
@@ -99,4 +105,26 @@ test('reuse is opt in and per-stage timing distinguishes zero from unavailable',
   app.state.correction.timings = { totalMs: 50, modelReused: false };
   app.poll(); await app.settle();
   assert.match(app.elements.get('processing-timings').textContent, /読込: 未計測/);
+});
+
+test('preset application saves current unrelated fields and loads the verified model without another save action',async()=>{
+  const app=await setup();app.elements.get('shortcut').value='Control+Alt+KeyB';
+  app.elements.get('auto-insert').checked=true;
+  await app.applyUsage('asr-first',7);
+  const applied=app.requests.find(x=>x.command==='apply_usage_preset');
+  assert.equal(applied.args.preferences.shortcut,'Control+Alt+KeyB');assert.equal(applied.args.preferences.autoInsert,true);
+  const loaded=app.requests.find(x=>x.command==='load_model');
+  assert.equal(loaded.args.path,'/verified/large-v3-turbo.bin');assert.equal(loaded.args.backend,'metal');
+  assert.equal(app.elements.get('model-path').value,'/verified/large-v3-turbo.bin');
+  assert.equal(app.elements.get('auto-correction').checked,false);
+  assert.equal(app.requests.filter(x=>x.command==='save_preferences').length,0);
+});
+
+test('saving unchanged preset settings retains its name and changing a preset field returns to custom',async()=>{
+  const app=await setup();await app.applyUsage('asr-first',7);
+  app.click('save-preferences');await app.settle();
+  assert.equal(app.requests.filter(x=>x.command==='save_preferences').at(-1).args.preferences.usagePreset,'asr-first');
+  app.elements.get('model-path').value='/manual/model.bin';
+  app.click('save-preferences');await app.settle();
+  assert.equal(app.requests.filter(x=>x.command==='save_preferences').at(-1).args.preferences.usagePreset,null);
 });
