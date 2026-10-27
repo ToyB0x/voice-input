@@ -1,0 +1,56 @@
+name: Accuracy-first ASR comparison
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/accuracy-asr.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: accuracy-asr-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  asr:
+    name: Accuracy ASR ${{ matrix.asr }} (Mac CPU)
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        asr: [large-v3, large-v3-turbo]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache immutable registry publication metadata
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voice-input-release-metadata
+          key: registry-age-${{ runner.os }}-v1-${{ hashFiles('**/Cargo.lock', 'package.json') }}
+          restore-keys: registry-age-${{ runner.os }}-v1-
+      - name: Enforce 48-hour dependency cooling before building
+        run: python3 scripts/check-dependency-age.py
+      - run: rustup show
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-transcription/target
+          key: macos26-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Build fixed evaluator
+        run: cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked --bin evaluate
+      - name: Prepare pinned model (explicit setup only)
+        run: python3 scripts/prepare-transcription-model.py --model '${{ matrix.asr }}' "$RUNNER_TEMP/model.bin"
+      - name: Compare all context inputs on CPU with networking denied
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 scripts/evaluate_context.py \
+            --binary crates/local-transcription/target/release/evaluate --model "$RUNNER_TEMP/model.bin" \
+            --model-name '${{ matrix.asr }}' --output "$RUNNER_TEMP/accuracy-asr" --require-network-denied
+          cat "$RUNNER_TEMP/accuracy-asr/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: accuracy-asr-${{ matrix.asr }}
+          path: ${{ runner.temp }}/accuracy-asr/
+          retention-days: 14
