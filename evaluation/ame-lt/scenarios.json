@@ -1,0 +1,13 @@
+{
+  "utterance": "あめがすごいですね",
+  "audio": "evaluation/context-evidence/baseline/fixtures/speech.wav",
+  "audio_sha256": "1da8846a64c35951720b445ed6f52e7fc535b0c3641178ab75302bbde02c4e0d",
+  "texts": [
+    {"id": "weather", "text": "今日は台風で、外は大雨だ。", "expected": "雨"},
+    {"id": "halloween", "text": "今日はハロウィン。特別なキャンディがたくさん用意されているらしい。", "expected": "飴"}
+  ],
+  "images": [
+    {"id": "rainfall", "file": "evaluation/context-evidence/assets/rainfall.png", "sha256": "5fd8505043bac7bf6510bd3be10c37738b0762d7ce4986ce2872dbf5390ef5dc", "expected": "雨"},
+    {"id": "candy-shower", "file": "evaluation/context-evidence/assets/candy-shower.png", "sha256": "21a3a5e819566f84f75f5762683e572a37e2e9502b4c75345979a9d2b7dbbcbd", "expected": "飴"}
+  ]
+}

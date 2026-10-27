@@ -1,0 +1,93 @@
+name: Ame LT three-stage demo
+on:
+  pull_request:
+    paths:
+      - 'evaluation/ame-lt/**'
+      - 'scripts/ame_lt.py'
+      - 'scripts/*ame-lt*.py'
+      - 'scripts/tests/test_ame_lt.py'
+      - '.github/workflows/ame-lt.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ame-lt-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dependency-policy:
+    uses: ./.github/workflows/dependency-policy.yml
+  validate:
+    needs: dependency-policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 -m unittest discover -s scripts/tests -p test_ame_lt.py
+  asr:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup show
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            crates/local-transcription/target
+          key: macos26-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
+      - run: cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked --bin compare-transcription
+      - run: python3 scripts/prepare-transcription-model.py --model large-v3 "$RUNNER_TEMP/model.bin"
+      - name: Same audio, no hint, two actual ASR runs
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)'             python3 scripts/evaluate-ame-lt-asr.py --binary crates/local-transcription/target/release/compare-transcription               --model "$RUNNER_TEMP/model.bin" --output "$RUNNER_TEMP/ame-asr"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ame-lt-asr
+          path: ${{ runner.temp }}/ame-asr/
+          retention-days: 30
+  demo:
+    needs: asr
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ame-lt-asr
+          path: asr
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libseccomp2
+      - run: python3 scripts/prepare-vlm-evidence.py --directory "$RUNNER_TEMP/models" --source "$RUNNER_TEMP/llama.cpp"
+      - name: Build the fixed CPU text and vision runtime
+        run: |
+          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build" -G Ninja             -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF             -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DMTMD_VIDEO=OFF
+          cmake --build "$RUNNER_TEMP/llama-build" --target llama-mtmd-cli -j 4
+      - name: Compare the three stages offline
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/evaluate-ame-lt.py             --binary "$RUNNER_TEMP/llama-build/bin/llama-mtmd-cli" --models "$RUNNER_TEMP/models"             --source "$RUNNER_TEMP/llama.cpp" --asr asr/asr.json --output evidence
+      - name: Build six LT slides from the actual outputs
+        env:
+          EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 scripts/prepare-presentation-font.py
+          python3 scripts/ame-lt-slides.py --report evidence/results.json --output presentation
+          CHROME_BIN=/usr/bin/google-chrome node scripts/render-context-slides.mjs presentation
+          cat presentation/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ame-lt-presentation
+          path: |
+            presentation/
+            evidence/
+          retention-days: 30
+      - name: Require the measured LT examples to work twice
+        run: |
+          python3 - <<'PY'
+          import json
+          r=json.load(open('evidence/results.json'))
+          assert r['quality_pass'], 'Keep the actual slides; do not claim the demonstration passed'
+          PY
