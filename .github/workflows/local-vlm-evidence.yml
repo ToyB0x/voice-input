@@ -1,0 +1,51 @@
+name: Local VLM image evidence
+on:
+  pull_request:
+    paths:
+      - 'evaluation/local-vlm/**'
+      - 'scripts/prepare-vlm-evidence.py'
+      - 'scripts/evaluate_vlm.py'
+      - '.github/workflows/local-vlm-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: local-vlm-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dependency-policy:
+    uses: ./.github/workflows/dependency-policy.yml
+  vision:
+    needs: dependency-policy
+    runs-on: ubuntu-26.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libseccomp2
+      - name: Explicitly prepare immutable model and runtime (48h cooling)
+        run: python3 scripts/prepare-vlm-evidence.py --directory "$RUNNER_TEMP/models" --source "$RUNNER_TEMP/llama.cpp"
+      - name: Build CPU multimodal CLI
+        run: |
+          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF \
+            -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DMTMD_VIDEO=OFF
+          cmake --build "$RUNNER_TEMP/llama-build" --target llama-mtmd-cli -j 4
+      - name: Observe images with networking denied
+        run: |
+          python3 scripts/run-offline-linux.py python3 scripts/evaluate_vlm.py \
+            --binary "$RUNNER_TEMP/llama-build/bin/llama-mtmd-cli" \
+            --models "$RUNNER_TEMP/models" --source "$RUNNER_TEMP/llama.cpp" \
+            --output "$RUNNER_TEMP/vlm-evidence" --require-network-denied --repeats 2
+      - name: Publish observations
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/vlm-evidence/summary.md" ]; then cat "$RUNNER_TEMP/vlm-evidence/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: local-vlm-observations
+          path: ${{ runner.temp }}/vlm-evidence/
+          retention-days: 14
