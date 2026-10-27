@@ -395,7 +395,7 @@ impl Comparisons {
         self.lab_update(epoch, "qwenDictionary", json!(options.qwen_dictionary));
         self.lab_update(epoch,"models",json!({"speech":if options.input=="text" {"なし（かな原文）"} else {"設定中のWhisper"},
             "speechSha256":speech_hash,"speechBackend":if options.input=="text" {"none"} else {prefs.backend.as_str()},"correction":if options.apple {"Apple Foundation Models"} else {"設定中のQwen"},
-            "qwenSha256":qwen_hash,"qwenBackend":prefs.correction_backend,"qwenModelReuse":false,"afmSessionReuse":false,"foundationProfile":options.foundation_profile,"qwenMode":options.qwen_mode,"ocrKatakanaJoin":options.join_ocr_katakana,"qwenPromptRevision":if options.qwen_mode=="replacements" {"dictionary-selection-v2"} else {"grounded-v2"}}));
+            "qwenSha256":qwen_hash,"qwenBackend":prefs.correction_backend,"qwenModelReuse":false,"afmSessionReuse":false,"foundationProfile":options.foundation_profile,"qwenMode":options.qwen_mode,"ocrKatakanaJoin":options.join_ocr_katakana,"qwenPromptRevision":if options.qwen_mode=="replacements" {"dictionary-selection-v4"} else {"grounded-v2"}}));
         let apple = self.foundation_check(&resources, epoch);
         if let Ok(state) = self.inner.lock()
             && let Some(d) = &state.status.foundation
