@@ -76,6 +76,9 @@ def main():
     report['complete'] = len(rows)==len(selected)*args.repeats
     report['groups'] = {group:dict(passed=sum(r['passed'] for r in rows if r['group']==group),
         total=sum(r['group']==group for r in rows)) for group in sorted({r['group'] for r in rows})}
+    report['decision_paths'] = {label:dict(passed=sum(r['passed'] for r in rows if bool(r['outcome'].get('inferenceSkipped'))==skipped),
+        total=sum(bool(r['outcome'].get('inferenceSkipped'))==skipped for r in rows))
+        for label,skipped in [('model-inference',False),('deterministic-no-authorized-edits',True)]}
     report['unstable_cases'] = [c['id'] for c in selected if len({json.dumps(r['outcome'].get('candidate'),ensure_ascii=False) + r['outcome']['status'] for r in rows if r['id']==c['id']})>1]
     # Strict on the small development suite. This is not a population accuracy claim.
     report['quality_pass'] = report['complete'] and all(r['passed'] for r in rows if r['gate']) and not report['unstable_cases']
@@ -83,7 +86,8 @@ def main():
     lines = [f"# {args.model_name} / {report['mode']}", '',f"Complete: {report['complete']}; quality gate: {report['quality_pass']}",'',
         '| Group | Exact accepted outputs | Total |','|---|---:|---:|']
     for group, values in report['groups'].items(): lines.append(f"| {group} | {values['passed']} | {values['total']} |")
-    lines += ['', 'Fallbacks are excluded from successful model outputs.',report['limitation'],'',
+    lines += ['', 'Pipeline decisions: '+json.dumps(report['decision_paths']),
+        'Deterministic no-edit decisions are reported separately, not as model generations. Guard/runtime fallbacks are excluded from successful outputs.',report['limitation'],'',
         'Failed cases: '+', '.join(sorted({r['id'] for r in rows if not r['passed']})),
         'Unstable cases: '+', '.join(report['unstable_cases'])]
     (args.output/'summary.md').write_text('\n'.join(lines)+'\n')

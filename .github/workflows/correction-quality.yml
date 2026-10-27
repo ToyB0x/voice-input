@@ -112,7 +112,7 @@ jobs:
           if {r['model'] for r in reports}!=expected or len(reports)!=len(expected):raise SystemExit('Missing model report')
           passing=[r['model'] for r in reports if r['complete'] and r['quality_pass']]
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:
-              out.write('Models passing every development quality check twice: '+repr(passing)+'\n')
+              out.write('Model pipelines passing every quality check twice: '+repr(passing)+'\n')
               for r in reports:out.write(r['model']+': '+json.dumps(r['groups'])+'\n')
           if not passing:raise SystemExit('No model meets the quality gate; inspect candidates before promotion')
           PYCODE

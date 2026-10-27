@@ -272,6 +272,35 @@ fn infer(
     verification_candidate: Option<&str>,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let phase_started = Instant::now();
+    // With no authorized edit, the only valid decision is an unchanged source.
+    // This is a pre-inference policy decision, never recovery from a bad output.
+    if verification_candidate.is_none()
+        && request.mode == local_correction::Mode::Replacements
+        && local_correction::replacements::candidates(request)?.is_empty()
+    {
+        performance.validation_ms = phase_started.elapsed().as_millis() as u64;
+        performance.peak_rss_bytes = peak_rss_bytes();
+        PHASE.store(7, Ordering::Relaxed);
+        if comparison {
+            return Ok(serde_json::json!({
+                "candidate":request.transcript,"accepted":true,"reason":null,
+                "inferenceSkipped":true,"decision":"no-authorized-edits","model_reused":reused,
+                "selection":{"evidenceId":null,"evidence":"","edits":[],"appliedEdits":[],
+                    "promptRevision":local_correction::replacements::REVISION},
+                "performance":performance,"backend":if metal {"metal"} else {"cpu"},
+                "offloaded_layers":layers,"elapsed_ms":started.elapsed().as_millis() as u64
+            }));
+        }
+        return Ok(serde_json::to_value(Report {
+            text: request.transcript.clone(),
+            model: name.to_owned(),
+            backend: if metal { "metal".into() } else { "cpu".into() },
+            offloaded_layers: layers,
+            elapsed_ms: started.elapsed().as_millis() as u64,
+            performance: Some(performance),
+            model_reused: reused,
+        })?);
+    }
     PHASE.store(3, Ordering::Relaxed);
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4)) as i32;
     let params = LlamaContextParams::default()
