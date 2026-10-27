@@ -1,0 +1,60 @@
+{
+  "VoiceInk": {
+    "repository": "Beingpax/VoiceInk",
+    "commit": "78aa19ddb5c8b2f378ac650184491c1f26c230f7",
+    "links": {
+      "prompt": "https://github.com/Beingpax/VoiceInk/blob/78aa19ddb5c8b2f378ac650184491c1f26c230f7/VoiceInk/Core/Enhancement/AIPrompts.swift#L11",
+      "context": "https://github.com/Beingpax/VoiceInk/blob/78aa19ddb5c8b2f378ac650184491c1f26c230f7/VoiceInk/Features/Enhancement/Workflows/AIEnhancementService.swift#L110",
+      "capture": "https://github.com/Beingpax/VoiceInk/blob/78aa19ddb5c8b2f378ac650184491c1f26c230f7/VoiceInk/Infrastructure/SystemIntegration/ScreenCapture/ScreenCaptureService.swift#L210",
+      "snapshot": "https://github.com/Beingpax/VoiceInk/blob/78aa19ddb5c8b2f378ac650184491c1f26c230f7/VoiceInk/Features/Recording/Context/RecordingContextSnapshot.swift#L36",
+      "filter": "https://github.com/Beingpax/VoiceInk/blob/78aa19ddb5c8b2f378ac650184491c1f26c230f7/VoiceInk/Core/Enhancement/AIEnhancementOutputFilter.swift#L4"
+    }
+  },
+  "Amical": {
+    "repository": "amicalhq/amical",
+    "commit": "d5604ef548816d8729b1170696d315a35c00391a",
+    "links": {
+      "whisper": "https://github.com/amicalhq/amical/blob/d5604ef548816d8729b1170696d315a35c00391a/apps/desktop/src/pipeline/providers/transcription/whisper-prompt.ts#L87",
+      "sanitizer": "https://github.com/amicalhq/amical/blob/d5604ef548816d8729b1170696d315a35c00391a/apps/desktop/src/pipeline/providers/transcription/whisper-prompt.ts#L55",
+      "formatter": "https://github.com/amicalhq/amical/blob/d5604ef548816d8729b1170696d315a35c00391a/apps/desktop/src/pipeline/providers/formatting/formatter-prompt.ts#L209",
+      "vad": "https://github.com/amicalhq/amical/blob/d5604ef548816d8729b1170696d315a35c00391a/apps/desktop/src/pipeline/utils/segment-filter.ts#L34"
+    }
+  },
+  "Handy": {
+    "repository": "cjpais/Handy",
+    "commit": "126bed73cb4c3c2afd0b23f3ae4e1ef03981f6c9",
+    "links": {
+      "vocabulary": "https://github.com/cjpais/Handy/blob/126bed73cb4c3c2afd0b23f3ae4e1ef03981f6c9/src-tauri/src/managers/transcription.rs#L1556",
+      "fuzzy": "https://github.com/cjpais/Handy/blob/126bed73cb4c3c2afd0b23f3ae4e1ef03981f6c9/src-tauri/src/audio_toolkit/text.rs#L34",
+      "prompt": "https://github.com/cjpais/Handy/blob/126bed73cb4c3c2afd0b23f3ae4e1ef03981f6c9/src-tauri/src/settings.rs#L840",
+      "afm": "https://github.com/cjpais/Handy/blob/126bed73cb4c3c2afd0b23f3ae4e1ef03981f6c9/src-tauri/src/actions.rs#L250"
+    }
+  },
+  "OpenWhispr": {
+    "repository": "OpenWhispr/openwhispr",
+    "commit": "6408cd9a1081dc4935706fcbba6aaeae1d2cd18d",
+    "links": {
+      "image": "https://github.com/OpenWhispr/openwhispr/blob/6408cd9a1081dc4935706fcbba6aaeae1d2cd18d/src/helpers/dictationRouting.js#L38",
+      "agentOnly": "https://github.com/OpenWhispr/openwhispr/blob/6408cd9a1081dc4935706fcbba6aaeae1d2cd18d/src/helpers/audioManager.js#L3399",
+      "guard": "https://github.com/OpenWhispr/openwhispr/blob/6408cd9a1081dc4935706fcbba6aaeae1d2cd18d/src/utils/cleanupOutput.ts#L19",
+      "echo": "https://github.com/OpenWhispr/openwhispr/blob/6408cd9a1081dc4935706fcbba6aaeae1d2cd18d/src/utils/dictionaryEchoFilter.js#L17",
+      "prompt": "https://github.com/OpenWhispr/openwhispr/blob/6408cd9a1081dc4935706fcbba6aaeae1d2cd18d/src/locales/en/prompts.json#L2"
+    }
+  },
+  "Whispering": {
+    "repository": "EpicenterHQ/epicenter",
+    "commit": "7cc869b4a1295e2566b61e1a4d5967a89f413b9b",
+    "links": {
+      "separate": "https://github.com/EpicenterHQ/epicenter/blob/7cc869b4a1295e2566b61e1a4d5967a89f413b9b/apps/whispering/src/routes/+page.svelte#L86"
+    }
+  },
+  "VoiceInk FT": {
+    "repository": "hourliert/VoiceInk-Qwen3.5-2B-FT",
+    "commit": "95bbf17b228b7ee03aec02d82de2f03a30ae3694",
+    "links": {
+      "evaluation": "https://github.com/hourliert/VoiceInk-Qwen3.5-2B-FT/blob/95bbf17b228b7ee03aec02d82de2f03a30ae3694/docs/BLOG_POST.md#L175",
+      "repetition": "https://github.com/hourliert/VoiceInk-Qwen3.5-2B-FT/blob/95bbf17b228b7ee03aec02d82de2f03a30ae3694/docs/BLOG_POST.md#L250",
+      "pipeline": "https://github.com/hourliert/VoiceInk-Qwen3.5-2B-FT/blob/95bbf17b228b7ee03aec02d82de2f03a30ae3694/src/training/prepare_dataset.py#L48"
+    }
+  }
+}
