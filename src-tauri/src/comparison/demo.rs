@@ -9,6 +9,14 @@ pub(super) struct Session {
     backend: Option<String>,
     pub(super) rows: Vec<Value>,
 }
+impl Session {
+    fn prepare(&mut self, options: &Options) {
+        if options.stage == "audio" || self.backend.as_deref() != Some(options.backend()) {
+            *self = Self::default();
+        }
+        self.backend = Some(options.backend().into());
+    }
+}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Options {
@@ -96,10 +104,7 @@ pub fn start_demo(
             .inner
             .lock()
             .map_err(|_| "状態を確認できません。")?;
-        if options.stage == "audio" || s.demo.backend.as_deref() != Some(options.backend()) {
-            s.demo = Session::default();
-        }
-        s.demo.backend = Some(options.backend().into());
+        s.demo.prepare(&options);
         let asr_needed = s.demo.raw.is_none();
         s.lab = None;
         s.active = Some(epoch);
@@ -392,4 +397,36 @@ fn verify_asset(
         return Err("同梱デモ素材のSHA-256が一致しません。".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn backend_switch_discards_previous_asr_and_results() {
+        let mut options: Options = serde_json::from_value(json!({
+            "stage":"image", "repeats":1, "texts":["", ""]
+        }))
+        .unwrap();
+        assert_eq!(options.backend(), "cpu");
+        let mut session = Session {
+            raw: Some("雨がすごいですね".into()),
+            backend: Some("cpu".into()),
+            rows: vec![json!({"stage":"text"})],
+        };
+        session.prepare(&options);
+        assert!(session.raw.is_some());
+        assert_eq!(session.rows.len(), 1);
+        options.use_gpu = true;
+        session.prepare(&options);
+        assert!(session.raw.is_none());
+        assert!(session.rows.is_empty());
+        assert_eq!(session.backend.as_deref(), Some("metal"));
+        session.raw = Some("雨がすごいですね".into());
+        session.rows.push(json!({"stage":"audio"}));
+        options.use_gpu = false;
+        session.prepare(&options);
+        assert!(session.raw.is_none());
+        assert!(session.rows.is_empty());
+    }
 }
