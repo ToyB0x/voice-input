@@ -276,7 +276,13 @@ impl Comparisons {
                 epoch,
                 Duration::from_secs(1800),
             )?;
-            self.resident_asr(&bin, &server.asr_model, &server.audio, epoch, backend)?;
+            let warm_asr =
+                self.resident_asr(&bin, &server.asr_model, &server.audio, epoch, backend)?;
+            protocol::target(
+                warm_asr["text"]
+                    .as_str()
+                    .ok_or("音声モデルのウォームアップに失敗しました。")?,
+            )?;
             server.preparation_ms = started.elapsed().as_millis() as u64;
             let observations = server.observations.clone();
             let preparation_ms = server.preparation_ms;
