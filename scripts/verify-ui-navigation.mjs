@@ -111,11 +111,13 @@ try {
     if (!el('demo-run-image').disabled) throw Error('Missing demo models did not disable execution');
     window.__ui.demoReady=true; await pause();
     const preferences=JSON.stringify(window.__ui.preferences);
+    if (el('demo-gpu').checked) throw Error('GPU must be opt-in');
     for (const stage of ['audio','text','image']) {
+      el('demo-gpu').checked = stage !== 'audio';
       el('demo-run-'+stage).click();await pause();
       const options=window.__ui.demoOptions;
-      if (options?.stage!==stage || options.repeats!==1 || options.texts[0]!=='今日は台風だ。') throw Error('Wrong demo preset');
-      if (!el('demo-run-audio').disabled || el('demo-cancel').disabled) throw Error('Busy demo controls are unsafe');
+      if (options?.stage!==stage || options.useGpu !== (stage !== 'audio') || options.repeats!==1 || options.texts[0]!=='今日は台風だ。') throw Error('Wrong demo preset');
+      if (!el('demo-gpu').disabled || !el('demo-run-audio').disabled || el('demo-cancel').disabled) throw Error('Busy demo controls are unsafe');
       el('demo-cancel').click();await pause();
     }
     if(JSON.stringify(window.__ui.preferences)!==preferences) throw Error('Demo changed ordinary preferences');

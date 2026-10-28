@@ -6,16 +6,22 @@ use serde_json::{Value, json};
 #[serde(rename_all = "camelCase")]
 pub(super) struct Session {
     raw: Option<String>,
+    backend: Option<String>,
     pub(super) rows: Vec<Value>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Options {
+    #[serde(default)]
+    use_gpu: bool,
     stage: String,
     repeats: usize,
     texts: Vec<String>,
 }
 impl Options {
+    fn backend(&self) -> &'static str {
+        if self.use_gpu { "metal" } else { "cpu" }
+    }
     fn validate(&self) -> Result<(), String> {
         if !["audio", "text", "image"].contains(&self.stage.as_str())
             || !(1..=2).contains(&self.repeats)
@@ -36,7 +42,7 @@ pub fn demo_status(comparisons: tauri::State<'_, Comparisons>) -> Value {
     let s = comparisons.inner.lock().unwrap_or_else(|e| e.into_inner());
     json!({"working":s.status.working,"mode":s.status.mode,"phase":s.status.phase,"message":s.status.message,
         "generation":s.status.generation,"completed":s.status.completed,"total":s.status.total,
-        "raw":s.demo.raw,"rows":s.demo.rows,"backend":"cpu","ocr":false,"asrHint":"",
+        "raw":s.demo.raw,"rows":s.demo.rows,"backend":s.demo.backend,"ocr":false,"asrHint":"",
         "model":serde_json::from_str::<Value>(protocol::MODEL).unwrap(),"networkDenied":false,"sourceRevision":env!("VOICE_INPUT_SOURCE_REVISION")})
 }
 #[tauri::command]
@@ -90,9 +96,10 @@ pub fn start_demo(
             .inner
             .lock()
             .map_err(|_| "状態を確認できません。")?;
-        if options.stage == "audio" {
+        if options.stage == "audio" || s.demo.backend.as_deref() != Some(options.backend()) {
             s.demo = Session::default();
         }
+        s.demo.backend = Some(options.backend().into());
         let asr_needed = s.demo.raw.is_none();
         s.lab = None;
         s.active = Some(epoch);
@@ -181,7 +188,10 @@ impl Comparisons {
             )?;
             self.demo_message(
                 epoch,
-                "同じ同梱音声をWhisper large-v3で認識中（ヒントなし・CPU）…",
+                &format!(
+                    "同じ同梱音声をWhisper large-v3で認識中（ヒントなし・{}）…",
+                    options.backend()
+                ),
             );
             let audio = local_transcription::read_wav(&assets.join("speech.wav"))
                 .map_err(|_| "同梱音声を読み込めません。")?;
@@ -194,7 +204,7 @@ impl Comparisons {
             let out = crate::correction::child_output(
                 Command::new(bin.join("compare-transcription"))
                     .arg(model)
-                    .arg("cpu"),
+                    .arg(options.backend()),
                 packet,
                 &self.epoch,
                 epoch,
@@ -212,7 +222,7 @@ impl Comparisons {
             if raw.len() > 8192 {
                 return Err("音声認識の出力が長すぎます。".into());
             }
-            self.demo_row(epoch,json!({"stage":"audio","label":"音声だけ","raw":raw,"final":raw,"elapsedMs":started.elapsed().as_millis() as u64,"status":"completed","asr":report,"audioSha256":config["audio_sha256"]}));
+            self.demo_row(epoch,json!({"stage":"audio","backend":options.backend(),"label":"音声だけ","raw":raw,"final":raw,"elapsedMs":started.elapsed().as_millis() as u64,"status":"completed","asr":report,"audioSha256":config["audio_sha256"]}));
             // Keep the real output visible even when it cannot enter the bounded follow-up.
             protocol::target(&raw)?;
             {
@@ -251,7 +261,11 @@ impl Comparisons {
                 };
                 self.demo_message(
                     epoch,
-                    &format!("{label}をQwen3-VLで判断中（{}回目・CPU）…", repeat + 1),
+                    &format!(
+                        "{label}をQwen3-VLで判断中（{}回目・{}指定）…",
+                        repeat + 1,
+                        options.backend()
+                    ),
                 );
                 let prompt = protocol::prompt(
                     &raw,
@@ -282,12 +296,13 @@ impl Comparisons {
                     command
                         .arg("--mmproj")
                         .arg(projector)
-                        .args(["--image-max-tokens", "4096", "--no-mmproj-offload"])
+                        .args(["--image-max-tokens", "4096"])
                         .arg("--image")
                         .arg(assets.join(name));
                 } else {
                     command.args(["-cnv", "-st", "--simple-io", "--no-display-prompt"]);
                 }
+                command.args(protocol::backend_args(options.use_gpu, image));
                 command
                     .args([
                         "-c",
@@ -301,8 +316,6 @@ impl Comparisons {
                         "--threads",
                         "4",
                         "--no-warmup",
-                        "-ngl",
-                        "0",
                         "--json-schema",
                     ])
                     .arg(protocol::schema(image).to_string())
@@ -316,7 +329,7 @@ impl Comparisons {
                     epoch,
                     Duration::from_secs(1800),
                 );
-                let mut row = json!({"stage":options.stage,"label":label,"repeat":repeat,"raw":raw,"final":raw,"prompt":prompt,"context":if image {""} else {&options.texts[index]},"status":"error","backend":"cpu","ocr":false});
+                let mut row = json!({"stage":options.stage,"label":label,"repeat":repeat,"raw":raw,"final":raw,"prompt":prompt,"context":if image {""} else {&options.texts[index]},"status":"error","backend":options.backend(),"ocr":false});
                 let parsed = (|| -> Result<Value, String> {
                     let out = result?;
                     let output = String::from_utf8(out.stdout)
