@@ -105,6 +105,24 @@ try {
   for (const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});
   assert.equal(await evaluate(`document.getElementById('tab-demo').getAttribute('aria-selected')`),'true');
   result.pointerAndKeyboardEvents = true;
+  result.demo = await evaluate(`(async () => {
+    const el=id=>document.getElementById(id), pause=()=>new Promise(r=>setTimeout(r,1700));
+    el('tab-demo').click();
+    if (!el('demo-run-image').disabled) throw Error('Missing demo models did not disable execution');
+    window.__ui.demoReady=true; await pause();
+    const preferences=JSON.stringify(window.__ui.preferences);
+    for (const stage of ['audio','text','image']) {
+      el('demo-run-'+stage).click();await pause();
+      const options=window.__ui.demoOptions;
+      if (options?.stage!==stage || options.repeats!==1 || options.texts[0]!=='今日は台風だ。') throw Error('Wrong demo preset');
+      if (!el('demo-run-audio').disabled || el('demo-cancel').disabled) throw Error('Busy demo controls are unsafe');
+      el('demo-cancel').click();await pause();
+    }
+    if(JSON.stringify(window.__ui.preferences)!==preferences) throw Error('Demo changed ordinary preferences');
+    const audio=el('demo-audio');audio.load();await new Promise((resolve,reject)=>{audio.onloadedmetadata=resolve;audio.onerror=()=>reject(Error('Bundled demo audio failed'));});
+    if(!(audio.duration>1 && audio.duration<3)) throw Error('Wrong demo audio');
+    return {presets:true,missingModels:true,busyCancellation:true,settingsPreserved:true,audioDuration:audio.duration,nativeBackend:'synthetic'};
+  })()`);
   await evaluate(`window.__ui.snapshot.phase='idle'; new Promise(r=>setTimeout(r,200));`);
   for (const [name, width, height, color, view] of [['input-light',760,940,'light','input'],['models-light',760,940,'light','models'],['settings-dark',760,940,'dark','settings'],['diagnostics-light',760,940,'light','diagnostics'],['input-narrow',360,620,'light','input'],['demo-light',760,940,'light','demo'],['demo-narrow',360,620,'light','demo']]) {
     await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });

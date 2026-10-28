@@ -36,7 +36,7 @@ pub fn demo_status(comparisons: tauri::State<'_, Comparisons>) -> Value {
     json!({"working":s.status.working,"mode":s.status.mode,"phase":s.status.phase,"message":s.status.message,
         "generation":s.status.generation,"completed":s.status.completed,"total":s.status.total,
         "raw":s.demo.raw,"rows":s.demo.rows,"backend":"cpu","ocr":false,"asrHint":"",
-        "model":"Qwen3-VL-8B-Instruct Q4_K_M","sourceRevision":env!("VOICE_INPUT_SOURCE_REVISION")})
+        "model":serde_json::from_str::<Value>(protocol::MODEL).unwrap(),"networkDenied":false,"sourceRevision":env!("VOICE_INPUT_SOURCE_REVISION")})
 }
 #[tauri::command]
 pub fn start_demo(

@@ -120,7 +120,9 @@ jobs:
           cargo fmt --manifest-path crates/local-models/Cargo.toml -- --check
           cargo clippy --manifest-path crates/local-models/Cargo.toml --locked --all-targets -- -D warnings
           sandbox-exec -p '(version 1) (allow default) (deny network*)' \
-            cargo test --manifest-path crates/local-models/Cargo.toml --locked --offline
+            cargo test --manifest-path crates/local-models/Cargo.toml --all-targets --locked --offline
+          cargo build --manifest-path crates/local-models/Cargo.toml --example demo-protocol --locked --offline
+          python3 scripts/verify-demo-protocol.py --binary crates/local-models/target/debug/examples/demo-protocol
       - name: Test comparison planning and reference metrics
         run: |
           cargo fmt --manifest-path crates/local-comparison/Cargo.toml -- --check

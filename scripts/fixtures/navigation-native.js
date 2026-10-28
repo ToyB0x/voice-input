@@ -19,7 +19,9 @@ window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
   if (command === 'insertion_status') return { enabled: false, trusted: false };
   if (command === 'context_status') return { message: '認識補助: 無効', ocrMessage: 'OCR: 無効', screenPermitted: false };
   if (command === 'correction_status') return { working: false, checkingFoundation: false, foundation: null, text: null, error: null, elapsedMs: 0 };
-  if (command === 'demo_status') return {working:false,mode:'demo',phase:'idle',message:'',raw:null,rows:[],completed:0,total:0};
+  if (command === 'demo_status') return s.demo ?? {working:false,mode:'demo',phase:'idle',message:'',raw:null,rows:[],completed:0,total:0};
+  if (command === 'start_demo') { s.demoOptions=structuredClone(args.options); s.demo={working:true,mode:'demo',phase:'running',message:'Synthetic inference in progress',raw:'雨がすごいですね',rows:[],completed:1,total:3}; return; }
+  if (command === 'cancel_comparison') { s.demo={working:false,mode:'demo',phase:'cancelled',message:'Synthetic cancelled',raw:null,rows:[],completed:0,total:0}; return; }
   if (command === 'context_lab_status') return {runId:null,working:false,phase:'idle',message:'',planned:0,completed:0,rows:[],next:0,more:false,parts:0,foundation:null};
   if (command === 'comparison_status') return { generation: 1, rows: [], next: 0, armed: false, working: false, completed: 0, total: 0, phase: 'idle', message: '', mode: 'recorded', audioMs: 0, axCharacters: 0, ocrCharacters: 0 };
   if (command === 'comparison_plan') return 1;
@@ -27,7 +29,7 @@ window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
   if (command === 'prepare_models') { s.prepared={generation:1,phase:'ready',prepared:args.ids.map(id=>({id,path:'/synthetic/'+id})),message:'検証完了',total:0,received:0,index:1,count:args.ids.length}; return structuredClone(s.prepared); }
   if (command === 'apply_usage_preset') { s.preferences={...args.preferences,usagePreset:args.id,modelPath:'/synthetic/large-v3-turbo',backend:'metal',autoCorrection:false,recognitionContext:false,ocrContext:false,correctionContext:false,correctionInstruction:''};return {preferences:structuredClone(s.preferences),shortcutRegistered:true,error:null}; }
   if (command === 'load_model') { s.snapshot={...s.snapshot,phase:'idle',working:false,modelReady:true,backend:args.backend,modelName:'large-v3-turbo',modelBytes:1624555275};return structuredClone(s.snapshot); }
-  if (command === 'model_catalog') return [{id:'large-v3-turbo',kind:'transcription',name:'Whisper large-v3-turbo',bytes:1624555275,cached:true},{id:'qwen3-4b',kind:'correction',name:'Qwen3 4B',bytes:2497280256,cached:false},{ id: 'base', kind: 'transcription', name: 'Whisper base', bytes: 148000000, license: 'MIT', memoryHint: '', cached: true }];
+  if (command === 'model_catalog') return [...['large-v3','demo-vlm','demo-projector'].map(id=>({id,kind:id==='large-v3'?'transcription':'demo',name:id,bytes:100,cached:!!s.demoReady})),{id:'large-v3-turbo',kind:'transcription',name:'Whisper large-v3-turbo',bytes:1624555275,cached:true},{id:'qwen3-4b',kind:'correction',name:'Qwen3 4B',bytes:2497280256,cached:false},{ id: 'base', kind: 'transcription', name: 'Whisper base', bytes: 148000000, license: 'MIT', memoryHint: '', cached: true }];
   if (command === 'model_preparation_status') return s.prepared ?? { generation: 0, phase: 'idle', prepared: [], message: '', total: 0, received: 0 };
   if (command === 'update_status') return { configured: false, working: false, installing: false, currentVersion: '0.0.1', availableVersion: null, phase: 'idle', message: '更新署名キー未設定', downloaded: 0, total: null };
   throw new Error('Unexpected native command: ' + command);

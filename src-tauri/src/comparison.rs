@@ -987,6 +987,7 @@ pub fn comparison_models(app: tauri::AppHandle) -> Result<Vec<Choice>, String> {
         .state::<local_models::Manager>()
         .models()
         .into_iter()
+        .filter(|m| m.kind != "demo")
         .map(|m| Choice {
             id: m.id,
             name: m.name,
