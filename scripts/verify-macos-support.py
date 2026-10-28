@@ -33,7 +33,7 @@ def main():
                 raise ValueError('Bundle minimum OS differs from tauri.conf.json')
             paths = [Path('MacOS') / info['CFBundleExecutable']]
             paths += [Path('Resources/bin') / name for name in
-                      ['local-correction', 'apple-foundation-correction', 'compare-transcription', 'context-lab-native', 'llama-mtmd-cli', 'llama-completion']]
+                      ['local-correction', 'apple-foundation-correction', 'compare-transcription', 'context-lab-native', 'llama-mtmd-cli', 'llama-completion', 'llama-server']]
             for relative in paths:
                 output = subprocess.check_output(['xcrun', 'vtool', '-show-build',
                                                   str(args.app / 'Contents' / relative)], text=True)

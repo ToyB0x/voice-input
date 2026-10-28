@@ -5,33 +5,42 @@ use serde_json::{Value, json};
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Session {
-    raw: Option<String>,
+    pub(super) raw: Option<String>,
+    resident: bool,
     backend: Option<String>,
     pub(super) rows: Vec<Value>,
 }
 impl Session {
     fn prepare(&mut self, options: &Options) {
-        if options.stage == "audio" || self.backend.as_deref() != Some(options.backend()) {
+        if options.stage == "audio"
+            || options.stage == "prepare"
+            || self.resident != options.resident
+            || self.backend.as_deref() != Some(options.backend())
+        {
             *self = Self::default();
         }
         self.backend = Some(options.backend().into());
+        self.resident = options.resident;
     }
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Options {
     #[serde(default)]
-    use_gpu: bool,
-    stage: String,
-    repeats: usize,
-    texts: Vec<String>,
+    pub(super) use_gpu: bool,
+    #[serde(default)]
+    pub(super) resident: bool,
+    pub(super) stage: String,
+    pub(super) repeats: usize,
+    pub(super) texts: Vec<String>,
 }
 impl Options {
-    fn backend(&self) -> &'static str {
+    pub(super) fn backend(&self) -> &'static str {
         if self.use_gpu { "metal" } else { "cpu" }
     }
     fn validate(&self) -> Result<(), String> {
-        if !["audio", "text", "image"].contains(&self.stage.as_str())
+        if !["audio", "text", "image", "prepare", "release"].contains(&self.stage.as_str())
+            || (["prepare", "release"].contains(&self.stage.as_str()) && !self.resident)
             || !(1..=2).contains(&self.repeats)
             || self.texts.len() != 2
             || self
@@ -50,7 +59,7 @@ pub fn demo_status(comparisons: tauri::State<'_, Comparisons>) -> Value {
     let s = comparisons.inner.lock().unwrap_or_else(|e| e.into_inner());
     json!({"working":s.status.working,"mode":s.status.mode,"phase":s.status.phase,"message":s.status.message,
         "generation":s.status.generation,"completed":s.status.completed,"total":s.status.total,
-        "raw":s.demo.raw,"rows":s.demo.rows,"backend":s.demo.backend,"ocr":false,"asrHint":"",
+        "residentReadyCpu":comparisons.resident.ready("cpu"),"residentReadyMetal":comparisons.resident.ready("metal"),"raw":s.demo.raw,"rows":s.demo.rows,"backend":s.demo.backend,"ocr":false,"asrHint":"",
         "model":serde_json::from_str::<Value>(protocol::MODEL).unwrap(),"networkDenied":false,"sourceRevision":env!("VOICE_INPUT_SOURCE_REVISION")})
 }
 #[tauri::command]
@@ -67,6 +76,7 @@ pub fn clear_demo(
     if s.status.working {
         return Err("実行中の処理の終了をお待ちください。".into());
     }
+    comparisons.resident.release();
     s.demo = Session::default();
     if s.status.mode == "demo" {
         s.status.phase = "idle".into();
@@ -114,12 +124,20 @@ pub fn start_demo(
             working: true,
             phase: "preparing".into(),
             message: "デモ用モデルを検証しています。".into(),
-            total: usize::from(asr_needed)
-                + if options.stage == "audio" {
-                    0
-                } else {
-                    2 * options.repeats
-                },
+            total: if options.resident {
+                match options.stage.as_str() {
+                    "prepare" | "audio" => 1,
+                    "release" => 0,
+                    _ => 2 * options.repeats,
+                }
+            } else {
+                usize::from(asr_needed)
+                    + if options.stage == "audio" {
+                        0
+                    } else {
+                        2 * options.repeats
+                    }
+            },
             ..Status::default()
         };
         // Previous stages remain visible, but stale results for this stage do not.
@@ -128,17 +146,47 @@ pub fn start_demo(
     let worker_app = app.clone();
     let owner = comparisons.inner().clone();
     let recorder = recorder.inner().clone();
+    let preparation = options.resident && options.stage == "prepare";
+    let release = options.resident && options.stage == "release";
     *handle = Some(std::thread::spawn(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            owner.run_demo(&worker_app, &recorder, options, epoch)
+            let result = if options.resident {
+                if options.stage == "release" {
+                    owner.resident.release();
+                    Ok(())
+                } else {
+                    owner.run_resident_demo(&worker_app, &recorder, &options, epoch)
+                }
+            } else {
+                owner.resident.release();
+                owner.run_demo(&worker_app, &recorder, options, epoch)
+            };
+            if result.is_err() {
+                owner.resident.release();
+            }
+            result
         }))
         .unwrap_or_else(|_| Err("デモの実行が中断されました。".into()));
+        if result.is_err() {
+            owner.resident.release();
+        }
+        let success = result.is_ok();
         owner.finish(epoch, result.err());
+        if success && (preparation || release) && owner.current(epoch) {
+            if let Ok(mut s) = owner.inner.lock() {
+                s.status.message = if preparation {
+                    "常駐・画像の準備が完了しました。①〜③を実行できます。"
+                } else {
+                    "常駐モデルを解放しました。"
+                }
+                .into();
+            }
+        }
     }));
     Ok(())
 }
 impl Comparisons {
-    fn demo_message(&self, epoch: u64, message: &str) {
+    pub(super) fn demo_message(&self, epoch: u64, message: &str) {
         if let Ok(mut s) = self.inner.lock()
             && self.current(epoch)
             && s.active == Some(epoch)
@@ -147,7 +195,7 @@ impl Comparisons {
             s.status.phase = "running".into();
         }
     }
-    fn demo_row(&self, epoch: u64, row: Value) {
+    pub(super) fn demo_row(&self, epoch: u64, row: Value) {
         if let Ok(mut s) = self.inner.lock()
             && self.current(epoch)
             && s.active == Some(epoch)
@@ -373,7 +421,7 @@ impl Comparisons {
         Ok(())
     }
 }
-fn verify_asset(
+pub(super) fn verify_asset(
     path: &Path,
     expected: &str,
     epoch: &AtomicU64,
@@ -410,6 +458,7 @@ mod tests {
         .unwrap();
         assert_eq!(options.backend(), "cpu");
         let mut session = Session {
+            resident: false,
             raw: Some("雨がすごいですね".into()),
             backend: Some("cpu".into()),
             rows: vec![json!({"stage":"text"})],

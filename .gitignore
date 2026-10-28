@@ -34,3 +34,5 @@ src-tauri/resources/llama-completion
 src-tauri/resources/DEMO-NOTICES.txt
 
 /node_modules
+
+/src-tauri/resources/llama-server

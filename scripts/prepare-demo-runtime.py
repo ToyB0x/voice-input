@@ -17,10 +17,10 @@ def main():
     if datetime.datetime.now(datetime.timezone.utc)-date<datetime.timedelta(hours=48):raise ValueError('Runtime requires 48-hour cooling')
     minimum=json.loads((ROOT/'src-tauri/tauri.conf.json').read_text())['bundle']['macOS']['minimumSystemVersion']
     subprocess.run(['cmake','-S',str(source),'-B',str(build),'-DCMAKE_BUILD_TYPE=Release',f'-DCMAKE_OSX_DEPLOYMENT_TARGET={minimum}',f'-DCMAKE_OSX_ARCHITECTURES={platform.machine()}',
-        '-DBUILD_SHARED_LIBS=OFF','-DGGML_OPENMP=OFF','-DGGML_NATIVE=OFF','-DGGML_CUDA=OFF','-DGGML_METAL=ON','-DGGML_METAL_EMBED_LIBRARY=ON','-DLLAMA_OPENSSL=OFF','-DLLAMA_BUILD_TESTS=OFF','-DLLAMA_BUILD_SERVER=OFF','-DMTMD_VIDEO=OFF'],check=True)
-    subprocess.run(['cmake','--build',str(build),'--target','llama-mtmd-cli','llama-completion','-j','4'],check=True)
+        '-DBUILD_SHARED_LIBS=OFF','-DGGML_OPENMP=OFF','-DGGML_NATIVE=OFF','-DGGML_CUDA=OFF','-DGGML_METAL=ON','-DGGML_METAL_EMBED_LIBRARY=ON','-DLLAMA_OPENSSL=OFF','-DLLAMA_BUILD_TESTS=OFF','-DLLAMA_BUILD_SERVER=ON','-DLLAMA_BUILD_UI=OFF','-DLLAMA_USE_PREBUILT_UI=OFF','-DMTMD_VIDEO=OFF'],check=True)
+    subprocess.run(['cmake','--build',str(build),'--target','llama-mtmd-cli','llama-completion','llama-server','-j','4'],check=True)
     dest=ROOT/'src-tauri/resources';dest.mkdir(exist_ok=True)
-    for name in ['llama-mtmd-cli','llama-completion']:
+    for name in ['llama-mtmd-cli','llama-completion','llama-server']:
         target=dest/name;shutil.copy2(build/'bin'/name,target)
         subprocess.run(['codesign','--force','--sign','-',str(target)],check=True)
         # Refuse non-system dylib dependencies that would break installed apps.

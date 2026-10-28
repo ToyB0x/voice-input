@@ -102,6 +102,11 @@
           <progress id="demo-progress" hidden aria-label="デモモデルのダウンロード進捗"></progress>
           <label><input id="demo-gpu" type="checkbox"> MacのGPU（Metal）を使う</label>
           <p class="hint">オフはCPU。オンは音声・文章・画像をGPUで処理します。切り替えて実行すると以前の結果を消し、音声認識からやり直します。結果や速度はCPUと異なる場合があります。</p>
+          <label><input id="demo-resident" type="checkbox"> 常駐アプリのデモ（準備後の3秒を目標）</label>
+          <p class="hint">画像の観察は先に準備します。本番は新たな音声認識と表記選択を計測。音声認識が3秒を超える場合もあり、期限内の完了を保証する設定ではありません。</p>
+          <button id="demo-warmup">常駐・画像を事前準備</button>
+          <button id="demo-release">常駐モデルを解放</button>
+          <p id="demo-resident-status" role="status"></p>
           <label for="demo-repeats">文章・画像の反復回数</label><select id="demo-repeats"><option value="1">1回（発表向け）</option><option value="2">2回（再現性確認・2回目は順序を反転）</option></select>
           <div class="demo-stage"><h3>① 音声だけ</h3><p>文章も画像も渡さず、そのまま文字起こしします。再実行すると②③の結果もリセットします。</p><button id="demo-run-audio" disabled>① 音声だけで実行</button></div>
           <div class="demo-stage"><h3>② 文章を添える</h3>

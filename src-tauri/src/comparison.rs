@@ -14,6 +14,7 @@ use std::{
 use tauri::Manager;
 pub mod context_lab;
 pub mod demo;
+mod demo_resident;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,6 +115,7 @@ struct Inner {
 }
 #[derive(Clone)]
 pub struct Comparisons {
+    resident: Arc<demo_resident::Runtime>,
     inner: Arc<Mutex<Inner>>,
     epoch: Arc<AtomicU64>,
     armed: Arc<AtomicBool>,
@@ -123,6 +125,7 @@ pub struct Comparisons {
 impl Comparisons {
     pub fn new() -> Self {
         Self {
+            resident: Arc::new(demo_resident::Runtime::default()),
             inner: Arc::new(Mutex::new(Inner {
                 status: Status::default(),
                 active: None,
@@ -147,6 +150,7 @@ impl Comparisons {
         self.armed.load(Ordering::Acquire)
     }
     pub fn cancel(&self, clear: bool) {
+        self.resident.release();
         self.epoch.fetch_add(1, Ordering::AcqRel);
         if let Ok(mut state) = self.inner.lock() {
             state.status.phase = if state.status.working {
@@ -178,6 +182,7 @@ impl Comparisons {
         if let Some(handle) = worker.take() {
             let _ = handle.join();
         }
+        self.resident.release();
     }
     fn status(&self, generation: u64, after: usize) -> Status {
         let state = self.inner.lock().unwrap_or_else(|e| e.into_inner());

@@ -43,10 +43,17 @@ impl Drop for Resident {
 }
 #[derive(Default)]
 pub(crate) struct Pool {
+    persistent: bool,
     resident: Mutex<Option<Resident>>,
     generation: AtomicU64,
 }
 impl Pool {
+    pub fn persistent() -> Self {
+        Self {
+            persistent: true,
+            ..Self::default()
+        }
+    }
     pub fn release(&self) {
         self.generation.fetch_add(1, Ordering::AcqRel);
         self.expire(Duration::ZERO);
@@ -89,7 +96,9 @@ impl Pool {
             return Err(FAILED.into());
         }
         if slot.as_ref().is_some_and(|r| {
-            r.key != key || r.generation != generation || r.last_used.elapsed() >= IDLE
+            r.key != key
+                || r.generation != generation
+                || (!self.persistent && r.last_used.elapsed() >= IDLE)
         }) {
             slot.take();
         }
