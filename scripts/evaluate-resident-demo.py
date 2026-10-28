@@ -17,7 +17,7 @@ def main():
         if hashlib.file_digest(path.open('rb'),'sha256').hexdigest()!=entry['sha256']:raise ValueError('Model checksum mismatch')
         paths[entry['role']]=path
     def protocol(raw='雨がすごいですね',text='手がかりはありません。',**extra):
-        return json.loads(subprocess.check_output([a.protocol],input=json.dumps(dict(raw=raw,text=text,**extra),ensure_ascii=False).encode()))
+        return json.loads(subprocess.check_output([a.protocol],input=json.dumps(dict(raw=raw,text=text,resident=True,**extra),ensure_ascii=False).encode()))
     contract=protocol()
     token=secrets.token_hex(32)
     with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
@@ -67,7 +67,9 @@ def main():
                     response=request('/v1/chat/completions',contract['residentBody'])
                     elapsed=round((time.monotonic()-start)*1000)
                     output=response['choices'][0]['message']['content']
+                    report['pending_output']=output;save()
                     parsed=protocol(text=context,output=output)
+                    report.pop('pending_output',None)
                     expected=case.get('expected',case.get('target'))
                     report['rows'].append(dict(stage=stage,id=case['id'],repeat=repeat,
                         context=context,prompt=contract['prompt'],output=output,final=parsed['final'],

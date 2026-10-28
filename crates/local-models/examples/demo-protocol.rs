@@ -19,7 +19,12 @@ fn main() {
     out["residentBody"] =
         demo_protocol::resident_body(out["prompt"].clone(), demo_protocol::schema(false));
     if let Some(output) = v["output"].as_str() {
-        let choice = demo_protocol::parse(output, image).unwrap();
+        let choice = if v["resident"] == true {
+            demo_protocol::parse_resident(output)
+        } else {
+            demo_protocol::parse(output, image)
+        }
+        .unwrap();
         out["final"] = demo_protocol::apply(raw, choice["spelling"].as_str().unwrap())
             .unwrap()
             .into();

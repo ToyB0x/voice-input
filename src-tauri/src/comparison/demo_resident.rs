@@ -359,7 +359,7 @@ impl Comparisons {
                 let mut final_text = raw.clone();
                 let mut status = "error";
                 let mut reason = String::new();
-                let result = result.and_then(|value| protocol::parse(&value.to_string(), false));
+                let result = result.and_then(|value| protocol::parse_resident(&value.to_string()));
                 match result {
                     Ok(value) => {
                         let parsed = value;

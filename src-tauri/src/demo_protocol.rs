@@ -67,6 +67,13 @@ pub fn parse(raw: &str, image: bool) -> Result<Value, String> {
             .ok_or_else(invalid)?
             .trim()
     };
+    parse_json(body, image)
+}
+pub fn parse_resident(body: &str) -> Result<Value, String> {
+    parse_json(body, false)
+}
+fn parse_json(body: &str, image: bool) -> Result<Value, String> {
+    let invalid = || "モデルの出力形式が不正です。元の認識結果を保持します。".to_owned();
     let value: Value = serde_json::from_str(body).map_err(|_| invalid())?;
     let object = value.as_object().ok_or_else(invalid)?;
     if object.len() != if image { 2 } else { 1 }
@@ -94,6 +101,21 @@ pub fn apply(raw: &str, spelling: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn resident_accepts_json_without_cli_terminator() {
+        assert_eq!(
+            parse_resident(r#"{"spelling":"飴"}"#).unwrap()["spelling"],
+            "飴"
+        );
+        for invalid in [
+            r#"{"spelling":"飴","extra":1}"#,
+            r#"{"spelling":"晴れ"}"#,
+            r#"{"spelling":"飴"} [end of text]"#,
+            "飴",
+        ] {
+            assert!(parse_resident(invalid).is_err());
+        }
+    }
     #[test]
     fn changes_only_target_and_abstains() {
         assert_eq!(
