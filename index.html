@@ -93,13 +93,15 @@
           <p class="hint">同梱の合成音声を使用します。マイク・画面収録の許可は不要です。音のアクセントではなく、文脈による表記の変化を楽しむ小さな実験です。</p>
           <details><summary>自動で選ぶデモ設定</summary>
             <p>Whisper large-v3／認識ヒントなし → 「あめ」の部分だけ読みへ変換 → Qwen3-VL 8Bで雨・飴・不明から選択。画像ではモデル自身が見えている物を短く記述してから選びます。</p>
-            <p>CPU・温度0・固定シードで実行します。初回は時間がかかります。OCR・Accessibility・AFM・自動入力は使用しません。通常の設定は変更しません。</p>
+            <p>温度0・固定シードで実行します。初回は時間がかかります。OCR・Accessibility・AFM・自動入力は使用しません。通常の設定は変更しません。</p>
           </details>
           <h3>初回の準備</h3>
           <p>3段階すべてに約9.3 GBのモデルを使います。16 GB以上のメモリを推奨します。モデル取得時だけインターネット接続が必要です。</p>
           <div class="controls"><button id="demo-prepare">デモ用モデルをまとめて準備</button><button id="demo-prepare-audio">音声モデルだけ準備（約3.1 GB）</button><button id="demo-cancel-prepare" disabled>準備を中止</button></div>
           <p id="demo-model-status" role="status"></p>
           <progress id="demo-progress" hidden aria-label="デモモデルのダウンロード進捗"></progress>
+          <label><input id="demo-gpu" type="checkbox"> MacのGPU（Metal）を使う</label>
+          <p class="hint">オフはCPU。オンは音声・文章・画像をGPUで処理します。切り替えて実行すると以前の結果を消し、音声認識からやり直します。結果や速度はCPUと異なる場合があります。</p>
           <label for="demo-repeats">文章・画像の反復回数</label><select id="demo-repeats"><option value="1">1回（発表向け）</option><option value="2">2回（再現性確認・2回目は順序を反転）</option></select>
           <div class="demo-stage"><h3>① 音声だけ</h3><p>文章も画像も渡さず、そのまま文字起こしします。再実行すると②③の結果もリセットします。</p><button id="demo-run-audio" disabled>① 音声だけで実行</button></div>
           <div class="demo-stage"><h3>② 文章を添える</h3>

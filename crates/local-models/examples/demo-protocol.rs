@@ -10,6 +10,10 @@ fn main() {
     let text = v["text"].as_str();
     let image = text.is_none();
     let mut out = serde_json::json!({"prompt":demo_protocol::prompt(raw,text).unwrap(),"schema":demo_protocol::schema(image),"config":demo_protocol::config(),"model":serde_json::from_str::<serde_json::Value>(demo_protocol::MODEL).unwrap()});
+    out["backendArgs"] = serde_json::json!(demo_protocol::backend_args(
+        v["useGpu"].as_bool().unwrap_or(false),
+        image
+    ));
     if let Some(output) = v["output"].as_str() {
         let choice = demo_protocol::parse(output, image).unwrap();
         out["final"] = demo_protocol::apply(raw, choice["spelling"].as_str().unwrap())
