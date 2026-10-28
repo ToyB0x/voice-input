@@ -469,7 +469,7 @@ mod tests {
     }
     #[test]
     fn successful_run_cancelled_with_server_locked_reaps_after_guard_drops() {
-        let owner = Comparisons::default();
+        let owner = Comparisons::new();
         let epoch = owner.epoch.load(Ordering::Acquire);
         let child = Command::new("/bin/sleep").arg("60").spawn().unwrap();
         let pid = child.id();
