@@ -9,6 +9,7 @@ def main():
     p=argparse.ArgumentParser()
     for key in ['binary','models','protocol','output']:p.add_argument('--'+key,type=Path,required=True)
     p.add_argument('--asr',type=Path)
+    p.add_argument('--observations',type=Path,help='Replay earlier measured observations for a targeted text regression; does not test vision')
     a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
     config=json.loads((ROOT/'evaluation/ame-lt/scenarios.json').read_text())
     spec=json.loads((ROOT/'evaluation/local-vlm/model.json').read_text())
@@ -49,7 +50,12 @@ def main():
                 if child.poll() is not None or time.monotonic()>deadline:raise RuntimeError('Server did not start')
                 try:request('/health');break
                 except (urllib.error.URLError,TimeoutError):time.sleep(.2)
-            for case in config['images']:
+            if a.observations:
+                report['observations']=json.loads(a.observations.read_text())['observations']
+                report['observation_replay_sha256']=hashlib.file_digest(a.observations.open('rb'),'sha256').hexdigest()
+                assert len(report['observations'])==2
+                save()
+            for case in ([] if a.observations else config['images']):
                 data=(ROOT/case['file']).read_bytes()
                 if hashlib.sha256(data).hexdigest()!=case['sha256']:raise ValueError('Image checksum mismatch')
                 body=contract['residentBody'].copy()
@@ -64,6 +70,9 @@ def main():
             request('/v1/chat/completions',protocol()['residentBody'])
             report['preparation_ms']=round((time.monotonic()-start)*1000)
             cases=[('text',c,c['text']) for c in config['texts']]+[('image',c,o) for c,o in zip(config['images'],report['observations'])]
+            regression=json.loads((ROOT/'evaluation/ame-lt/resident-observation-regression.json').read_text())
+            report['observation_regression']=regression
+            cases += [('observed-text-regression',dict(c,id='recorded-'+c['id']),o) for c,o in zip(config['images'],regression['observations'])]
             for repeat in range(2):
                 current_raw=asr["rows"][repeat]["result"]["text"] if asr else "雨がすごいですね"
                 for stage,case,context in (cases if repeat==0 else reversed(cases)):
@@ -77,7 +86,7 @@ def main():
                     report.pop('pending_output',None)
                     expected=case.get('expected',case.get('target'))
                     report['rows'].append(dict(stage=stage,id=case['id'],repeat=repeat,
-                        raw=current_raw,context=context,prompt=contract['prompt'],output=output,final=parsed['final'],
+                        raw=current_raw,context=context,prompt=contract['residentPrompt'],output=output,final=parsed['final'],
                         expected=expected,passed=parsed['final'].rstrip('。')==expected+'がすごいですね',elapsed_ms=elapsed))
                     save()
             report['complete']=True;report['quality_pass']=all(r['passed'] for r in report['rows']);save()

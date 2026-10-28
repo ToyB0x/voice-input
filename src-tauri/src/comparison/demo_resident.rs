@@ -269,7 +269,7 @@ impl Comparisons {
                 server.observations.push(observation.into());
             }
             // Warm text inference with neutral content; do not cache a demo answer.
-            let warm = protocol::prompt("雨がすごいですね", Some("手がかりはありません。"))?;
+            let warm = protocol::resident_prompt("雨がすごいですね", "手がかりはありません。")?;
             server.request(
                 protocol::resident_body(json!(warm), protocol::schema(false)),
                 &self.epoch,
@@ -348,7 +348,7 @@ impl Comparisons {
                 } else {
                     options.texts[index].clone()
                 };
-                let prompt = protocol::prompt(&raw, Some(&context))?;
+                let prompt = protocol::resident_prompt(&raw, &context)?;
                 let started = Instant::now();
                 let result = if asr_ms >= 3000 {
                     Err("音声認識で3秒の目標に達したため原文を保持しました。".into())

@@ -1,0 +1,9 @@
+{
+  "source_run": "https://github.com/ToyB0x/voice-input/actions/runs/40673640590",
+  "source_revision": "5b161bbffa55678eee8b33bd627a2e3f295332ff",
+  "description": "Actual generated observations from built-in synthetic images. Candy wording previously caused a wrong rain choice; not authored image captions.",
+  "observations": [
+    "雨が降っている。屋根から水が流れ落ち、道路は水たまりで反射している。緑の木々と伝統的な家々が並んでいる。遠くには山が見える。電柱と電線が空を横切っている。",
+    "伝統的な日本の建物の屋上で、複数の人物がカラフルなキャンディーを空に向かって投げている。下の観客は手を上げてキャンディーを捕まえようとしている。"
+  ]
+}
