@@ -38,6 +38,7 @@ async function setup() {
   const modules = {
     '@tauri-apps/api/core': api,
     './usage-presets': stub({ setupUsagePresets: (_locked, apply) => { applyUsage=apply; return { refreshControls() {} }; } }),
+    './demo': stub({ setupDemo() {} }),
     './context-lab': stub({ setupContextLab() {} }),
     './comparison': stub({ setupComparison() {}, comparisonWorking: () => false }),
     './updates': stub({ setupUpdates() {}, updateInstalling: () => false }),

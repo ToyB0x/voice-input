@@ -66,3 +66,6 @@ try:
 finally:
     aiff.unlink(missing_ok=True)
 subprocess.run([str(lab),'--reading-self-test'],check=True,timeout=15)
+
+# Pinned CPU VLM for the explicit LT demo; weights are prepared in the app.
+subprocess.run(["python3", str(ROOT/"scripts/prepare-demo-runtime.py")],check=True,env=build_env)

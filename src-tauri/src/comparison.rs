@@ -13,6 +13,7 @@ use std::{
 };
 use tauri::Manager;
 pub mod context_lab;
+pub mod demo;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,6 +110,7 @@ struct Inner {
     status: Status,
     active: Option<u64>,
     lab: Option<context_lab::Session>,
+    demo: demo::Session,
 }
 #[derive(Clone)]
 pub struct Comparisons {
@@ -125,6 +127,7 @@ impl Comparisons {
                 status: Status::default(),
                 active: None,
                 lab: None,
+                demo: demo::Session::default(),
             })),
             epoch: Arc::new(AtomicU64::new(0)),
             armed: Arc::new(AtomicBool::new(false)),
@@ -138,7 +141,7 @@ impl Comparisons {
     pub fn has_results(&self) -> bool {
         self.inner
             .lock()
-            .is_ok_and(|s| !s.status.rows.is_empty() || s.lab.is_some())
+            .is_ok_and(|s| !s.status.rows.is_empty() || s.lab.is_some() || !s.demo.rows.is_empty())
     }
     pub fn armed(&self) -> bool {
         self.armed.load(Ordering::Acquire)
@@ -156,6 +159,7 @@ impl Comparisons {
             .into();
             if clear {
                 state.lab = None;
+                state.demo = demo::Session::default();
                 state.status.rows.clear();
                 state.status.foundation = None;
                 state.status.audio_ms = 0;
@@ -983,6 +987,7 @@ pub fn comparison_models(app: tauri::AppHandle) -> Result<Vec<Choice>, String> {
         .state::<local_models::Manager>()
         .models()
         .into_iter()
+        .filter(|m| m.kind != "demo")
         .map(|m| Choice {
             id: m.id,
             name: m.name,

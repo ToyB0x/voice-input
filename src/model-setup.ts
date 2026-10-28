@@ -85,7 +85,7 @@ export function setupModels(locked: () => boolean, apply: (speech: string | unde
   async function loadCatalog() {
     models = await invoke<Model[]>("model_catalog");
     if (!populated) {
-      for (const m of models) (m.kind === "transcription" ? speech : correction).add(new Option(m.name, m.id));
+      for (const m of models.filter(m => m.kind !== "demo")) (m.kind === "transcription" ? speech : correction).add(new Option(m.name, m.id));
       speech.value = ""; correction.value = "keep"; populated = true;
     }
     render();

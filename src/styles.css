@@ -83,7 +83,7 @@ main { max-width: 46rem; padding-bottom: 0; }
 .tagline { font-size: .9rem; }
 .app-header .privacy { margin-top: .2rem; }
 .view-navigation { position: sticky; top: 0; z-index: 2; padding: .65rem 0; background: #f6f7f9; }
-[role="tablist"] { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .35rem; }
+[role="tablist"] { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .35rem; }
 [role="tab"] { padding: .65rem .25rem; font-size: .9rem; background: transparent; }
 [role="tab"][aria-selected="true"] { background: #315fba; border-color: #315fba; color: white; }
 [role="tabpanel"] { outline-offset: .25rem; padding-bottom: 1rem; }
@@ -130,3 +130,9 @@ button, select, input, textarea, summary { scroll-margin-top: 5rem; scroll-margi
 .lab-pictures img { display:block; width:100%; height:150px; object-fit:contain; }
 #lab-rows td { white-space:pre-wrap; overflow-wrap:anywhere; max-width:22rem; }
 #lab-json { width:100%; box-sizing:border-box; }
+.demo-stage { margin-block: 1.4rem; padding-block: .8rem; border-top: 1px solid var(--border, #8885); }
+.demo-result { padding: .8rem 1rem; margin-block: .8rem; border: 1px solid #8885; border-radius: .6rem; overflow-wrap: anywhere; }
+.demo-output { font-size: 1.4rem; font-weight: 700; }
+#demo-audio { width: 100%; max-width: 28rem; }
+
+@media (max-width: 520px) { [role="tablist"] { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
