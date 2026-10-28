@@ -36,7 +36,7 @@ try {
   let serial = 0;
   const pending = new Map();
   socket.addEventListener('message', e => { const response = JSON.parse(e.data); const p = pending.get(response.id); if (p) { pending.delete(response.id); clearTimeout(p.timer); response.error ? p.reject(Error(response.error.message)) : p.resolve(response.result); } });
-  const call = (method, params = {}) => new Promise((resolve, reject) => { const id = ++serial; const timer = setTimeout(() => { pending.delete(id); reject(Error('CDP deadline: ' + method)); }, 15000); pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params })); });
+  const call = (method, params = {}) => new Promise((resolve, reject) => { const id = ++serial; const timer = setTimeout(() => { pending.delete(id); reject(Error('CDP deadline: ' + method)); }, 45000); pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params })); });
   const evaluate = async expression => {
     const result = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);

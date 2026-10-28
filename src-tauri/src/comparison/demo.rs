@@ -13,6 +13,13 @@ pub(super) struct Session {
 impl Session {
     fn prepare(&mut self, options: &Options) {
         if options.stage == "audio"
+            && options.resident
+            && self.resident
+            && self.backend.as_deref() == Some(options.backend())
+        {
+            self.raw = None;
+            self.rows.retain(|row| row["stage"] == "prepare");
+        } else if options.stage == "audio"
             || options.stage == "prepare"
             || self.resident != options.resident
             || self.backend.as_deref() != Some(options.backend())
