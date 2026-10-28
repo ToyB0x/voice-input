@@ -460,6 +460,42 @@ mod tests {
         );
     }
     #[test]
+    fn successful_run_cancelled_with_server_locked_reaps_after_guard_drops() {
+        let owner = Comparisons::default();
+        let epoch = owner.epoch.load(Ordering::Acquire);
+        let child = Command::new("/bin/sleep").arg("60").spawn().unwrap();
+        let pid = child.id();
+        *owner.resident.server.lock().unwrap() = Some(Server {
+            child,
+            url: String::new(),
+            token: String::new(),
+            backend: "cpu".into(),
+            observations: vec!["rain".into(), "candy".into()],
+            preparation_ms: 0,
+            asr_model: PathBuf::new(),
+            audio: vec![],
+        });
+        // Successful, current runs must keep the prepared model alive.
+        owner.cleanup_demo_runtime(epoch, false);
+        assert!(owner.resident.ready("cpu"));
+        let guard = owner.resident.server.lock().unwrap();
+        owner.cancel(false);
+        assert!(!owner.current(epoch));
+        assert!(guard.is_some()); // cancel's try_lock could not release it.
+        drop(guard); // The final successful request returns and unlocks.
+        owner.cleanup_demo_runtime(epoch, false);
+        assert!(!owner.resident.ready("cpu"));
+        assert!(owner.resident.server.lock().unwrap().is_none());
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", &pid.to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    #[test]
     fn image_encoding_preserves_padding() {
         for (input, expected) in [
             (b"".as_slice(), ""),

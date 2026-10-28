@@ -178,9 +178,7 @@ pub fn start_demo(
             result
         }))
         .unwrap_or_else(|_| Err("デモの実行が中断されました。".into()));
-        if result.is_err() {
-            owner.resident.release();
-        }
+        owner.cleanup_demo_runtime(epoch, result.is_err());
         let success = result.is_ok();
         owner.finish(epoch, result.err());
         if success
@@ -201,6 +199,13 @@ pub fn start_demo(
     Ok(())
 }
 impl Comparisons {
+    pub(super) fn cleanup_demo_runtime(&self, epoch: u64, failed: bool) {
+        // run_resident_demo has dropped its server guard. Cancellation may have
+        // skipped that locked server even when the last request returned Ok.
+        if failed || !self.current(epoch) {
+            self.resident.release();
+        }
+    }
     pub(super) fn demo_message(&self, epoch: u64, message: &str) {
         if let Ok(mut s) = self.inner.lock()
             && self.current(epoch)
