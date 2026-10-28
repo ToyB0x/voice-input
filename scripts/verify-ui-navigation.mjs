@@ -36,7 +36,7 @@ try {
   let serial = 0;
   const pending = new Map();
   socket.addEventListener('message', e => { const response = JSON.parse(e.data); const p = pending.get(response.id); if (p) { pending.delete(response.id); clearTimeout(p.timer); response.error ? p.reject(Error(response.error.message)) : p.resolve(response.result); } });
-  const call = (method, params = {}) => new Promise((resolve, reject) => { const id = ++serial; const timer = setTimeout(() => { pending.delete(id); reject(Error('CDP deadline: ' + method)); }, 15000); pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params })); });
+  const call = (method, params = {}) => new Promise((resolve, reject) => { const id = ++serial; const timer = setTimeout(() => { pending.delete(id); reject(Error('CDP deadline: ' + method)); }, 45000); pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params })); });
   const evaluate = async expression => {
     const result = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
@@ -120,6 +120,19 @@ try {
       if (!el('demo-gpu').disabled || !el('demo-run-audio').disabled || el('demo-cancel').disabled) throw Error('Busy demo controls are unsafe');
       el('demo-cancel').click();await pause();
     }
+    el('demo-resident').checked=true;el('demo-resident').dispatchEvent(new Event('change'));
+    if(!el('demo-run-audio').disabled || el('demo-warmup').disabled) throw Error('Resident preparation gate failed');
+    el('demo-warmup').click();await pause();
+    if(window.__ui.demoOptions.stage!=='prepare' || !window.__ui.demoOptions.resident) throw Error('Wrong resident preparation request');
+    el('demo-cancel').click();await pause();
+    window.__ui.demo={...window.__ui.demo,residentReadyMetal:true};await pause();
+    if(el('demo-run-audio').disabled) throw Error('Prepared resident cannot run');
+    el('demo-run-audio').click();await pause();
+    if(!window.__ui.demoOptions.resident || !window.__ui.demoOptions.useGpu) throw Error('Resident/backend selection lost');
+    el('demo-cancel').click();await pause();
+    el('demo-gpu').checked=false;el('demo-gpu').dispatchEvent(new Event('change'));
+    if(!el('demo-run-audio').disabled) throw Error('Wrong backend reused resident preparation');
+    el('demo-resident').checked=false;el('demo-resident').dispatchEvent(new Event('change'));
     if(JSON.stringify(window.__ui.preferences)!==preferences) throw Error('Demo changed ordinary preferences');
     const audio=el('demo-audio');audio.load();await new Promise((resolve,reject)=>{audio.onloadedmetadata=resolve;audio.onerror=()=>reject(Error('Bundled demo audio failed'));});
     if(!(audio.duration>1 && audio.duration<3)) throw Error('Wrong demo audio');

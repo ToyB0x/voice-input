@@ -8,6 +8,11 @@ on:
       - 'scripts/tests/test_ame_lt.py'
       - '.github/workflows/ame-lt.yml'
   workflow_dispatch:
+    inputs:
+      resident_only:
+        description: Run resident quality and ASR reuse without repeating the one-shot presentation
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -38,6 +43,9 @@ jobs:
           key: macos26-${{ runner.arch }}-evaluation-rust-v1-${{ hashFiles('crates/local-transcription/Cargo.lock', 'rust-toolchain.toml') }}
       - run: cargo build --manifest-path crates/local-transcription/Cargo.toml --release --locked --bin compare-transcription
       - run: python3 scripts/prepare-transcription-model.py --model large-v3 "$RUNNER_TEMP/model.bin"
+      - name: Verify resident ASR performs fresh inference without reloading
+        run: |
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' python3 scripts/verify-resident-asr.py --binary crates/local-transcription/target/release/compare-transcription --model "$RUNNER_TEMP/model.bin" --output "$RUNNER_TEMP/ame-asr/resident-asr.json"
       - name: Same audio, no hint, two actual ASR runs
         run: |
           sandbox-exec -p '(version 1) (allow default) (deny network*)'             python3 scripts/evaluate-ame-lt-asr.py --binary crates/local-transcription/target/release/compare-transcription               --model "$RUNNER_TEMP/model.bin" --output "$RUNNER_TEMP/ame-asr"
@@ -71,16 +79,24 @@ jobs:
       - run: python3 scripts/prepare-vlm-evidence.py --directory "$RUNNER_TEMP/models" --source "$RUNNER_TEMP/llama.cpp"
       - name: Build the fixed CPU text and vision runtime
         run: |
-          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build"             -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF             -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DMTMD_VIDEO=OFF
-          cmake --build "$RUNNER_TEMP/llama-build" --target llama-mtmd-cli llama-completion -j 4
+          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build"             -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF             -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF -DMTMD_VIDEO=OFF
+          cmake --build "$RUNNER_TEMP/llama-build" --target llama-mtmd-cli llama-completion llama-server -j 4
       - name: Compare the three stages offline
+        if: ${{ !inputs.resident_only }}
         run: |
           python3 scripts/run-offline-linux.py python3 scripts/evaluate-ame-lt.py             --binary "$RUNNER_TEMP/llama-build/bin/llama-mtmd-cli" --models "$RUNNER_TEMP/models"             --source "$RUNNER_TEMP/llama.cpp" --asr asr/asr.json --output evidence
       - name: Check the app Rust protocol against these actual model outputs
         run: |
           cargo build --manifest-path crates/local-models/Cargo.toml --example demo-protocol --locked
-          python3 scripts/verify-demo-protocol.py --binary crates/local-models/target/debug/examples/demo-protocol --report evidence/results.json
+          python3 scripts/verify-demo-protocol.py --binary crates/local-models/target/debug/examples/demo-protocol
+          if [ "${{ inputs.resident_only }}" != "true" ]; then
+            python3 scripts/verify-demo-protocol.py --binary crates/local-models/target/debug/examples/demo-protocol --report evidence/results.json
+          fi
+      - name: Verify prepared image observations and resident text inference twice
+        run: |
+          python3 scripts/evaluate-resident-demo.py --binary "$RUNNER_TEMP/llama-build/bin/llama-server" --models "$RUNNER_TEMP/models" --protocol crates/local-models/target/debug/examples/demo-protocol --asr asr/asr.json --output evidence/resident
       - name: Build six LT slides from the actual outputs
+        if: ${{ !inputs.resident_only }}
         env:
           EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -97,6 +113,7 @@ jobs:
             evidence/
           retention-days: 30
       - name: Require the measured LT examples to work twice
+        if: ${{ !inputs.resident_only }}
         run: |
           python3 - <<'PY'
           import json

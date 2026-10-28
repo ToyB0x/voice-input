@@ -14,8 +14,20 @@ fn main() {
         v["useGpu"].as_bool().unwrap_or(false),
         image
     ));
+    out["observationPrompt"] = demo_protocol::OBSERVATION_PROMPT.into();
+    out["observationSchema"] = demo_protocol::observation_schema();
+    out["residentPrompt"] = demo_protocol::resident_prompt(raw, text.unwrap_or(""))
+        .unwrap()
+        .into();
+    out["residentBody"] =
+        demo_protocol::resident_body(out["residentPrompt"].clone(), demo_protocol::schema(false));
     if let Some(output) = v["output"].as_str() {
-        let choice = demo_protocol::parse(output, image).unwrap();
+        let choice = if v["resident"] == true {
+            demo_protocol::parse_resident(output)
+        } else {
+            demo_protocol::parse(output, image)
+        }
+        .unwrap();
         out["final"] = demo_protocol::apply(raw, choice["spelling"].as_str().unwrap())
             .unwrap()
             .into();

@@ -14,6 +14,9 @@ struct Header {
 }
 fn run() -> Result<(), &'static str> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len() == 3 && args[2] == "--serve" {
+        return serve(&args[..2]);
+    }
     if args.len() != 2
         || !Path::new(&args[0]).is_absolute()
         || !["cpu", "metal"].contains(&args[1].as_str())
@@ -94,5 +97,77 @@ fn main() {
         );
         let _ = std::io::stdout().write_all(b"\n");
         std::process::exit(1);
+    }
+}
+
+// Resident demo protocol: bounded JSON lines, one freshly recognized PCM request at a time.
+fn serve(args: &[String]) -> Result<(), &'static str> {
+    if !Path::new(&args[0]).is_absolute() {
+        return Err("invalid-arguments");
+    }
+    let backend = match args[1].as_str() {
+        "cpu" => Backend::Cpu,
+        #[cfg(target_os = "macos")]
+        "metal" => Backend::Metal,
+        _ => return Err("backend-unavailable"),
+    };
+    let started = Instant::now();
+    let engine =
+        Transcriber::load(Path::new(&args[0]), backend).map_err(|_| "model-load-failed")?;
+    let load_ms = started.elapsed().as_millis() as u64;
+    let mut input = std::io::stdin().lock();
+    let mut count = 0;
+    loop {
+        let mut line = Vec::new();
+        input
+            .by_ref()
+            .take(8_000_001)
+            .read_until(b'\n', &mut line)
+            .map_err(|_| "invalid-header")?;
+        if line.is_empty() {
+            return Ok(());
+        }
+        if line.len() > 8_000_000 || line.last() != Some(&b'\n') {
+            return Err("input-limit");
+        }
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Request {
+            audio: Vec<f32>,
+        }
+        let request: Request = serde_json::from_slice(&line).map_err(|_| "invalid-pcm")?;
+        if !(16000..=MAX_SAMPLES).contains(&request.audio.len())
+            || request
+                .audio
+                .iter()
+                .any(|s| !s.is_finite() || s.abs() > 1.0)
+        {
+            return Err("invalid-pcm");
+        }
+        let started = Instant::now();
+        let text = engine
+            .transcribe_with_hint(&request.audio, Some(""))
+            .map_err(|_| "inference-failed")?;
+        if text.len() > 8192 || text.contains('\0') {
+            return Err("output-limit");
+        }
+        if args[1] == "metal" && !engine.metal_active() {
+            return Err("metal-unavailable");
+        }
+        let mut stdout = std::io::stdout().lock();
+        serde_json::to_writer(
+            &mut stdout,
+            &serde_json::json!({
+                "text":text, "model_reused":count > 0, "load_ms":if count == 0 {load_ms} else {0},
+                "inference_ms":started.elapsed().as_millis() as u64, "backend":args[1],
+                "metal_active":engine.metal_active()
+            }),
+        )
+        .map_err(|_| "output-failed")?;
+        stdout
+            .write_all(b"\n")
+            .and_then(|_| stdout.flush())
+            .map_err(|_| "output-failed")?;
+        count += 1;
     }
 }
