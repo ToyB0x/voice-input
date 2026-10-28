@@ -111,6 +111,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            comparison::demo::clear_demo,
             comparison::demo::start_demo,
             comparison::demo::demo_status,
             comparison::context_lab::start_context_lab,

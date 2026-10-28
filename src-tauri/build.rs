@@ -20,6 +20,7 @@ fn main() {
 
     println!("cargo:rerun-if-env-changed=VOICE_INPUT_UPDATER_PUBLIC_KEY");
     let manifest = tauri_build::AppManifest::new().commands(&[
+        "clear_demo",
         "start_demo",
         "demo_status",
         "start_context_lab",

@@ -40,6 +40,29 @@ pub fn demo_status(comparisons: tauri::State<'_, Comparisons>) -> Value {
         "model":serde_json::from_str::<Value>(protocol::MODEL).unwrap(),"networkDenied":false,"sourceRevision":env!("VOICE_INPUT_SOURCE_REVISION")})
 }
 #[tauri::command]
+pub fn clear_demo(
+    app: tauri::AppHandle,
+    comparisons: tauri::State<'_, Comparisons>,
+) -> Result<(), String> {
+    let activity = app.state::<crate::activity::Activity>();
+    let _gate = activity.lock()?;
+    let mut s = comparisons
+        .inner
+        .lock()
+        .map_err(|_| "状態を確認できません。")?;
+    if s.status.working {
+        return Err("実行中の処理の終了をお待ちください。".into());
+    }
+    s.demo = Session::default();
+    if s.status.mode == "demo" {
+        s.status.phase = "idle".into();
+        s.status.message = "デモ結果を消去しました。".into();
+        s.status.completed = 0;
+        s.status.total = 0;
+    }
+    Ok(())
+}
+#[tauri::command]
 pub fn start_demo(
     app: tauri::AppHandle,
     comparisons: tauri::State<'_, Comparisons>,
@@ -71,6 +94,7 @@ pub fn start_demo(
             s.demo = Session::default();
         }
         let asr_needed = s.demo.raw.is_none();
+        s.lab = None;
         s.active = Some(epoch);
         s.status = Status {
             generation: epoch,

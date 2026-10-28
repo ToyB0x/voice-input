@@ -62,7 +62,7 @@ export function setupDemo() {
   el('demo-prepare-audio').addEventListener('click',()=>void action(()=>invoke('prepare_models',{ids:['large-v3'],download:true})));
   el('demo-cancel-prepare').addEventListener('click',()=>void action(()=>invoke('cancel_model_preparation')));
   el('demo-cancel').addEventListener('click',()=>void action(()=>invoke('cancel_comparison',{clear:false})));
-  el('demo-clear').addEventListener('click',()=>void action(()=>invoke('cancel_comparison',{clear:true})));
+  el('demo-clear').addEventListener('click',()=>void action(()=>invoke('clear_demo')));
   el('demo-export').addEventListener('click',()=>{
     if (!state || busy()) return;
     const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
