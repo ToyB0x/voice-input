@@ -564,6 +564,26 @@ mod tests {
         );
     }
     #[test]
+    fn demo_models_match_the_measured_vlm_spec() {
+        let spec: serde_json::Value =
+            serde_json::from_str(include_str!("../../../evaluation/local-vlm/model.json")).unwrap();
+        let models = catalog();
+        for (id, role) in [("demo-vlm", "model"), ("demo-projector", "projector")] {
+            let model = models.iter().find(|m| m.id == id).unwrap();
+            let file = spec["files"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|f| f["role"] == role)
+                .unwrap();
+            assert_eq!(model.identity.sha256, file["sha256"].as_str().unwrap());
+            assert_eq!(model.bytes, file["bytes"].as_u64().unwrap());
+            assert_eq!(model.identity.repo, spec["repo"].as_str().unwrap());
+            assert_eq!(model.identity.revision, spec["revision"].as_str().unwrap());
+            assert_eq!(model.kind, "demo");
+        }
+    }
+    #[test]
     fn correction_only_setup_is_supported_without_touching_custom_speech_paths() {
         let (manager, _) = fixture("correction-only");
         assert!(manager.start(vec![], false).is_err());
