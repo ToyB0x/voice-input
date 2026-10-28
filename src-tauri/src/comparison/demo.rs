@@ -113,11 +113,12 @@ pub fn start_demo(
         // Previous stages remain visible, but stale results for this stage do not.
         s.demo.rows.retain(|r| r["stage"] != options.stage);
     }
+    let worker_app = app.clone();
     let owner = comparisons.inner().clone();
     let recorder = recorder.inner().clone();
     *handle = Some(std::thread::spawn(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            owner.run_demo(&app, &recorder, options, epoch)
+            owner.run_demo(&worker_app, &recorder, options, epoch)
         }))
         .unwrap_or_else(|_| Err("デモの実行が中断されました。".into()));
         owner.finish(epoch, result.err());
