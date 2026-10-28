@@ -8,6 +8,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
     p=argparse.ArgumentParser()
     for key in ['binary','models','protocol','output']:p.add_argument('--'+key,type=Path,required=True)
+    p.add_argument('--asr',type=Path)
     a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
     config=json.loads((ROOT/'evaluation/ame-lt/scenarios.json').read_text())
     spec=json.loads((ROOT/'evaluation/local-vlm/model.json').read_text())
@@ -16,8 +17,11 @@ def main():
         path=a.models/entry['file']
         if hashlib.file_digest(path.open('rb'),'sha256').hexdigest()!=entry['sha256']:raise ValueError('Model checksum mismatch')
         paths[entry['role']]=path
-    def protocol(raw='雨がすごいですね',text='手がかりはありません。',**extra):
-        return json.loads(subprocess.check_output([a.protocol],input=json.dumps(dict(raw=raw,text=text,resident=True,**extra),ensure_ascii=False).encode()))
+    asr=json.loads(a.asr.read_text()) if a.asr else None
+    if asr and (not asr['complete'] or asr['audio_sha256']!=config['audio_sha256']):raise ValueError('Invalid ASR provenance')
+    current_raw='雨がすごいですね'
+    def protocol(raw=None,text='手がかりはありません。',**extra):
+        return json.loads(subprocess.check_output([a.protocol],input=json.dumps(dict(raw=current_raw if raw is None else raw,text=text,resident=True,**extra),ensure_ascii=False).encode()))
     contract=protocol()
     token=secrets.token_hex(32)
     with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
@@ -30,7 +34,7 @@ def main():
     report=dict(complete=False,quality_pass=False,backend='cpu',network_denied=False,
         source_revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         timing_scope='resident-model-inference-only; excludes ASR; no 3-second deadline in CPU quality test',
-        model=spec,observations=[],rows=[])
+        model=spec,asr=asr,asr_scope='fresh measured ASR report' if asr else 'fixed previously measured fixture text; model-only quality test',observations=[],rows=[])
     def save():(a.output/'resident.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     save();start=time.monotonic()
     with (a.output/'server.log').open('w') as log:
@@ -61,6 +65,7 @@ def main():
             report['preparation_ms']=round((time.monotonic()-start)*1000)
             cases=[('text',c,c['text']) for c in config['texts']]+[('image',c,o) for c,o in zip(config['images'],report['observations'])]
             for repeat in range(2):
+                current_raw=asr["rows"][repeat]["result"]["text"] if asr else "雨がすごいですね"
                 for stage,case,context in (cases if repeat==0 else reversed(cases)):
                     contract=protocol(text=context)
                     start=time.monotonic()
@@ -72,8 +77,8 @@ def main():
                     report.pop('pending_output',None)
                     expected=case.get('expected',case.get('target'))
                     report['rows'].append(dict(stage=stage,id=case['id'],repeat=repeat,
-                        context=context,prompt=contract['prompt'],output=output,final=parsed['final'],
-                        expected=expected,passed=parsed['final']==expected+'がすごいですね',elapsed_ms=elapsed))
+                        raw=current_raw,context=context,prompt=contract['prompt'],output=output,final=parsed['final'],
+                        expected=expected,passed=parsed['final'].rstrip('。')==expected+'がすごいですね',elapsed_ms=elapsed))
                     save()
             report['complete']=True;report['quality_pass']=all(r['passed'] for r in report['rows']);save()
         finally:

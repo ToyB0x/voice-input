@@ -12,6 +12,9 @@ pub(super) struct Session {
 }
 impl Session {
     fn prepare(&mut self, options: &Options) {
+        if options.stage == "release" {
+            return;
+        }
         if options.stage == "audio"
             && options.resident
             && self.resident
@@ -153,6 +156,7 @@ pub fn start_demo(
     let worker_app = app.clone();
     let owner = comparisons.inner().clone();
     let recorder = recorder.inner().clone();
+    let resident_mode = options.resident;
     let preparation = options.resident && options.stage == "prepare";
     let release = options.resident && options.stage == "release";
     *handle = Some(std::thread::spawn(move || {
@@ -179,15 +183,19 @@ pub fn start_demo(
         }
         let success = result.is_ok();
         owner.finish(epoch, result.err());
-        if success && (preparation || release) && owner.current(epoch) {
-            if let Ok(mut s) = owner.inner.lock() {
-                s.status.message = if preparation {
+        if success
+            && resident_mode
+            && owner.current(epoch)
+            && let Ok(mut s) = owner.inner.lock()
+        {
+            s.status.message = if preparation {
                     "常駐・画像の準備が完了しました。①〜③を実行できます。"
-                } else {
+                } else if release {
                     "常駐モデルを解放しました。"
+                } else {
+                    "常駐デモが完了しました。通常入力へ戻るときは常駐モデルを解放してから音声モデルを再読み込みしてください。"
                 }
                 .into();
-            }
         }
     }));
     Ok(())
@@ -457,6 +465,27 @@ pub(super) fn verify_asset(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn resident_audio_keeps_preparation_and_release_keeps_evidence() {
+        let mut options: Options = serde_json::from_value(json!({
+            "stage":"audio", "repeats":1, "texts":["",""], "resident":true
+        }))
+        .unwrap();
+        let mut session = Session {
+            resident: true,
+            backend: Some("cpu".into()),
+            raw: Some("雨がすごいですね".into()),
+            rows: vec![json!({"stage":"prepare"}), json!({"stage":"text"})],
+        };
+        session.prepare(&options);
+        assert!(session.raw.is_none());
+        assert_eq!(session.rows, vec![json!({"stage":"prepare"})]);
+        options.stage = "release".into();
+        options.use_gpu = true;
+        session.prepare(&options);
+        assert_eq!(session.rows.len(), 1);
+        assert_eq!(session.backend.as_deref(), Some("cpu"));
+    }
     #[test]
     fn backend_switch_discards_previous_asr_and_results() {
         let mut options: Options = serde_json::from_value(json!({

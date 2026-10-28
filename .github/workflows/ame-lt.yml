@@ -85,7 +85,7 @@ jobs:
           python3 scripts/verify-demo-protocol.py --binary crates/local-models/target/debug/examples/demo-protocol --report evidence/results.json
       - name: Verify prepared image observations and resident text inference twice
         run: |
-          python3 scripts/evaluate-resident-demo.py --binary "$RUNNER_TEMP/llama-build/bin/llama-server" --models "$RUNNER_TEMP/models" --protocol crates/local-models/target/debug/examples/demo-protocol --output evidence/resident
+          python3 scripts/evaluate-resident-demo.py --binary "$RUNNER_TEMP/llama-build/bin/llama-server" --models "$RUNNER_TEMP/models" --protocol crates/local-models/target/debug/examples/demo-protocol --asr asr/asr.json --output evidence/resident
       - name: Build six LT slides from the actual outputs
         env:
           EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

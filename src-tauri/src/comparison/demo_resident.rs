@@ -315,7 +315,12 @@ impl Comparisons {
             .as_str()
             .ok_or("音声認識結果がありません。")?
             .to_owned();
-        protocol::target(&raw)?;
+        if let Err(error) = protocol::target(&raw) {
+            self.demo_row(epoch,json!({"stage":"audio","label":"音声認識・対象語を確認できず停止",
+                "raw":raw,"final":raw,"status":"error","error":error,"backend":backend,
+                "elapsedMs":asr_ms,"asr":report,"resident":true,"timingScope":"prepared-audio-to-result"}));
+            return Err(error);
+        }
         {
             let mut s = self.inner.lock().map_err(|_| "状態を確認できません。")?;
             if self.current(epoch) {
