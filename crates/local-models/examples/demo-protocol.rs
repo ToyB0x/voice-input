@@ -14,6 +14,10 @@ fn main() {
         v["useGpu"].as_bool().unwrap_or(false),
         image
     ));
+    out["observationPrompt"] = demo_protocol::OBSERVATION_PROMPT.into();
+    out["observationSchema"] = demo_protocol::observation_schema();
+    out["residentBody"] =
+        demo_protocol::resident_body(out["prompt"].clone(), demo_protocol::schema(false));
     if let Some(output) = v["output"].as_str() {
         let choice = demo_protocol::parse(output, image).unwrap();
         out["final"] = demo_protocol::apply(raw, choice["spelling"].as_str().unwrap())

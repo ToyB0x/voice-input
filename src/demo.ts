@@ -78,4 +78,9 @@ export function setupDemo() {
   });
   if (!isTauri()) el('demo-model-status').textContent='実行にはMacアプリが必要です。ブラウザーでは画面と同梱音声だけ確認できます。';
   render();void poll();setInterval(()=>void poll(),1500);
+  setInterval(()=>{
+    if (!isTauri() || !state?.working || polling) return;
+    polling=true;
+    void invoke<State>('demo_status').then(next=>{state=next;render();}).catch(e=>{el('demo-error').textContent=String(e);}).finally(()=>{polling=false;});
+  },100);
 }

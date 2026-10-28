@@ -182,3 +182,13 @@ mod backend_tests {
         }
     }
 }
+
+pub const OBSERVATION_PROMPT: &str = "画像に実際に見える物や動作を日本語で簡潔に述べてください。見えない状況は補わず、JSONのobservationだけを返してください。";
+pub fn observation_schema() -> Value {
+    json!({"type":"object","properties":{"observation":{"type":"string","minLength":1,"maxLength":160}},"required":["observation"],"additionalProperties":false})
+}
+pub fn resident_body(content: Value, schema: Value) -> Value {
+    json!({"messages":[{"role":"user","content":content}],"temperature":0,"seed":0,
+        "max_tokens":128,"stream":false,"cache_prompt":false,
+        "response_format":{"type":"json_schema","json_schema":{"name":"demo","strict":true,"schema":schema}}})
+}

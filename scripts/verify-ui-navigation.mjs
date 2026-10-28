@@ -120,6 +120,19 @@ try {
       if (!el('demo-gpu').disabled || !el('demo-run-audio').disabled || el('demo-cancel').disabled) throw Error('Busy demo controls are unsafe');
       el('demo-cancel').click();await pause();
     }
+    el('demo-resident').checked=true;el('demo-resident').dispatchEvent(new Event('change'));
+    if(!el('demo-run-audio').disabled || el('demo-warmup').disabled) throw Error('Resident preparation gate failed');
+    el('demo-warmup').click();await pause();
+    if(window.__ui.demoOptions.stage!=='prepare' || !window.__ui.demoOptions.resident) throw Error('Wrong resident preparation request');
+    el('demo-cancel').click();await pause();
+    window.__ui.demo={...window.__ui.demo,residentReadyMetal:true};await pause();
+    if(el('demo-run-audio').disabled) throw Error('Prepared resident cannot run');
+    el('demo-run-audio').click();await pause();
+    if(!window.__ui.demoOptions.resident || !window.__ui.demoOptions.useGpu) throw Error('Resident/backend selection lost');
+    el('demo-cancel').click();await pause();
+    el('demo-gpu').checked=false;el('demo-gpu').dispatchEvent(new Event('change'));
+    if(!el('demo-run-audio').disabled) throw Error('Wrong backend reused resident preparation');
+    el('demo-resident').checked=false;el('demo-resident').dispatchEvent(new Event('change'));
     if(JSON.stringify(window.__ui.preferences)!==preferences) throw Error('Demo changed ordinary preferences');
     const audio=el('demo-audio');audio.load();await new Promise((resolve,reject)=>{audio.onloadedmetadata=resolve;audio.onerror=()=>reject(Error('Bundled demo audio failed'));});
     if(!(audio.duration>1 && audio.duration<3)) throw Error('Wrong demo audio');

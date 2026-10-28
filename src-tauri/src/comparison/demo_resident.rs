@@ -118,11 +118,6 @@ impl Server {
         serde_json::from_str(content).map_err(|_| "常駐モデルのJSONが不正です。".into())
     }
 }
-fn body(content: Value, schema: Value) -> Value {
-    json!({"messages":[{"role":"user","content":content}],"temperature":0,"seed":0,
-        "max_tokens":128,"stream":false,"cache_prompt":false,
-        "response_format":{"type":"json_schema","json_schema":{"name":"demo","strict":true,"schema":schema}}})
-}
 impl Comparisons {
     pub(super) fn run_resident_demo(
         &self,
@@ -258,10 +253,15 @@ impl Comparisons {
                 )?;
                 let bytes = std::fs::read(assets.join(name)).map_err(|_| "画像を読めません。")?;
                 let content = json!([
-                    {"type":"text","text":"画像に実際に見える物や動作を日本語で簡潔に述べてください。見えない状況は補わず、JSONのobservationだけを返してください。"},
+                    {"type":"text","text":protocol::OBSERVATION_PROMPT},
                     {"type":"image_url","image_url":{"url":format!("data:image/png;base64,{}",encode(&bytes))}}
                 ]);
-                let value=server.request(body(content,json!({"type":"object","properties":{"observation":{"type":"string","minLength":1,"maxLength":160}},"required":["observation"],"additionalProperties":false})),&self.epoch,epoch,Duration::from_secs(1800))?;
+                let value = server.request(
+                    protocol::resident_body(content, protocol::observation_schema()),
+                    &self.epoch,
+                    epoch,
+                    Duration::from_secs(1800),
+                )?;
                 let observation = value["observation"]
                     .as_str()
                     .filter(|s| !s.is_empty() && s.chars().count() <= 160)
@@ -271,7 +271,7 @@ impl Comparisons {
             // Warm text inference with neutral content; do not cache a demo answer.
             let warm = protocol::prompt("雨がすごいですね", Some("手がかりはありません。"))?;
             server.request(
-                body(json!(warm), protocol::schema(false)),
+                protocol::resident_body(json!(warm), protocol::schema(false)),
                 &self.epoch,
                 epoch,
                 Duration::from_secs(1800),
@@ -349,7 +349,7 @@ impl Comparisons {
                     Err("音声認識で3秒の目標に達したため原文を保持しました。".into())
                 } else {
                     server.request(
-                        body(json!(prompt), protocol::schema(false)),
+                        protocol::resident_body(json!(prompt), protocol::schema(false)),
                         &self.epoch,
                         epoch,
                         Duration::from_millis(3000 - asr_ms),
@@ -357,11 +357,12 @@ impl Comparisons {
                 };
                 let correction_ms = started.elapsed().as_millis() as u64;
                 let mut final_text = raw.clone();
-                let mut status = "deadline";
+                let mut status = "error";
                 let mut reason = String::new();
+                let result = result.and_then(|value| protocol::parse(&value.to_string(), false));
                 match result {
                     Ok(value) => {
-                        let parsed = protocol::parse(&value.to_string(), false)?;
+                        let parsed = value;
                         final_text = protocol::apply(&raw, parsed["spelling"].as_str().unwrap())?;
                         status = if parsed["spelling"] == "不明" {
                             "undetermined"
@@ -374,7 +375,7 @@ impl Comparisons {
                     }
                 }
                 let elapsed = asr_ms + correction_ms;
-                if elapsed > 3000 {
+                if elapsed >= 3000 {
                     final_text = raw.clone();
                     status = "deadline";
                 }
@@ -383,13 +384,12 @@ impl Comparisons {
                     "asrMs":asr_ms,"correctionMs":correction_ms,"asrShared":true,"asr":report,"resident":true,
                     "preparationMs":server.preparation_ms,"observation":if image {Some(context.clone())}else{None},
                     "context":context,"prompt":prompt,"withinTarget":elapsed<=3000,"timingScope":"prepared-audio-to-result"}));
-                if status == "deadline" {
+                if status == "deadline" || status == "error" {
                     // A timed-out native generation must not queue behind the next request.
                     slot.take();
                     self.resident.asr.release();
                     return Err(
-                        "3秒目標に収まらなかったため原文を保持しました。再準備してください。"
-                            .into(),
+                        "補正を確定できなかったため原文を保持しました。再準備してください。".into(),
                     );
                 }
             }
@@ -419,6 +419,35 @@ impl Comparisons {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    #[test]
+    fn owned_server_is_reaped_on_release() {
+        let child = Command::new("/bin/sleep").arg("60").spawn().unwrap();
+        let pid = child.id();
+        let runtime = Runtime::default();
+        *runtime.server.lock().unwrap() = Some(Server {
+            child,
+            url: String::new(),
+            token: String::new(),
+            backend: "cpu".into(),
+            observations: vec!["rain".into(), "candy".into()],
+            preparation_ms: 0,
+            asr_model: PathBuf::new(),
+            audio: vec![],
+        });
+        assert!(runtime.ready("cpu"));
+        assert!(!runtime.ready("metal"));
+        runtime.release();
+        assert!(!runtime.ready("cpu"));
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", &pid.to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
     #[test]
     fn image_encoding_preserves_padding() {
         for (input, expected) in [
