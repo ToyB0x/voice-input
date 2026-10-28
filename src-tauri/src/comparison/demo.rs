@@ -23,7 +23,8 @@ impl Options {
             || self
                 .texts
                 .iter()
-                .any(|s| s.trim().is_empty() || s.chars().count() > 256 || s.contains('\0'))
+                .any(|s| s.chars().count() > 256 || s.contains('\0'))
+            || (self.stage == "text" && self.texts.iter().any(|s| s.trim().is_empty()))
         {
             return Err("デモの段階・反復回数・文章を確認してください。".into());
         }
