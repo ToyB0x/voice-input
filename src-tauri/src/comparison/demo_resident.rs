@@ -37,11 +37,19 @@ impl Default for Runtime {
     }
 }
 impl Runtime {
-    pub fn release(&self) {
+    // Only cancellation may skip an in-flight request's lock. Its worker will
+    // call release after returning, once the request guard has been dropped.
+    pub fn request_release(&self) {
         self.asr.release();
         if let Ok(mut server) = self.server.try_lock() {
             server.take();
         }
+    }
+    pub fn release(&self) {
+        self.asr.release();
+        // Explicit release and worker finalization must not report completion
+        // while a concurrent readiness check still holds this mutex.
+        self.server.lock().unwrap_or_else(|e| e.into_inner()).take();
     }
     pub fn ready(&self, backend: &str) -> bool {
         self.server.try_lock().is_ok_and(|mut slot| {
@@ -486,6 +494,46 @@ mod tests {
         owner.cleanup_demo_runtime(epoch, false);
         assert!(!owner.resident.ready("cpu"));
         assert!(owner.resident.server.lock().unwrap().is_none());
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", &pid.to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    #[test]
+    fn explicit_release_waits_for_a_concurrent_readiness_guard() {
+        let runtime = Arc::new(Runtime::default());
+        let child = Command::new("/bin/sleep").arg("60").spawn().unwrap();
+        let pid = child.id();
+        *runtime.server.lock().unwrap() = Some(Server {
+            child,
+            url: String::new(),
+            token: String::new(),
+            backend: "cpu".into(),
+            observations: vec!["rain".into(), "candy".into()],
+            preparation_ms: 0,
+            asr_model: PathBuf::new(),
+            audio: vec![],
+        });
+        let guard = runtime.server.lock().unwrap();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let owner = runtime.clone();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            owner.release();
+            done_tx.send(()).unwrap();
+        });
+        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(guard);
+        done_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        worker.join().unwrap();
+        assert!(runtime.server.lock().unwrap().is_none());
+        assert!(!runtime.ready("cpu"));
         assert!(
             !Command::new("/bin/kill")
                 .args(["-0", &pid.to_string()])

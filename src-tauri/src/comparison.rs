@@ -152,7 +152,7 @@ impl Comparisons {
     pub fn cancel(&self, clear: bool) {
         // Publish cancellation before attempting non-blocking worker cleanup.
         self.epoch.fetch_add(1, Ordering::AcqRel);
-        self.resident.release();
+        self.resident.request_release();
         if let Ok(mut state) = self.inner.lock() {
             state.status.phase = if state.status.working {
                 "cancelling"
