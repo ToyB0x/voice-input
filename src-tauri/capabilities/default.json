@@ -48,6 +48,8 @@
     "allow-start-context-lab",
     "allow-context-lab-status",
     "allow-context-lab-report",
-    "allow-copy-context-lab-report"
+    "allow-copy-context-lab-report",
+    "allow-start-demo",
+    "allow-demo-status"
   ]
 }

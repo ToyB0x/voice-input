@@ -2,6 +2,8 @@
 
 #[cfg(any(target_os = "macos", test))]
 mod audio_buffer;
+#[cfg(any(target_os = "macos", test))]
+mod demo_protocol;
 #[cfg(target_os = "macos")]
 mod recorder;
 #[cfg(target_os = "macos")]
@@ -109,6 +111,8 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            comparison::demo::start_demo,
+            comparison::demo::demo_status,
             comparison::context_lab::start_context_lab,
             comparison::context_lab::context_lab_status,
             comparison::context_lab::context_lab_report,

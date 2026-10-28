@@ -74,13 +74,13 @@ try {
     window.__ui.snapshot.phase='recording'; window.__ui.snapshot.elapsedMs=1234; await pause();
     select('settings'); await pause(); select('input');
     check(!el('stop').disabled && el('duration').textContent.includes('1.2'),'Navigation interrupted recording UI');
-    const reads = new Set(['context_lab_status','recording_status','recording_level','desktop_status','insertion_status','context_status','correction_status','comparison_status','comparison_plan','comparison_models','model_catalog','model_preparation_status','update_status']);
+    const reads = new Set(['demo_status','context_lab_status','recording_status','recording_level','desktop_status','insertion_status','context_status','correction_status','comparison_status','comparison_plan','comparison_models','model_catalog','model_preparation_status','update_status']);
     const forbidden = window.__ui.calls.filter(c => !reads.has(c) && c !== 'save_preferences');
     check(window.__ui.calls.filter(c=>c==='save_preferences').length===1,'Settings were saved outside the explicit action');
     check(forbidden.length===0,'Navigation triggered native side effects: '+forbidden.join(','));
     el('tab-input').focus(); el('tab-input').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
-    check(active('models') && document.activeElement===el('tab-models'),'ArrowRight did not select and focus next tab');
-    el('tab-models').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true})); check(active('diagnostics'),'End did not select last tab');
+    check(active('demo') && document.activeElement===el('tab-demo'),'ArrowRight did not select and focus next tab');
+    el('tab-demo').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true})); check(active('diagnostics'),'End did not select last tab');
     el('tab-diagnostics').dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true})); check(active('input'),'Home did not return to first tab');
     el('tab-input').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true})); check(active('diagnostics'),'ArrowLeft did not wrap');
     window.__ui.snapshot.phase='idle';window.__ui.snapshot.working=false;await pause();
@@ -94,7 +94,7 @@ try {
     check(el('usage-status').textContent.includes('準備と設定が完了'),'Preset setup did not reach ready');
     check(window.__ui.calls.filter(c=>c==='apply_usage_preset').length===1 && window.__ui.calls.filter(c=>c==='load_model').length===1,'Preset setup did not explicitly save and load once');
     select('input');
-    return {presetSetup:true,status:'passed' , realBrowser:true, nativeBackend:'synthetic', panels:4, keyboardNavigation:true, fieldsAndRecordingPreserved:true, explicitSharedSave:true, navigationSideEffects:false};
+    return {presetSetup:true,status:'passed' , realBrowser:true, nativeBackend:'synthetic', panels:5, keyboardNavigation:true, fieldsAndRecordingPreserved:true, explicitSharedSave:true, navigationSideEffects:false};
   })()`);
   assert.equal(result.status, 'passed');
   await evaluate(`document.getElementById('tab-input').click(); window.scrollTo(0,0);`);
@@ -103,10 +103,10 @@ try {
   assert.equal(await evaluate(`document.getElementById('tab-models').getAttribute('aria-selected')`),'true');
   await evaluate(`document.getElementById('tab-input').focus();`);
   for (const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});
-  assert.equal(await evaluate(`document.getElementById('tab-models').getAttribute('aria-selected')`),'true');
+  assert.equal(await evaluate(`document.getElementById('tab-demo').getAttribute('aria-selected')`),'true');
   result.pointerAndKeyboardEvents = true;
   await evaluate(`window.__ui.snapshot.phase='idle'; new Promise(r=>setTimeout(r,200));`);
-  for (const [name, width, height, color, view] of [['input-light',760,940,'light','input'],['models-light',760,940,'light','models'],['settings-dark',760,940,'dark','settings'],['diagnostics-light',760,940,'light','diagnostics'],['input-narrow',360,620,'light','input']]) {
+  for (const [name, width, height, color, view] of [['input-light',760,940,'light','input'],['models-light',760,940,'light','models'],['settings-dark',760,940,'dark','settings'],['diagnostics-light',760,940,'light','diagnostics'],['input-narrow',360,620,'light','input'],['demo-light',760,940,'light','demo'],['demo-narrow',360,620,'light','demo']]) {
     await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: color }] });
     await evaluate(`document.getElementById('tab-${view}').click(); document.getElementById('tab-${view}').focus({preventScroll:true}); window.scrollTo(0,0);`);

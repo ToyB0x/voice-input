@@ -16,6 +16,7 @@
       <nav aria-label="画面の切り替え" class="view-navigation">
         <div role="tablist" aria-label="作業メニュー">
           <button id="tab-input" type="button" role="tab" aria-controls="panel-input" aria-selected="true" tabindex="0">音声入力</button>
+          <button id="tab-demo" type="button" role="tab" aria-controls="panel-demo" aria-selected="false" tabindex="-1">デモ</button>
           <button id="tab-models" type="button" role="tab" aria-controls="panel-models" aria-selected="false" tabindex="-1">モデル</button>
           <button id="tab-settings" type="button" role="tab" aria-controls="panel-settings" aria-selected="false" tabindex="-1">設定</button>
           <button id="tab-diagnostics" type="button" role="tab" aria-controls="panel-diagnostics" aria-selected="false" tabindex="-1">比較・診断</button>
@@ -82,6 +83,38 @@
             <button id="copy-correction" aria-label="Copy correction" disabled>補正結果をコピー</button>
             <p class="hint">手動プレビューは自動入力しません。自動補正と直接入力の両方を有効にすると、最終結果を直接入力します。意味・数値・否定・固有名詞が変わっていないか固定サンプルで確認してから利用してください。再試行は取得テキストなしで行います。画像・取得テキスト・補正結果をファイルに保存・クラウド送信しません。</p>
           </details>
+        </section>
+      </div>
+      <div id="panel-demo" role="tabpanel" aria-labelledby="tab-demo" tabindex="0" hidden>
+        <section aria-labelledby="demo-title">
+          <h2 id="demo-title">この「あめ」、どっち？</h2>
+          <p>同じ音声「あめがすごいですね」に、文章や画像の手がかりを加えてみます。</p>
+          <audio id="demo-audio" controls preload="none" aria-label="同梱のあめの音声"></audio>
+          <p class="hint">同梱の合成音声を使用します。マイク・画面収録の許可は不要です。音のアクセントではなく、文脈による表記の変化を楽しむ小さな実験です。</p>
+          <details><summary>自動で選ぶデモ設定</summary>
+            <p>Whisper large-v3／認識ヒントなし → 「あめ」の部分だけ読みへ変換 → Qwen3-VL 8Bで雨・飴・不明から選択。画像ではモデル自身が見えている物を短く記述してから選びます。</p>
+            <p>CPU・温度0・固定シードで実行します。初回は時間がかかります。OCR・Accessibility・AFM・自動入力は使用しません。通常の設定は変更しません。</p>
+          </details>
+          <h3>初回の準備</h3>
+          <p>3段階すべてに約9.3 GBのモデルを使います。16 GB以上のメモリを推奨します。モデル取得時だけインターネット接続が必要です。</p>
+          <div class="controls"><button id="demo-prepare">デモ用モデルをまとめて準備</button><button id="demo-prepare-audio">音声モデルだけ準備（約3.1 GB）</button><button id="demo-cancel-prepare" disabled>準備を中止</button></div>
+          <p id="demo-model-status" role="status"></p>
+          <progress id="demo-progress" hidden aria-label="デモモデルのダウンロード進捗"></progress>
+          <label for="demo-repeats">文章・画像の反復回数</label><select id="demo-repeats"><option value="1">1回（発表向け）</option><option value="2">2回（再現性確認・2回目は順序を反転）</option></select>
+          <div class="demo-stage"><h3>① 音声だけ</h3><p>文章も画像も渡さず、そのまま文字起こしします。再実行すると②③の結果もリセットします。</p><button id="demo-run-audio" disabled>① 音声だけで実行</button></div>
+          <div class="demo-stage"><h3>② 文章を添える</h3>
+            <label for="demo-weather">天気の手がかり</label><textarea id="demo-weather" rows="2" maxlength="256"></textarea>
+            <label for="demo-halloween">お菓子の手がかり</label><textarea id="demo-halloween" rows="2" maxlength="256"></textarea>
+            <p class="hint">画像は渡しません。文章は調整できます。</p><button id="demo-run-text" disabled>② 文章付きで実行</button>
+          </div>
+          <div class="demo-stage"><h3>③ 画像を見せる</h3>
+            <div class="lab-pictures"><figure><img id="demo-rain" alt="雨が降る住宅街の合成画像"><figcaption>雨の街</figcaption></figure><figure><img id="demo-candy" alt="屋根からキャンディを撒く合成画像"><figcaption>屋根からの飴まき</figcaption></figure></div>
+            <p class="hint">文字のない画像をそのまま渡します。②の文章・画像の説明文・OCR結果は渡しません。</p><button id="demo-run-image" disabled>③ 画像付きで実行</button>
+          </div>
+          <p class="hint">②③から始めても、最初に①を自動実行します。その後は同じ認識結果を共有します。</p>
+          <div class="controls"><button id="demo-cancel" disabled>実行を中止</button><button id="demo-clear" disabled>デモ結果を消去</button><button id="demo-export" disabled>実行結果をJSONで保存</button></div>
+          <p id="demo-status" role="status" aria-live="polite"></p><p id="demo-error" role="alert"></p>
+          <p id="demo-baseline"></p><div id="demo-results" aria-label="デモの実測結果"></div>
         </section>
       </div>
       <div id="panel-models" role="tabpanel" aria-labelledby="tab-models" tabindex="0" hidden="">

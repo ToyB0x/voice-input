@@ -27,3 +27,8 @@ src-tauri/resources/compare-transcription
 
 src-tauri/resources/speech-falling.wav
 src-tauri/resources/speech-falling.aiff
+
+.cache/demo-runtime/
+src-tauri/resources/llama-mtmd-cli
+src-tauri/resources/llama-completion
+src-tauri/resources/DEMO-NOTICES.txt

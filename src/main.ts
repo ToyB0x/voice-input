@@ -1,3 +1,4 @@
+import { setupDemo } from "./demo";
 import { setupUsagePresets } from "./usage-presets";
 import { setupContextLab } from "./context-lab";
 import { setupComparison, comparisonWorking } from "./comparison";
@@ -377,3 +378,5 @@ if (isTauri()) {
 }
 
 setupContextLab();
+
+setupDemo();

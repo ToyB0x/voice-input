@@ -56,6 +56,7 @@ struct Label {
 struct Catalog {
     transcription: Group,
     correction: Group,
+    demo: Group,
     labels: BTreeMap<String, Label>,
 }
 #[derive(Clone, Serialize)]
@@ -97,6 +98,7 @@ pub fn catalog() -> Vec<Model> {
     for (kind, group, license) in [
         ("transcription", source.transcription, "MIT"),
         ("correction", source.correction, "Apache-2.0"),
+        ("demo", source.demo, "Apache-2.0"),
     ] {
         for (id, mut identity) in group.models {
             if identity.repo.is_empty() {
@@ -243,7 +245,8 @@ impl Manager {
     }
     pub fn start(&self, ids: Vec<String>, download: bool) -> Result<Status> {
         let all = catalog();
-        if ids.is_empty() || ids.len() > 2 {
+        let demo_set = ids == ["large-v3", "demo-vlm", "demo-projector"];
+        if ids.is_empty() || (ids.len() > 2 && !demo_set) {
             return Err("準備するモデルを一つか二つ選んでください。");
         }
         let models = ids
@@ -255,12 +258,13 @@ impl Manager {
                     .ok_or("未対応のモデルです。")
             })
             .collect::<Result<Vec<_>>>()?;
-        if models
-            .iter()
-            .map(|m| &m.kind)
-            .collect::<std::collections::BTreeSet<_>>()
-            .len()
-            != models.len()
+        if !demo_set
+            && models
+                .iter()
+                .map(|m| &m.kind)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != models.len()
         {
             return Err("音声・補正モデルはそれぞれ一つまで選択できます。");
         }
@@ -538,7 +542,7 @@ mod tests {
     #[test]
     fn pinned_catalog_has_safe_unique_identities() {
         let models = catalog();
-        assert_eq!(models.len(), 8);
+        assert_eq!(models.len(), 10);
         for m in &models {
             assert!(
                 m.id.chars()
@@ -556,7 +560,7 @@ mod tests {
                 .map(|m| &m.id)
                 .collect::<std::collections::BTreeSet<_>>()
                 .len(),
-            8
+            10
         );
     }
     #[test]

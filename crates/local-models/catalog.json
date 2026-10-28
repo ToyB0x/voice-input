@@ -90,6 +90,30 @@
     "qwen3-8b": {
       "name": "Qwen3 8B",
       "memoryHint": "CI CPUの最大RSS約8.5 GiB。音声モデルやアプリのメモリは別途必要です。"
+    },
+    "demo-vlm": {
+      "name": "LTデモ Qwen3-VL 8B",
+      "memoryHint": "デモ専用。通常の補正モデルには設定しません。16 GB以上のメモリを推奨。"
+    },
+    "demo-projector": {
+      "name": "LTデモ 画像エンコーダー",
+      "memoryHint": "デモ専用。通常の補正モデルには設定しません。16 GB以上のメモリを推奨。"
+    }
+  },
+  "demo": {
+    "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF",
+    "revision": "f982a07559d4a2f6c8744d840bf6fccab30eea96",
+    "models": {
+      "demo-vlm": {
+        "file": "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+        "bytes": 5027784800,
+        "sha256": "67d1659bfe71b89d50b45a4ad1a9e5b997e5bb16ce5da66a6a6167abd569e9e2"
+      },
+      "demo-projector": {
+        "file": "mmproj-Qwen3VL-8B-Instruct-F16.gguf",
+        "bytes": 1159029824,
+        "sha256": "ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38"
+      }
     }
   }
 }
