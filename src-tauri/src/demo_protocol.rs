@@ -144,6 +144,9 @@ mod tests {
 // Keep CPU and Metal choices explicit, including the image encoder.
 pub fn backend_args(use_gpu: bool, image: bool) -> Vec<&'static str> {
     let mut args = vec!["-ngl", if use_gpu { "99" } else { "0" }];
+    if !use_gpu {
+        args.extend(["--device", "none", "--no-op-offload"]);
+    }
     if image {
         args.push(if use_gpu {
             "--mmproj-offload"
@@ -162,10 +165,12 @@ mod backend_tests {
             for gpu in [false, true] {
                 let args = super::backend_args(gpu, image);
                 assert_eq!(&args[..2], &["-ngl", if gpu { "99" } else { "0" }]);
-                assert_eq!(args.len(), if image { 3 } else { 2 });
+                assert_eq!(args.contains(&"--no-op-offload"), !gpu);
+                assert_eq!(args.contains(&"none"), !gpu);
+                assert_eq!(args.len(), 2 + if gpu { 0 } else { 3 } + usize::from(image));
                 if image {
                     assert_eq!(
-                        args[2],
+                        *args.last().unwrap(),
                         if gpu {
                             "--mmproj-offload"
                         } else {
