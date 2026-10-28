@@ -32,3 +32,5 @@ src-tauri/resources/speech-falling.aiff
 src-tauri/resources/llama-mtmd-cli
 src-tauri/resources/llama-completion
 src-tauri/resources/DEMO-NOTICES.txt
+
+/node_modules
