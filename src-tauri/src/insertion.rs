@@ -326,18 +326,31 @@ impl PasteTarget {
             && self.range == current.range
             && self.fingerprint == current.fingerprint
     }
-    fn validate(&self, shared: &Shared) -> Result<(), String> {
+    fn ensure_current(&self, shared: &Shared) -> Result<(), String> {
         if !shared.enabled.load(Ordering::Acquire)
             || !shared.clipboard_fallback.load(Ordering::Acquire)
             || shared.epoch.load(Ordering::Acquire) != self.epoch
         {
             return Err("設定変更・取り消しのため貼り付けを見送りました。".into());
         }
-        let current = Self::capture(self.id, self.epoch)?;
+        Ok(())
+    }
+    fn validate_using(
+        &self,
+        shared: &Shared,
+        capture: impl FnOnce() -> Result<Self, String>,
+    ) -> Result<(), String> {
+        self.ensure_current(shared)?;
+        let current = capture()?;
+        // AX IPC may block while another thread invalidates this recording.
+        self.ensure_current(shared)?;
         if !self.same_destination(&current) {
             return Err("入力先・位置・内容が変わったため貼り付けを見送りました。".into());
         }
         Ok(())
+    }
+    fn validate(&self, shared: &Shared) -> Result<(), String> {
+        self.validate_using(shared, || Self::capture(self.id, self.epoch))
     }
     fn insert(&self, value: &str, shared: &Shared) -> Result<(), String> {
         self.validate(shared)?;
@@ -347,6 +360,7 @@ impl PasteTarget {
         // Recheck after clipboard IPC. Never restore on a timer: the target may
         // read asynchronously, and restoring could overwrite a user's new copy.
         self.validate(shared)?;
+        self.ensure_current(shared)?;
         unsafe {
             CGEventPostToPid(self.pid, down.as_CFTypeRef());
             CGEventPostToPid(self.pid, up.as_CFTypeRef());
@@ -610,6 +624,22 @@ mod paste_tests {
         shared.clipboard_fallback.store(true, Ordering::Release);
         shared.enabled.store(false, Ordering::Release);
         assert!(target().validate(&shared).is_err());
+    }
+    #[test]
+    fn paste_rechecks_cancellation_after_destination_query() {
+        let shared = Shared {
+            enabled: AtomicBool::new(true),
+            clipboard_fallback: AtomicBool::new(true),
+            epoch: AtomicU64::new(7),
+            status: Mutex::new((String::new(), String::new())),
+        };
+        let error = target()
+            .validate_using(&shared, || {
+                shared.epoch.fetch_add(1, Ordering::AcqRel);
+                Ok(target())
+            })
+            .unwrap_err();
+        assert!(error.contains("取り消し"));
     }
     #[test]
     fn paste_events_are_command_v_down_and_up_without_shift() {
