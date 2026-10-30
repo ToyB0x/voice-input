@@ -283,7 +283,10 @@ fn paste_field_allowed(element: &CFType) -> Result<(), String> {
         return Err("テキスト入力先を確認できないため貼り付けません。".into());
     }
     if let Ok(value) = attribute(element, "AXEnabled") {
-        if value.downcast::<CFBoolean>().is_some_and(|v| !v.value()) {
+        if value
+            .downcast::<CFBoolean>()
+            .is_some_and(|v| !bool::from(v))
+        {
             return Err("無効な入力欄には貼り付けません。".into());
         }
     }
