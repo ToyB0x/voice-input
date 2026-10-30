@@ -3,6 +3,17 @@ const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
 const panels = [...document.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
 const scrollPositions = new Map<string, number>();
 let current = 'input';
+let debug = false;
+const modeToggle = document.querySelector<HTMLButtonElement>('#mode-toggle')!;
+function setMode(value: boolean) {
+  debug = value;
+  document.body.dataset.mode = debug ? 'debug' : 'simple';
+  modeToggle.setAttribute('aria-expanded', String(debug));
+  modeToggle.setAttribute('aria-label', debug ? '通常画面に戻る' : '詳細・デバッグを開く');
+  if (!debug) select('input');
+  updateSaveBar();
+}
+modeToggle.addEventListener('click', () => setMode(!debug));
 
 function select(view: string, focusTab = false) {
   const selected = tabs.find(tab => tab.id === `tab-${view}`);
@@ -40,9 +51,11 @@ const saveBar = document.querySelector<HTMLElement>('.save-bar')!;
 const preferenceMessage = document.querySelector<HTMLElement>('#preferences-message')!;
 const unsaved = document.querySelector<HTMLElement>('#unsaved-status')!;
 let dirty = false;
-const preferenceFields = new Set(['model-path', 'backend', 'shortcut', 'auto-insert', 'auto-correction', 'reuse-correction-model', 'show-overlay', 'recognition-context', 'ocr-context', 'whisper-context', 'correction-context', 'correction-instruction', 'correction-engine', 'correction-model-path', 'correction-backend']);
+const preferenceFields = new Set(['model-path', 'backend', 'shortcut', 'auto-insert', 'clipboard-fallback', 'auto-correction', 'reuse-correction-model', 'show-overlay', 'recognition-context', 'ocr-context', 'whisper-context', 'correction-context', 'correction-instruction', 'correction-engine', 'correction-model-path', 'correction-backend']);
 function updateSaveBar() {
-  saveBar.hidden = !dirty && !['models', 'settings'].includes(current);
+  saveBar.hidden = !debug || (!dirty && !['models', 'settings'].includes(current));
+  modeToggle.dataset.dirty = String(dirty);
+  modeToggle.title = dirty ? '詳細・デバッグ（未保存の変更あり）' : '詳細・デバッグ';
   unsaved.textContent = dirty ? '未保存の変更があります。' : '';
 }
 document.addEventListener('input', event => {

@@ -154,10 +154,24 @@ function setText(element: HTMLElement, text: string | null) {
   if (element.textContent !== value) element.textContent = value;
 }
 
+const homeGuidance = document.querySelector<HTMLElement>('#home-guidance')!;
+const homeShortcut = document.querySelector<HTMLElement>('#home-shortcut')!;
+const homeNotice = document.querySelector<HTMLElement>('#home-notice')!;
+const homeLoad = document.querySelector<HTMLButtonElement>('#home-load')!;
+homeLoad.addEventListener('click', () => loadModel.click());
 function render() {
   managedModels.refreshControls();
   usageSetup?.refreshControls();
   if (!snapshot) return;
+  const homeRecording = snapshot.phase === 'recording';
+  setText(homeGuidance, homeRecording ? '話し終わったら、停止してください。' : snapshot.working || correction?.working ? 'あなたの言葉を整えています…' : snapshot.modelReady ? '準備できました。自由に話してみましょう。' : '歯車から音声モデルを準備してください。');
+  const activeShortcut = desktop?.shortcutRegistered ? desktop.preferences.shortcut : '';
+  setText(homeShortcut, activeShortcut ? activeShortcut.replaceAll('Command', '⌘').replaceAll('Shift', '⇧').replaceAll('+', '  ') + '  で開始 / 停止' : 'ボタンから録音できます');
+  homeLoad.hidden = snapshot.modelReady || !modelPath.value || homeRecording;
+  homeLoad.disabled = busy || snapshot.working;
+  const notice = insertion?.state === 'blocked' ? insertion.message : snapshot.finalSource === 'fallback' ? '補正できなかったため、認識した原文を表示しています。' : snapshot.finalSource === 'cancelled' ? '補正を取り消しました。自動入力は行いません。' : '';
+  setText(homeNotice, notice);
+  homeNotice.hidden = !notice;
   setText(permission, `マイクの許可: ${permissions[snapshot.permission]}`);
   savePreferences.disabled = busy;
   shortcut.disabled = showOverlay.disabled = autoCorrection.disabled = clipboardFallback.disabled = autoInsert.disabled = recognitionContext.disabled = accessibility.disabled = busy;
