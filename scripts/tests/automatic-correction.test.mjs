@@ -129,3 +129,17 @@ test('saving unchanged preset settings retains its name and changing a preset fi
   app.click('save-preferences');await app.settle();
   assert.equal(app.requests.filter(x=>x.command==='save_preferences').at(-1).args.preferences.usagePreset,null);
 });
+
+
+test('clipboard fallback defaults off for legacy preferences and is saved explicitly', async () => {
+  const app = await setup();
+  assert.equal(app.elements.get('clipboard-fallback').checked, false);
+  app.elements.get('clipboard-fallback').checked = true;
+  app.elements.get('clipboard-fallback').listeners.get('input')();
+  app.state.correction.working = false;
+  app.state.snapshot.finalSource = 'raw';
+  app.poll(); await app.settle();
+  app.click('save-preferences'); await app.settle();
+  const saved = app.requests.find(r => r.command === 'save_preferences').args.preferences;
+  assert.equal(saved.clipboardFallback, true);
+});

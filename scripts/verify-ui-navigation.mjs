@@ -54,6 +54,11 @@ try {
     const select = id => el('tab-'+id).click();
     const active = id => !el('panel-'+id).hidden && el('tab-'+id).getAttribute('aria-selected') === 'true';
     check(active('input'), 'Input must be the initial view');
+    check(document.body.dataset.mode==='simple', 'Default mode must be simple');
+    check(getComputedStyle(document.querySelector('.view-navigation')).display==='none', 'Debug navigation must start hidden');
+    check(getComputedStyle(el('raw-result')).display==='none','Raw transcript must be debug-only');
+    el('mode-toggle').click();
+    check(document.body.dataset.mode==='debug' && el('mode-toggle').getAttribute('aria-expanded')==='true','Gear must open debug mode');
     check(document.querySelector('.save-bar').hidden, 'Clean input view should not show setup controls');
     check(document.querySelectorAll('[role=tabpanel]:not([hidden])').length===1, 'Exactly one visible panel');
     const ids = [...document.querySelectorAll('[id]')].map(n=>n.id);
@@ -64,6 +69,11 @@ try {
     select('diagnostics'); el('comparison-panel').open=true; el('compare-reference').value='Synthetic reference';
     select('input'); await pause();
     check(!document.querySelector('.save-bar').hidden, 'Unsaved settings lost their save control');
+    el('mode-toggle').click();
+    check(document.body.dataset.mode==='simple' && active('input'), 'Close must restore home');
+    check(el('mode-toggle').dataset.dirty==='true','Hidden unsaved settings must remain discoverable');
+    check(document.querySelector('.save-bar').hidden,'Simple mode must hide debug save bar');
+    el('mode-toggle').click();
     select('models');
     check(el('model-path')===pathNode && pathNode.value==='/synthetic/unsaved.bin','Navigation lost unsaved model input');
     check(!window.__ui.saved,'Navigation saved settings');
@@ -72,7 +82,7 @@ try {
     select('diagnostics'); check(el('compare-reference').value==='Synthetic reference','Navigation cleared comparison input');
     select('input'); check(document.querySelector('.save-bar').hidden, 'Saved settings still obscure routine input');
     window.__ui.snapshot.phase='recording'; window.__ui.snapshot.elapsedMs=1234; await pause();
-    select('settings'); await pause(); select('input');
+    select('settings'); await pause(); el('mode-toggle').click(); await pause(); el('mode-toggle').click(); select('input');
     check(!el('stop').disabled && el('duration').textContent.includes('1.2'),'Navigation interrupted recording UI');
     const reads = new Set(['demo_status','context_lab_status','recording_status','recording_level','desktop_status','insertion_status','context_status','correction_status','comparison_status','comparison_plan','comparison_models','model_catalog','model_preparation_status','update_status']);
     const forbidden = window.__ui.calls.filter(c => !reads.has(c) && c !== 'save_preferences');
@@ -139,6 +149,24 @@ try {
     return {presets:true,missingModels:true,busyCancellation:true,settingsPreserved:true,audioDuration:audio.duration,nativeBackend:'synthetic'};
   })()`);
   await evaluate(`window.__ui.snapshot.phase='idle'; new Promise(r=>setTimeout(r,200));`);
+  await evaluate(`document.getElementById('mode-toggle').click(); window.__ui.snapshot={...window.__ui.snapshot,phase:'recorded',sampleCount:16000,transcript:'雨がすごいですね。',finalText:'雨がすごいですね。',finalSource:'whisper',elapsedMs:2100}; new Promise(r=>setTimeout(r,1800));`);
+  await evaluate(`(async()=>{
+    window.__ui.insertion={enabled:true,trusted:true,state:'blocked',message:'入力先を確認できません。'};
+    await new Promise(r=>setTimeout(r,1800));
+    if(document.getElementById('home-notice').hidden || !document.getElementById('home-notice').textContent.includes('入力先')) throw Error('Home hid insertion failure');
+    window.__ui.insertion=undefined;
+    await new Promise(r=>setTimeout(r,1800));
+  })()`);
+  for (const [name,width,height,color] of [['home-light',960,820,'light'],['home-dark',960,820,'dark'],['home-narrow',360,950,'light']]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:2,mobile:false});
+    await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:color}]});
+    await evaluate(`window.scrollTo(0,0); document.fonts.ready.then(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))`);
+    assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true,'Home overflow: '+name);
+    const shot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+    await writeFile(join(output,name+'.png'),Buffer.from(shot.data,'base64'));
+  }
+  result.simpleHome={default:true,gearOnlyDebug:true,unsavedPreserved:true,recordingPreserved:true,screenshots:'synthetic result in actual frontend'};
+  await evaluate(`document.getElementById('mode-toggle').click();`);
   for (const [name, width, height, color, view] of [['input-light',760,940,'light','input'],['models-light',760,940,'light','models'],['settings-dark',760,940,'dark','settings'],['diagnostics-light',760,940,'light','diagnostics'],['input-narrow',360,620,'light','input'],['demo-light',760,940,'light','demo'],['demo-narrow',360,620,'light','demo']]) {
     await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: color }] });
