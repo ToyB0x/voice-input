@@ -143,7 +143,7 @@ body { background: var(--paper); color: var(--ink); }
 main { max-width: 880px; padding: 26px 40px 20px; }
 .app-header { display:flex; align-items:center; justify-content:space-between; padding:0 0 24px; }
 .brand { display:flex; align-items:center; gap:12px; font-size:18px; font-weight:650; letter-spacing:-.03em; }
-.brand-mark { display:grid; place-items:center; width:35px; height:35px; background:var(--ink); color:#dceec9; border-radius:12px; letter-spacing:-.2em; padding-right:4px; }
+.brand-mark { display:block; width:38px; height:38px; flex-shrink:0; }
 .icon-button { position:relative; display:grid; place-items:center; width:42px; height:42px; padding:0; border:1px solid var(--line); background:var(--surface); border-radius:50%; color:var(--ink); }
 .icon-button[data-dirty="true"]::after { content:''; position:absolute; right:0; top:0; width:8px; height:8px; background:#b57425; border-radius:50%; }
 .home-heading { margin:10px 0 24px; }
@@ -165,9 +165,7 @@ body[data-mode="simple"] #panel-input { display:grid; grid-template-columns:1fr 
 body[data-mode="simple"] section { margin:0; border:1px solid var(--line); border-radius:24px; padding:24px; background:var(--surface); box-shadow:0 8px 35px #173f3b04; }
 body[data-mode="simple"] .recording-card { text-align:center; display:flex; align-items:center; flex-direction:column; }
 .voice-emblem { display:flex; align-items:center; justify-content:center; gap:5px; width:76px; height:76px; border:1px solid #d6e5d8; background:radial-gradient(circle,#e6f2d9,#f6f9f1); border-radius:50%; margin:6px auto 22px; }
-.voice-emblem i { display:block; width:4px; height:16px; background:#548675; border-radius:4px; }
-.voice-emblem i:nth-child(2n) { height:30px; }
-.voice-emblem i:nth-child(3n) { height:44px; }
+.voice-emblem { color:#548675; }
 body[data-mode="simple"] #recording-title { font-size:18px; font-weight:600; }
 body[data-mode="simple"] #home-guidance { font-size:12px; color:var(--muted); min-height:28px; }
 body[data-mode="simple"] .shortcut-hint { font-size:11px; color:var(--muted); letter-spacing:.03em; margin-top:12px; }
@@ -202,9 +200,8 @@ body[data-mode="debug"] .view-navigation, body[data-mode="debug"] .save-bar { ba
 }
 @media (prefers-color-scheme:dark) {
   :root { --ink:#d5e8de; --muted:#96aea3; --paper:#132520; --surface:#1c3029; --line:#344b40; }
-  .brand-mark { background:#b7cfb6; color:#173f3b; }
   .voice-emblem { background:radial-gradient(circle,#314c37,#21382c); border-color:#405d45; }
-  .voice-emblem i { background:#96bd98; }
+  .voice-emblem { color:#96bd98; }
 }
 :root { background:var(--paper); }
 body { min-height:100vh; }

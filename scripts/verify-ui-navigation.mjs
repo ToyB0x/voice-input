@@ -13,7 +13,7 @@ const server = createServer(async (req, res) => {
   try {
     const path = resolve(root, '.' + new URL(req.url, 'http://localhost').pathname.replace(/\/$/, '/index.html'));
     if (!path.startsWith(root + sep)) { res.writeHead(403).end(); return; }
-    res.setHeader('Content-Type', { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[extname(path)] ?? 'application/octet-stream');
+    res.setHeader('Content-Type', { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' }[extname(path)] ?? 'application/octet-stream');
     res.end(await readFile(path));
   } catch { res.writeHead(404).end(); }
 });
@@ -160,7 +160,7 @@ try {
   for (const [name,width,height,color] of [['home-light',960,820,'light'],['home-dark',960,820,'dark'],['home-narrow',360,950,'light']]) {
     await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:2,mobile:false});
     await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:color}]});
-    await evaluate(`window.scrollTo(0,0); document.fonts.ready.then(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))`);
+    await evaluate(`(async()=>{ window.scrollTo(0,0); await document.fonts.load(getComputedStyle(document.getElementById('start')).font, '録音を開始'); await document.fonts.ready; await new Promise(r=>setTimeout(r,250)); await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))); })()`);
     assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true,'Home overflow: '+name);
     const shot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
     await writeFile(join(output,name+'.png'),Buffer.from(shot.data,'base64'));
