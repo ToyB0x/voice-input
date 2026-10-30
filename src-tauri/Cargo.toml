@@ -21,7 +21,7 @@ local-comparison = { path = "../crates/local-comparison" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 local-models = { path = "../crates/local-models" }
-tauri-plugin-updater = "2.14.0"
+tauri-plugin-updater = "2.14.1"
 tauri-plugin-global-shortcut = "2.4.1"
 core-foundation = "0.10.1"
 cpal = "0.18.2"
