@@ -136,3 +136,75 @@ button, select, input, textarea, summary { scroll-margin-top: 5rem; scroll-margi
 #demo-audio { width: 100%; max-width: 28rem; }
 
 @media (max-width: 520px) { [role="tablist"] { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* Quiet, everyday surface. The same controls keep their native behavior. */
+:root { --ink: #173f3b; --muted: #6b827d; --paper: #f5f7f2; --surface: #ffffff; --line: #dce6df; }
+body { background: var(--paper); color: var(--ink); }
+main { max-width: 880px; padding: 26px 40px 20px; }
+.app-header { display:flex; align-items:center; justify-content:space-between; padding:0 0 24px; }
+.brand { display:flex; align-items:center; gap:12px; font-size:18px; font-weight:650; letter-spacing:-.03em; }
+.brand-mark { display:grid; place-items:center; width:35px; height:35px; background:var(--ink); color:#dceec9; border-radius:12px; letter-spacing:-.2em; padding-right:4px; }
+.icon-button { position:relative; display:grid; place-items:center; width:42px; height:42px; padding:0; border:1px solid var(--line); background:var(--surface); border-radius:50%; color:var(--ink); }
+.icon-button[data-dirty="true"]::after { content:''; position:absolute; right:0; top:0; width:8px; height:8px; background:#b57425; border-radius:50%; }
+.home-heading { margin:10px 0 24px; }
+.home-heading .eyebrow { color:#6b827d; font-size:10px; letter-spacing:.22em; font-weight:650; }
+.home-heading h1 { font-size:38px; line-height:1.4; font-weight:650; letter-spacing:.02em; margin:10px 0 8px; }
+.home-heading > p:last-child { font-size:13px; color:var(--muted); }
+body[data-mode="simple"] .debug-only,
+body[data-mode="simple"] .view-navigation,
+body[data-mode="simple"] .recording-card > .hint { display:none !important; }
+body[data-mode="debug"] .home-only,
+body[data-mode="debug"] .home-heading,
+body[data-mode="debug"] .voice-emblem { display:none !important; }
+.debug-heading { font-weight:650; }
+.debug-heading span { font-size:12px; font-weight:400; color:var(--muted); margin-left:15px; }
+body[data-mode="simple"] .session-summary { border:0; padding:0; margin:0 0 14px; }
+body[data-mode="simple"] #status { font-size:12px; color:var(--muted); font-weight:400; }
+body[data-mode="simple"] #model-status { display:none; }
+body[data-mode="simple"] #panel-input { display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:0; }
+body[data-mode="simple"] section { margin:0; border:1px solid var(--line); border-radius:24px; padding:24px; background:var(--surface); box-shadow:0 8px 35px #173f3b04; }
+body[data-mode="simple"] .recording-card { text-align:center; display:flex; align-items:center; flex-direction:column; }
+.voice-emblem { display:flex; align-items:center; justify-content:center; gap:5px; width:76px; height:76px; border:1px solid #d6e5d8; background:radial-gradient(circle,#e6f2d9,#f6f9f1); border-radius:50%; margin:6px auto 22px; }
+.voice-emblem i { display:block; width:4px; height:16px; background:#548675; border-radius:4px; }
+.voice-emblem i:nth-child(2n) { height:30px; }
+.voice-emblem i:nth-child(3n) { height:44px; }
+body[data-mode="simple"] #recording-title { font-size:18px; font-weight:600; }
+body[data-mode="simple"] #home-guidance { font-size:12px; color:var(--muted); min-height:28px; }
+body[data-mode="simple"] .shortcut-hint { font-size:11px; color:var(--muted); letter-spacing:.03em; margin-top:12px; }
+body[data-mode="simple"] .level { width:100%; gap:8px; margin:20px 0; }
+body[data-mode="simple"] #input-level-label, body[data-mode="simple"] #input-level-value { display:none; }
+body[data-mode="simple"] #input-level { height:4px; background:var(--line); }
+body[data-mode="simple"] #input-level-fill { background:#518873; }
+body[data-mode="simple"] #duration { font-size:11px; min-width:45px; color:var(--muted); }
+body[data-mode="simple"] .controls { justify-content:center; gap:8px; width:100%; margin-top:auto; }
+body[data-mode="simple"] button { font-size:12px; }
+body[data-mode="simple"] #start, body[data-mode="simple"] #stop { width:100%; padding:14px 20px; border-radius:14px; background:#214f45; border-color:#214f45; color:white; font-size:14px; }
+body[data-mode="simple"] #stop:disabled { display:none; }
+body[data-mode="simple"] .controls:has(#stop:not(:disabled)) #start { display:none; }
+body[data-mode="simple"] #clear { border:0; background:transparent; color:var(--muted); padding:6px; }
+body[data-mode="simple"] #clear:disabled { visibility:hidden; }
+body[data-mode="simple"] .result-card { display:flex; flex-direction:column; }
+body[data-mode="simple"] #result-title { color:var(--muted); font-size:12px; font-weight:500; letter-spacing:.07em; }
+body[data-mode="simple"] #final-status { font-size:11px; color:var(--muted); }
+body[data-mode="simple"] #final-text { flex:1; min-height:160px; border:0; padding:20px 0; resize:none; font-size:21px; line-height:1.9; outline-offset:4px; }
+body[data-mode="simple"] #final-text::placeholder { font-size:16px; color:#9baaa3; }
+body[data-mode="simple"] #copy-final { align-self:flex-end; padding:10px 18px; border:1px solid var(--line); border-radius:12px; color:var(--ink); background:var(--paper); }
+.home-footer { text-align:center; color:var(--muted); font-size:11px; margin:24px 0 0; }
+.home-footer > span:first-child { color:#7e9e6e; font-size:8px; margin-right:6px; }
+.footer-separator { margin:0 12px; opacity:.5; }
+#home-notice { font-size:13px; background:#fff0cf; color:#614719; border-radius:12px; padding:12px 16px; }
+body[data-mode="debug"] .view-navigation, body[data-mode="debug"] .save-bar { background:var(--paper); }
+@media (max-width:620px) {
+  main { padding:20px; }
+  body[data-mode="simple"] #panel-input { grid-template-columns:1fr; }
+  .home-heading h1 { font-size:34px; }
+  body[data-mode="simple"] #final-text { min-height:130px; }
+}
+@media (prefers-color-scheme:dark) {
+  :root { --ink:#d5e8de; --muted:#96aea3; --paper:#132520; --surface:#1c3029; --line:#344b40; }
+  .brand-mark { background:#b7cfb6; color:#173f3b; }
+  .voice-emblem { background:radial-gradient(circle,#314c37,#21382c); border-color:#405d45; }
+  .voice-emblem i { background:#96bd98; }
+}
+:root { background:var(--paper); }
+body { min-height:100vh; }

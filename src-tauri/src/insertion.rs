@@ -1,5 +1,5 @@
 //! AX references and target snapshots never leave this owning thread.
-//! No keystroke synthesis, clipboard, full-value writes or text IPC.
+//! Optional clipboard fallback is selected at capture, never after an AX write.
 use core_foundation::{
     base::{CFType, CFTypeRef, TCFType},
     boolean::CFBoolean,
@@ -134,7 +134,7 @@ fn editable(element: &CFType) -> Result<(), String> {
     }
     Ok(())
 }
-pub(crate) fn focused() -> Result<(i32, CFType), String> {
+fn focused_app() -> Result<(i32, CFType), String> {
     if !trusted() {
         return Err("アクセシビリティが未許可です。結果を確認してコピーしてください。".into());
     }
@@ -157,7 +157,10 @@ pub(crate) fn focused() -> Result<(i32, CFType), String> {
     unsafe {
         AXUIElementSetMessagingTimeout(app.as_CFTypeRef(), 0.2);
     }
-    let element = attribute(&app, "AXFocusedUIElement")?;
+    Ok((pid, app))
+}
+fn focused_element(app: &CFType, pid: i32) -> Result<CFType, String> {
+    let element = attribute(app, "AXFocusedUIElement")?;
     if element.type_of() != unsafe { AXUIElementGetTypeID() } {
         return Err("入力先を識別できません。".into());
     }
@@ -169,10 +172,15 @@ pub(crate) fn focused() -> Result<(i32, CFType), String> {
     {
         return Err("入力先を識別できません。".into());
     }
+    Ok(element)
+}
+pub(crate) fn focused() -> Result<(i32, CFType), String> {
+    let (pid, app) = focused_app()?;
+    let element = focused_element(&app, pid)?;
     editable(&element)?;
     Ok((pid, element))
 }
-struct Target {
+struct DirectTarget {
     id: u64,
     epoch: u64,
     pid: i32,
@@ -180,7 +188,7 @@ struct Target {
     range: Range,
     fingerprint: u64,
 }
-impl Target {
+impl DirectTarget {
     fn capture(id: u64, epoch: u64) -> Result<Self, String> {
         let (pid, element) = focused()?;
         let range = selected_range(&element)?;
@@ -229,6 +237,176 @@ impl Target {
         Ok(())
     }
 }
+// The fallback is intentionally explicit: without AX field metadata we can
+// verify the application, but cannot promise the original caret/field.
+#[link(name = "Carbon", kind = "framework")]
+unsafe extern "C" {
+    fn IsSecureEventInputEnabled() -> u8;
+}
+#[link(name = "ApplicationServices", kind = "framework")]
+unsafe extern "C" {
+    fn CGEventCreateKeyboardEvent(source: *const c_void, key: u16, down: bool) -> CFTypeRef;
+    fn CGEventSetFlags(event: CFTypeRef, flags: u64);
+    fn CGEventPostToPid(pid: i32, event: CFTypeRef);
+}
+fn paste_events() -> Result<(CFType, CFType), String> {
+    fn event(down: bool) -> Result<CFType, String> {
+        // kVK_ANSI_V, kCGEventFlagMaskCommand. Do not inherit shortcut modifiers.
+        let ptr = unsafe { CGEventCreateKeyboardEvent(std::ptr::null(), 9, down) };
+        if ptr.is_null() {
+            return Err("貼り付けキーを作成できません。".into());
+        }
+        let event = unsafe { CFType::wrap_under_create_rule(ptr) };
+        unsafe {
+            CGEventSetFlags(event.as_CFTypeRef(), 1 << 20);
+        }
+        Ok(event)
+    }
+    Ok((event(true)?, event(false)?))
+}
+fn paste_field_allowed(element: &CFType) -> Result<(), String> {
+    let role = text(element, "AXRole")?;
+    let subrole = text(element, "AXSubrole").unwrap_or_default();
+    if role.contains("Secure") || subrole.contains("Secure") {
+        return Err("パスワード欄には貼り付けません。".into());
+    }
+    if ![
+        "AXTextArea",
+        "AXTextField",
+        "AXComboBox",
+        "AXGroup",
+        "AXWebArea",
+        "AXUnknown",
+    ]
+    .contains(&role.as_str())
+    {
+        return Err("テキスト入力先を確認できないため貼り付けません。".into());
+    }
+    if let Ok(value) = attribute(element, "AXEnabled")
+        && value
+            .downcast::<CFBoolean>()
+            .is_some_and(|v| !bool::from(v))
+    {
+        return Err("無効な入力欄には貼り付けません。".into());
+    }
+    Ok(())
+}
+struct PasteTarget {
+    id: u64,
+    epoch: u64,
+    pid: i32,
+    element: Option<CFType>,
+    range: Option<Range>,
+    fingerprint: Option<u64>,
+}
+impl PasteTarget {
+    fn capture(id: u64, epoch: u64) -> Result<Self, String> {
+        if unsafe { IsSecureEventInputEnabled() } != 0 {
+            return Err("保護された入力中は貼り付けません。".into());
+        }
+        let (pid, app) = focused_app()?;
+        let element = focused_element(&app, pid).ok();
+        if let Some(element) = &element {
+            paste_field_allowed(element)?;
+        }
+        let range = element.as_ref().and_then(|e| selected_range(e).ok());
+        let fingerprint = element.as_ref().and_then(|e| fingerprint(e).ok());
+        Ok(Self {
+            id,
+            epoch,
+            pid,
+            element,
+            range,
+            fingerprint,
+        })
+    }
+    fn same_destination(&self, current: &Self) -> bool {
+        self.pid == current.pid
+            && self.element == current.element
+            && self.range == current.range
+            && self.fingerprint == current.fingerprint
+    }
+    fn ensure_current(&self, shared: &Shared) -> Result<(), String> {
+        if !shared.enabled.load(Ordering::Acquire)
+            || !shared.clipboard_fallback.load(Ordering::Acquire)
+            || shared.epoch.load(Ordering::Acquire) != self.epoch
+        {
+            return Err("設定変更・取り消しのため貼り付けを見送りました。".into());
+        }
+        Ok(())
+    }
+    fn validate_using(
+        &self,
+        shared: &Shared,
+        capture: impl FnOnce() -> Result<Self, String>,
+    ) -> Result<(), String> {
+        self.ensure_current(shared)?;
+        let current = capture()?;
+        // AX IPC may block while another thread invalidates this recording.
+        self.ensure_current(shared)?;
+        if !self.same_destination(&current) {
+            return Err("入力先・位置・内容が変わったため貼り付けを見送りました。".into());
+        }
+        Ok(())
+    }
+    fn validate(&self, shared: &Shared) -> Result<(), String> {
+        self.validate_using(shared, || Self::capture(self.id, self.epoch))
+    }
+    fn insert(&self, value: &str, shared: &Shared) -> Result<(), String> {
+        self.validate(shared)?;
+        let (down, up) = paste_events()?;
+        let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+        clipboard.set_text(value).map_err(|e| e.to_string())?;
+        // Recheck after clipboard IPC. Never restore on a timer: the target may
+        // read asynchronously, and restoring could overwrite a user's new copy.
+        self.validate(shared)?;
+        self.ensure_current(shared)?;
+        unsafe {
+            CGEventPostToPid(self.pid, down.as_CFTypeRef());
+            CGEventPostToPid(self.pid, up.as_CFTypeRef());
+        }
+        Ok(())
+    }
+}
+enum Target {
+    Direct(DirectTarget),
+    Paste(PasteTarget),
+}
+impl Target {
+    fn capture(id: u64, epoch: u64, fallback: bool) -> Result<Self, String> {
+        match DirectTarget::capture(id, epoch) {
+            Ok(target) => Ok(Self::Direct(target)),
+            Err(_) if fallback => PasteTarget::capture(id, epoch).map(Self::Paste),
+            Err(error) => Err(error),
+        }
+    }
+    fn id(&self) -> u64 {
+        match self {
+            Self::Direct(t) => t.id,
+            Self::Paste(t) => t.id,
+        }
+    }
+    fn epoch(&self) -> u64 {
+        match self {
+            Self::Direct(t) => t.epoch,
+            Self::Paste(t) => t.epoch,
+        }
+    }
+    fn insert(&self, value: &str, shared: &Shared) -> Result<(), String> {
+        match self {
+            Self::Direct(t) => t.insert(value, shared),
+            Self::Paste(t) => t.insert(value, shared),
+        }
+    }
+    fn success_message(&self) -> &'static str {
+        match self {
+            Self::Direct(_) => "入力先へ挿入しました。再試行した認識結果は自動入力しません。",
+            Self::Paste(_) => {
+                "録音開始時のアプリへ貼り付けキーを送信しました。挿入結果を確認してください。クリップボードに結果を保持しています。"
+            }
+        }
+    }
+}
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
@@ -239,6 +417,7 @@ pub struct Status {
 }
 struct Shared {
     enabled: AtomicBool,
+    clipboard_fallback: AtomicBool,
     epoch: AtomicU64,
     status: Mutex<(String, String)>,
 }
@@ -263,6 +442,7 @@ impl Inserter {
     pub fn new() -> Self {
         let shared = Arc::new(Shared {
             enabled: AtomicBool::new(false),
+            clipboard_fallback: AtomicBool::new(false),
             epoch: AtomicU64::new(0),
             status: Mutex::new(("disabled".into(), "自動入力は無効です。".into())),
         });
@@ -280,10 +460,14 @@ impl Inserter {
                         target = None;
                         sequence += 1;
                         if worker.enabled.load(Ordering::Acquire) {
-                            match Target::capture(sequence, worker.epoch.load(Ordering::Acquire)) {
+                            match Target::capture(
+                                sequence,
+                                worker.epoch.load(Ordering::Acquire),
+                                worker.clipboard_fallback.load(Ordering::Acquire),
+                            ) {
                                 Ok(captured)
                                     if worker.enabled.load(Ordering::Acquire)
-                                        && captured.epoch
+                                        && captured.epoch()
                                             == worker.epoch.load(Ordering::Acquire) =>
                                 {
                                     target = Some(captured);
@@ -293,17 +477,17 @@ impl Inserter {
                                 Err(error) => worker.report("blocked", &error),
                             }
                         }
-                        let _ = reply.send(target.as_ref().map(|t| t.id));
+                        let _ = reply.send(target.as_ref().map(|t| t.id()));
                     }
                     Command::Apply(id, value, reply) => {
-                        if let Some(captured) = target.take().filter(|t| t.id == id) {
+                        if let Some(captured) = target.take().filter(|t| t.id() == id) {
                             if value.is_empty() {
                                 worker.report("blocked", "認識結果が空のため自動入力しません。");
                             } else {
                                 match captured.insert(&value, &worker) {
-                                Ok(()) => worker.report("inserted", "入力先へ挿入しました。再試行した認識結果は自動入力しません。"),
-                                Err(error) => worker.report("blocked", &error),
-                            }
+                                    Ok(()) => worker.report("inserted", captured.success_message()),
+                                    Err(error) => worker.report("blocked", &error),
+                                }
                             }
                         }
                         let _ = reply.send(());
@@ -313,8 +497,13 @@ impl Inserter {
         });
         Self { tx, shared }
     }
-    pub fn configure(&self, enabled: bool) {
-        if self.shared.enabled.swap(enabled, Ordering::AcqRel) != enabled {
+    pub fn configure(&self, enabled: bool, clipboard_fallback: bool) {
+        let changed = self
+            .shared
+            .clipboard_fallback
+            .swap(clipboard_fallback, Ordering::AcqRel)
+            != clipboard_fallback;
+        if self.shared.enabled.swap(enabled, Ordering::AcqRel) != enabled || changed {
             self.shared.epoch.fetch_add(1, Ordering::AcqRel);
             self.cancel();
             self.shared.report(
@@ -388,4 +577,85 @@ impl Inserter {
 #[tauri::command]
 pub fn insertion_status(inserter: tauri::State<'_, Inserter>) -> Status {
     inserter.status()
+}
+
+#[cfg(test)]
+mod paste_tests {
+    use super::*;
+    fn target() -> PasteTarget {
+        PasteTarget {
+            id: 1,
+            epoch: 7,
+            pid: 42,
+            element: None,
+            range: None,
+            fingerprint: None,
+        }
+    }
+    #[test]
+    fn paste_rejects_changed_app_or_newly_available_field_metadata() {
+        let before = target();
+        let mut after = target();
+        assert!(before.same_destination(&after));
+        after.pid = 43;
+        assert!(!before.same_destination(&after));
+        after.pid = 42;
+        after.range = Some(Range {
+            location: 1,
+            length: 0,
+        });
+        assert!(!before.same_destination(&after));
+        after.range = None;
+        after.fingerprint = Some(123);
+        assert!(!before.same_destination(&after));
+    }
+    #[test]
+    fn paste_rejects_cancelled_or_disabled_jobs_before_os_access() {
+        let shared = Shared {
+            enabled: AtomicBool::new(true),
+            clipboard_fallback: AtomicBool::new(true),
+            epoch: AtomicU64::new(8),
+            status: Mutex::new((String::new(), String::new())),
+        };
+        assert!(target().validate(&shared).unwrap_err().contains("取り消し"));
+        shared.epoch.store(7, Ordering::Release);
+        shared.clipboard_fallback.store(false, Ordering::Release);
+        assert!(target().validate(&shared).unwrap_err().contains("設定変更"));
+        shared.clipboard_fallback.store(true, Ordering::Release);
+        shared.enabled.store(false, Ordering::Release);
+        assert!(target().validate(&shared).is_err());
+    }
+    #[test]
+    fn paste_rechecks_cancellation_after_destination_query() {
+        let shared = Shared {
+            enabled: AtomicBool::new(true),
+            clipboard_fallback: AtomicBool::new(true),
+            epoch: AtomicU64::new(7),
+            status: Mutex::new((String::new(), String::new())),
+        };
+        let error = target()
+            .validate_using(&shared, || {
+                shared.epoch.fetch_add(1, Ordering::AcqRel);
+                Ok(target())
+            })
+            .unwrap_err();
+        assert!(error.contains("取り消し"));
+    }
+    #[test]
+    fn paste_events_are_command_v_down_and_up_without_shift() {
+        unsafe extern "C" {
+            fn CGEventGetFlags(event: CFTypeRef) -> u64;
+            fn CGEventGetType(event: CFTypeRef) -> u32;
+            fn CGEventGetIntegerValueField(event: CFTypeRef, field: u32) -> i64;
+        }
+        let (down, up) = paste_events().unwrap();
+        unsafe {
+            assert_eq!(CGEventGetType(down.as_CFTypeRef()), 10);
+            assert_eq!(CGEventGetType(up.as_CFTypeRef()), 11);
+            for event in [&down, &up] {
+                assert_eq!(CGEventGetFlags(event.as_CFTypeRef()), 1 << 20);
+                assert_eq!(CGEventGetIntegerValueField(event.as_CFTypeRef(), 9), 9);
+            }
+        }
+    }
 }

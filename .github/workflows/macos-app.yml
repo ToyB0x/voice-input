@@ -22,6 +22,9 @@ jobs:
     timeout-minutes: ${{ inputs.full_integration && 60 || 30 }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "27.0"
+      # The isolated inference helper does not fetch models over HTTPS.
+      # Avoid optional cpp-httplib OpenSSL discovery against runner OpenSSL 4.
+      CMAKE_DISABLE_FIND_PACKAGE_OpenSSL: "TRUE"
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
@@ -105,14 +108,8 @@ jobs:
           path: |
             ~/.cargo/registry
             crates/local-correction/target
-          key: macos27-${{ runner.arch }}-correction-runtime-v2-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: macos27-${{ runner.arch }}-correction-runtime-v2-
-      - name: Restore previous correction target cache
-        if: steps.correction-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: crates/local-correction/target
-          key: macos27-${{ runner.arch }}-correction-runtime-v1-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          key: macos27-${{ runner.arch }}-correction-runtime-v3-${{ hashFiles('crates/local-correction/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: macos27-${{ runner.arch }}-correction-runtime-v3-
       - name: Test evaluation helpers
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Test pinned model preparation without networking
