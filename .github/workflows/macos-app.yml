@@ -22,6 +22,9 @@ jobs:
     timeout-minutes: ${{ inputs.full_integration && 60 || 30 }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "27.0"
+      # The isolated inference helper does not fetch models over HTTPS.
+      # Avoid optional cpp-httplib OpenSSL discovery against runner OpenSSL 4.
+      CMAKE_DISABLE_FIND_PACKAGE_OpenSSL: "TRUE"
     defaults:
       run:
         # Explicit Bash enables -e -o pipefail, including commands piped to tee.
