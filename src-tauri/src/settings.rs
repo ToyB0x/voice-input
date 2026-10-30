@@ -14,6 +14,8 @@ pub struct Preferences {
     #[serde(default)]
     pub auto_insert: bool,
     #[serde(default)]
+    pub clipboard_fallback: bool,
+    #[serde(default)]
     pub auto_correction: bool,
     #[serde(default)]
     pub reuse_correction_model: bool,
@@ -54,6 +56,7 @@ impl Default for Preferences {
             backend: "metal".into(),
             shortcut: "Command+Shift+Space".into(),
             auto_insert: false,
+            clipboard_fallback: false,
             auto_correction: false,
             reuse_correction_model: false,
             show_overlay: false,
@@ -171,6 +174,7 @@ mod tests {
             serde_json::from_str(r#"{"version":1,"modelPath":"","backend":"cpu","shortcut":""}"#)
                 .unwrap();
         assert!(!legacy.auto_insert);
+        assert!(!legacy.clipboard_fallback);
         assert!(!legacy.auto_correction);
         assert!(!legacy.reuse_correction_model);
         assert!(!legacy.show_overlay);
