@@ -219,8 +219,10 @@ pub(crate) fn apply_preferences(
     inner.registered = new;
     inner.error = None;
     desktop.shortcut_armed.store(false, Ordering::Release);
-    app.state::<crate::insertion::Inserter>()
-        .configure(inner.preferences.auto_insert);
+    app.state::<crate::insertion::Inserter>().configure(
+        inner.preferences.auto_insert,
+        inner.preferences.clipboard_fallback,
+    );
     Ok(Status {
         preferences: inner.preferences.clone(),
         shortcut_registered: new.is_some(),
@@ -265,7 +267,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         worker: Mutex::new(None),
     });
     app.state::<crate::insertion::Inserter>()
-        .configure(preferences.auto_insert);
+        .configure(preferences.auto_insert, preferences.clipboard_fallback);
     app.state::<crate::context::Reader>()
         .configure(preferences.context_config());
     app.state::<Recorder>().configure_automatic(
