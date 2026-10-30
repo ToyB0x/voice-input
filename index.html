@@ -212,6 +212,8 @@
           <h2 id="input-settings-title">入力と自動補正</h2>
           <label class="check">
             <input id="auto-insert" aria-label="Automatic text insertion" type="checkbox">認識結果を録音開始時の入力欄へ直接入力する（初期状態は無効）</label>
+          <label class="check"><input id="clipboard-fallback" type="checkbox" aria-label="Clipboard paste fallback">直接入力に非対応の場合、クリップボード経由で貼り付ける（初期状態は無効）</label>
+          <p class="note">直接入力も有効にしてください。録音開始時と同じアプリにCommand+Vを一度送信します。クリップボードは認識結果に置き換わり、元には戻しません。入力欄を取得できない場合、同じアプリ内の欄・カーソルの変更は検出できません。完了まで入力先を変えないでください。</p>
           <button id="accessibility" aria-label="Request accessibility permission">アクセシビリティの許可を確認・設定</button>
           <label>
             <input id="auto-correction" aria-label="Automatic correction after transcription" type="checkbox">認識後に自動補正する（初期状態は無効）</label>

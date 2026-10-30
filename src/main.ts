@@ -8,7 +8,7 @@ import { setupModels } from "./model-setup";
 import { setupInputLevel } from "./input-level";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-type Preferences = { usagePreset?: string | null; version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; autoCorrection: boolean; reuseCorrectionModel: boolean; showOverlay: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionInstruction: string; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
+type Preferences = { usagePreset?: string | null; version: number; modelPath: string; backend: string; shortcut: string; autoInsert: boolean; clipboardFallback: boolean; autoCorrection: boolean; reuseCorrectionModel: boolean; showOverlay: boolean; recognitionContext: boolean; ocrContext: boolean; whisperContext: boolean; correctionContext: boolean; correctionInstruction: string; correctionModelPath: string; correctionEngine: string; correctionBackend: string };
 type InsertionStatus = { enabled: boolean; trusted: boolean; state: string; message: string };
 type DesktopStatus = { preferences: Preferences; shortcutRegistered: boolean; error: string | null };
 
@@ -80,6 +80,7 @@ const autoCorrection = document.querySelector<HTMLInputElement>("#auto-correctio
 const finalText = document.querySelector<HTMLTextAreaElement>("#final-text")!;
 const finalStatus = document.querySelector<HTMLParagraphElement>("#final-status")!;
 const copyFinal = document.querySelector<HTMLButtonElement>("#copy-final")!;
+const clipboardFallback = document.querySelector<HTMLInputElement>("#clipboard-fallback")!;
 const autoInsert = document.querySelector<HTMLInputElement>("#auto-insert")!;
 const insertionStatus = document.querySelector<HTMLParagraphElement>("#insertion-status")!;
 const insertionMessage = document.querySelector<HTMLParagraphElement>("#insertion-message")!;
@@ -159,7 +160,7 @@ function render() {
   if (!snapshot) return;
   setText(permission, `マイクの許可: ${permissions[snapshot.permission]}`);
   savePreferences.disabled = busy;
-  shortcut.disabled = showOverlay.disabled = autoCorrection.disabled = autoInsert.disabled = recognitionContext.disabled = accessibility.disabled = busy;
+  shortcut.disabled = showOverlay.disabled = autoCorrection.disabled = clipboardFallback.disabled = autoInsert.disabled = recognitionContext.disabled = accessibility.disabled = busy;
   setText(contextStatus, context?.message ?? "認識補助: 無効");
   correctionInstruction.disabled = busy;
   ocrContext.disabled = whisperContext.disabled = correctionContext.disabled = screenPermission.disabled = busy;
@@ -273,6 +274,7 @@ async function refresh() {
         backend.value = desktop.preferences.backend;
         shortcut.value = desktop.preferences.shortcut;
         autoInsert.checked = desktop.preferences.autoInsert;
+        clipboardFallback.checked = desktop.preferences.clipboardFallback ?? false;
         autoCorrection.checked = desktop.preferences.autoCorrection;
         reuseCorrectionModel.checked = desktop.preferences.reuseCorrectionModel ?? false;
         showOverlay.checked = desktop.preferences.showOverlay;
@@ -319,7 +321,7 @@ async function action(operation: () => Promise<unknown>) {
 
 function preferencesFromFields(): Preferences {
   const preferences: Preferences = {
-    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, autoCorrection: autoCorrection.checked, reuseCorrectionModel: reuseCorrectionModel.checked, showOverlay: showOverlay.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
+    version: 1, modelPath: modelPath.value, backend: backend.value, shortcut: shortcut.value, autoInsert: autoInsert.checked, clipboardFallback: clipboardFallback.checked, autoCorrection: autoCorrection.checked, reuseCorrectionModel: reuseCorrectionModel.checked, showOverlay: showOverlay.checked, recognitionContext: recognitionContext.checked, ocrContext: ocrContext.checked,
     whisperContext: whisperContext.checked, correctionContext: correctionContext.checked,
     correctionInstruction: correctionInstruction.value, correctionModelPath: correctionModelPath.value, correctionEngine: correctionEngine.value, correctionBackend: correctionBackend.value,
   };
@@ -332,7 +334,7 @@ savePreferences.addEventListener("click", () => void action(async () => {
   preferencesMessage.textContent = "設定を保存しました。ショートカットは反映済みです。";
 }));
 accessibility.addEventListener("click", () => void action(() => invoke("request_accessibility")));
-for (const field of [modelPath, backend, shortcut, autoInsert, autoCorrection, reuseCorrectionModel, showOverlay, recognitionContext, ocrContext, whisperContext, correctionContext, correctionInstruction, correctionEngine, correctionModelPath, correctionBackend]) {
+for (const field of [modelPath, backend, shortcut, autoInsert, clipboardFallback, autoCorrection, reuseCorrectionModel, showOverlay, recognitionContext, ocrContext, whisperContext, correctionContext, correctionInstruction, correctionEngine, correctionModelPath, correctionBackend]) {
   field.addEventListener("input", () => { preferencesMessage.textContent = "未保存の設定があります。"; });
 }
 modelPath.addEventListener("input", render);
