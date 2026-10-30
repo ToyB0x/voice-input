@@ -16,7 +16,7 @@ window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
   if (command === 'recording_level') return { phase: s.snapshot.phase, level: 0.02 };
   if (command === 'save_preferences') { s.saved = structuredClone(args.preferences); s.preferences = s.saved; }
   if (['desktop_status','save_preferences'].includes(command)) return { preferences: structuredClone(s.preferences), shortcutRegistered: true, error: null };
-  if (command === 'insertion_status') return { enabled: false, trusted: false };
+  if (command === 'insertion_status') return s.insertion ?? { enabled: false, trusted: false };
   if (command === 'context_status') return { message: '認識補助: 無効', ocrMessage: 'OCR: 無効', screenPermitted: false };
   if (command === 'correction_status') return { working: false, checkingFoundation: false, foundation: null, text: null, error: null, elapsedMs: 0 };
   if (command === 'demo_status') return s.demo ?? {working:false,mode:'demo',phase:'idle',message:'',raw:null,rows:[],completed:0,total:0};

@@ -6,13 +6,16 @@
     <meta name="color-scheme" content="light dark">
     <title>Voice Input</title>
   </head>
-  <body>
+  <body data-mode="simple">
     <main>
       <header class="app-header">
-        <h1>Voice Input</h1>
-        <p class="tagline">音声から、整った文章へ。</p>
-        <p class="privacy">音声・画面情報・補正はこのMac内で処理します。</p>
+        <div class="brand"><span class="brand-mark" aria-hidden="true">◖◗</span><span>Voice Input</span></div>
+        <button id="mode-toggle" class="icon-button" aria-label="詳細・デバッグを開く" aria-expanded="false" title="詳細・デバッグ">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9 3-1 3-3 1-2 4 2 2v3l3 2 2 3h4l1-3 3-1 2-4-2-2V8l-3-2-1-3Z"/><circle cx="11" cy="12" r="3"/></svg>
+        </button>
       </header>
+      <div class="home-heading"><p class="eyebrow">YOUR VOICE, YOUR WORDS</p><h1>話すだけで、<br>言葉がかたちに。</h1><p>考えたことを、そのまま声に。あとはこのMacで。</p></div>
+      <p class="debug-only debug-heading">詳細・デバッグ <span>歯車を押すと通常画面に戻ります</span></p>
       <nav aria-label="画面の切り替え" class="view-navigation">
         <div role="tablist" aria-label="作業メニュー">
           <button id="tab-input" type="button" role="tab" aria-controls="panel-input" aria-selected="true" tabindex="0">音声入力</button>
@@ -25,7 +28,7 @@
       <div aria-label="アプリの状態" class="session-summary">
         <p id="status" role="status" aria-live="polite">準備中…</p>
         <p id="model-status" role="status">モデル未読み込み。録音のみ利用できます。</p>
-        <details id="session-details">
+        <details class="debug-only" id="session-details">
           <summary aria-label="Session details">状態の詳細</summary>
           <p id="model-info" aria-label="Loaded model information" hidden></p>
           <p id="desktop-status" role="status"></p>
@@ -39,10 +42,14 @@
         <p id="error" role="alert" hidden></p>
       </div>
       <div id="panel-input" role="tabpanel" aria-labelledby="tab-input" tabindex="0">
-        <section aria-labelledby="recording-title">
-          <h2 id="recording-title">録音</h2>
-          <p id="permission">マイクの許可を確認しています…</p>
-          <p id="input-device" class="hint">録音入力: 録音開始時にmacOSの既定入力を使用します。</p>
+        <section class="recording-card" aria-labelledby="recording-title">
+          <div class="voice-emblem" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <h2 id="recording-title">声を聞かせてください</h2>
+          <p id="home-guidance" class="home-only">歯車からモデルを準備して、はじめましょう。</p>
+          <p id="home-shortcut" class="home-only shortcut-hint"></p>
+          <button id="home-load" class="home-only" hidden>音声モデルを読み込む</button>
+          <p class="debug-only" id="permission">マイクの許可を確認しています…</p>
+          <p class="debug-only hint" id="input-device">録音入力: 録音開始時にmacOSの既定入力を使用します。</p>
           <div class="level">
             <span id="input-level-label">入力レベル</span>
             <div id="input-level" role="meter" aria-labelledby="input-level-label" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0">
@@ -51,11 +58,11 @@
             <output id="input-level-value" aria-label="入力音量">停止中</output>
             <output id="duration" aria-label="録音時間">0.0 秒</output>
           </div>
-          <p id="input-level-status" class="hint"></p>
+          <p class="debug-only hint" id="input-level-status"></p>
           <div class="controls">
             <button id="start" aria-label="Start recording" disabled>録音を開始</button>
             <button id="stop" aria-label="Stop recording" disabled>停止</button>
-            <button id="transcribe" aria-label="Transcribe recording" disabled>文字起こし・再試行</button>
+            <button class="debug-only" id="transcribe" aria-label="Transcribe recording" disabled>文字起こし・再試行</button>
             <button id="clear" aria-label="Discard recording" disabled>破棄</button>
           </div>
           <button id="settings" aria-label="Open microphone settings" hidden>マイクのシステム設定を開く</button>
@@ -63,20 +70,20 @@
           <p class="hint">初回はモデルを準備してください。<button type="button" data-view-target="models" class="text-button">モデルを準備する</button>
           </p>
         </section>
-        <section aria-labelledby="result-title">
-          <h2 id="result-title">最終結果</h2>
-          <p id="final-status" role="status">最終結果は未作成です。</p>
-          <textarea id="final-text" aria-label="Final text" rows="4" readonly></textarea>
-          <button id="copy-final" disabled>最終結果をコピー</button>
-          <p id="correction-status" role="status">補正は未実行です。</p>
-          <details id="raw-result">
+        <section class="result-card" aria-labelledby="result-title">
+          <h2 id="result-title">あなたの言葉</h2>
+          <p class="debug-only" id="final-status" role="status">最終結果は未作成です。</p>
+          <textarea id="final-text" aria-label="Final text" rows="4" readonly placeholder="ここに、あなたの言葉が届きます。"></textarea>
+          <button id="copy-final" disabled>コピーする</button>
+          <p class="debug-only" id="correction-status" role="status">補正は未実行です。</p>
+          <details class="debug-only" id="raw-result">
             <summary aria-label="Raw transcript details">Whisperの原文を確認・コピー</summary>
             <textarea id="transcript" aria-label="Transcription result" rows="3" readonly placeholder="モデル読み込み後、録音を停止すると文字起こしします。"></textarea>
             <button id="copy" aria-label="Copy transcript" disabled>結果をコピー</button>
             <span id="copy-status" role="status" aria-live="polite"></span>
             <p class="hint">コピーした結果はクリップボードに残ります。新しい録音・破棄・終了でアプリ内の結果を消去します。</p>
           </details>
-          <details id="manual-preview">
+          <details class="debug-only" id="manual-preview">
             <summary aria-label="Manual correction details">手動の補正プレビュー</summary>
             <button id="correct" aria-label="Preview local correction" disabled>最終補正をプレビュー</button>
             <textarea id="corrected" aria-label="Corrected text" rows="4" readonly placeholder="元の文字起こしは上の認識結果に保持します。"></textarea>
@@ -85,6 +92,8 @@
           </details>
         </section>
       </div>
+      <p id="home-notice" class="home-only" role="status" hidden></p>
+      <p class="home-only home-footer"><span>●</span> ローカル処理 <span class="footer-separator">/</span> 音声はこのMacの中で</p>
       <div id="panel-demo" role="tabpanel" aria-labelledby="tab-demo" tabindex="0" hidden>
         <section aria-labelledby="demo-title">
           <h2 id="demo-title">この「あめ」、どっち？</h2>
@@ -212,6 +221,8 @@
           <h2 id="input-settings-title">入力と自動補正</h2>
           <label class="check">
             <input id="auto-insert" aria-label="Automatic text insertion" type="checkbox">認識結果を録音開始時の入力欄へ直接入力する（初期状態は無効）</label>
+          <label class="check"><input id="clipboard-fallback" type="checkbox" aria-label="Clipboard paste fallback">直接入力に非対応の場合、クリップボード経由で貼り付ける（初期状態は無効）</label>
+          <p class="note">直接入力も有効にしてください。録音開始時と同じアプリにCommand+Vを一度送信します。クリップボードは認識結果に置き換わり、元には戻しません。入力欄を取得できない場合、同じアプリ内の欄・カーソルの変更は検出できません。完了まで入力先を変えないでください。</p>
           <button id="accessibility" aria-label="Request accessibility permission">アクセシビリティの許可を確認・設定</button>
           <label>
             <input id="auto-correction" aria-label="Automatic correction after transcription" type="checkbox">認識後に自動補正する（初期状態は無効）</label>
