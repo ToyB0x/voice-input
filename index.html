@@ -4,14 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
+    <link rel="icon" type="image/svg+xml" href="/voice-input.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
     <title>Voice Input</title>
   </head>
   <body data-mode="simple">
     <main>
       <header class="app-header">
-        <div class="brand"><span class="brand-mark" aria-hidden="true">◖◗</span><span>Voice Input</span></div>
+        <div class="brand"><img class="brand-mark" src="/voice-input.svg" width="38" height="38" alt=""><span>Voice Input</span></div>
         <button id="mode-toggle" class="icon-button" aria-label="詳細・デバッグを開く" aria-expanded="false" title="詳細・デバッグ">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9 3-1 3-3 1-2 4 2 2v3l3 2 2 3h4l1-3 3-1 2-4-2-2V8l-3-2-1-3Z"/><circle cx="11" cy="12" r="3"/></svg>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M19.646,9.648 L21.851,10.281 L21.851,13.719 L19.646,14.352 L19.070,15.743 L20.181,17.750 L17.750,20.181 L15.743,19.070 L14.352,19.646 L13.719,21.851 L10.281,21.851 L9.648,19.646 L8.257,19.070 L6.250,20.181 L3.819,17.750 L4.930,15.743 L4.354,14.352 L2.149,13.719 L2.149,10.281 L4.354,9.648 L4.930,8.257 L3.819,6.250 L6.250,3.819 L8.257,4.930 L9.648,4.354 L10.281,2.149 L13.719,2.149 L14.352,4.354 L15.743,4.930 L17.750,3.819 L20.181,6.250 L19.070,8.257 Z"/><circle cx="12" cy="12" r="3.2"/></svg>
         </button>
       </header>
       <div class="home-heading"><p class="eyebrow">YOUR VOICE, YOUR WORDS</p><h1>話すだけで、<br>言葉がかたちに。</h1><p>考えたことを、そのまま声に。あとはこのMacで。</p></div>
@@ -43,7 +45,7 @@
       </div>
       <div id="panel-input" role="tabpanel" aria-labelledby="tab-input" tabindex="0">
         <section class="recording-card" aria-labelledby="recording-title">
-          <div class="voice-emblem" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="voice-emblem" aria-hidden="true"><svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M8 21v6M16 15v18M24 9v30M32 15v18M40 21v6"/></svg></div>
           <h2 id="recording-title">声を聞かせてください</h2>
           <p id="home-guidance" class="home-only">歯車からモデルを準備して、はじめましょう。</p>
           <p id="home-shortcut" class="home-only shortcut-hint"></p>
