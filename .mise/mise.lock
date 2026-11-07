@@ -86,10 +86,10 @@ checksum = "sha256:dcc60d59a0746999f99064a01c020445d54d84228c691cdbf25b49ac3b591
 url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-win-x64.zip"
 
 [[tools."npm:pnpm"]]
-version = "12.16.1"
-aube = { path = "locks/npm-pnpm/12.16.1", digest = "sha256:b3e279eab7c2fb197898a31a8ee02094e7e0d72b3651de5ae618d9e18ab17b12" }
+version = "12.18.0"
+aube = { path = "locks/npm-pnpm/12.18.0", digest = "sha256:ec908cb943a36b42d32383ddc5f41287d3c1bca33cb123d238e46da41e36ef93" }
 backend = "npm:pnpm"
-specifiers = ["12.16.1"]
+specifiers = ["12.18.0"]
 
 [[tools.python]]
 version = "3.15.2"
