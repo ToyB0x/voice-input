@@ -2,9 +2,9 @@ min_version = "2026.10.18"
 
 [tools]
 # Keep these in sync with .nvmrc and package.json; CI checks for drift.
-node = "26.13.0"
+node = "26.13.1"
 # Use the same npm distribution checked by the bootstrap release-age gate.
-"npm:pnpm" = "12.16.1"
+"npm:pnpm" = "12.18.0"
 python = "3.15.2"
 cmake = "4.4.5"
 
