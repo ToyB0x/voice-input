@@ -10,10 +10,10 @@ publish = false
 ci-restart-probe = []
 
 [build-dependencies]
-tauri-build = { version = "2.7.4", features = [] }
+tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
-tauri = { version = "2.12.5", features = ["tray-icon"] }
+tauri = { version = "2.12.7", features = ["tray-icon"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 local-comparison = { path = "../crates/local-comparison" }
@@ -57,7 +57,7 @@ version = "0.3.2"
 features = ["CGImage"]
 
 [dev-dependencies]
-tauri = { version = "2.12.5", features = ["test"] }
+tauri = { version = "2.12.7", features = ["test"] }
 
 [[test]]
 name = "overlay-window"
