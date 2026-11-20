@@ -13,11 +13,11 @@ ci-diagnostics = []
 libc = "0.2.191"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-llama-cpp-sys-2 = { version = "=0.1.160", default-features = false }
+llama-cpp-sys-2 = { version = "=0.1.161", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-metal = { version = "0.3.2", default-features = false, features = ["std", "MTLDevice"] }
-llama-cpp-2 = { version = "=0.1.160", default-features = false, features = ["metal"] }
+llama-cpp-2 = { version = "=0.1.161", default-features = false, features = ["metal"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-llama-cpp-2 = { version = "=0.1.160", default-features = false }
+llama-cpp-2 = { version = "=0.1.161", default-features = false }
