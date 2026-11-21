@@ -17,13 +17,13 @@
     "test:ui": "node --disable-warning=ExperimentalWarning --experimental-vm-modules --test scripts/tests/*.test.mjs"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.12.4",
-    "@types/node": "26.6.5",
+    "@tauri-apps/cli": "2.12.6",
+    "@types/node": "26.6.6",
     "typescript": "7.0.2",
-    "vite": "8.3.5"
+    "vite": "8.3.8"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.12.4"
+    "@tauri-apps/api": "2.12.5"
   },
   "packageManager": "pnpm@12.16.1"
 }
