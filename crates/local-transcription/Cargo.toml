@@ -18,4 +18,4 @@ whisper-rs = { version = "=0.16.0", features = ["metal"] }
 whisper-rs = "=0.16.0"
 
 [dependencies.rubato]
-version = "5.0.1"
+version = "5.1.0"
